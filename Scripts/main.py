@@ -1,7 +1,7 @@
 import os
 import discord
-from dotenv import load_dotenv
 from discord.ext import commands
+from dotenv import load_dotenv
 import time
 #
 # File Imports
@@ -49,6 +49,7 @@ time.sleep(1)
 
 # Bot basic setup
 intents = discord.Intents.default()
+intents.members = True
 intents.message_content = True
 
 client = commands.Bot(command_prefix="$", intents=discord.Intents.all())
@@ -56,23 +57,37 @@ client = commands.Bot(command_prefix="$", intents=discord.Intents.all())
 
 @client.event
 async def on_ready():
-    print(f'We have logged in as {client.user}')
+    print(f'Bot is ready. Logged in as {client.user}')
 
 
-@client.command()
-async def TotalTime(ctx):
-    data = bookshelf_listening_stats()
+@client.hybrid_command(name="sync_commands", description="Re-syncs all of the bots commands")
+async def sync_commands(ctx):
+    await client.tree.sync()
+    await ctx.send("Successfully Synced Commands")
 
-    total_time = round(data.get('totalTime') / 60)  # Convert to Minutes
 
-    if total_time >= 60:
-        total_time = round(total_time / 60)  # Convert to hours
-        message = f'Total Listening Time : {total_time} Hours'
-    else:
-        message = f'Total Listening Time : {total_time} Minutes'
+@client.hybrid_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
+async def totalTime(ctx):
+    try:
+        data = bookshelf_listening_stats()
+        total_time = round(data.get('totalTime') / 60)  # Convert to Minutes
+        if total_time >= 60:
+            total_time = round(total_time / 60)  # Convert to hours
+            message = f'Total Listening Time : {total_time} Hours'
+        else:
+            message = f'Total Listening Time : {total_time} Minutes'
+        await ctx.send(message)
+        print("sent: ", message)
+    except Exception as e:
+        ctx.send("Could not get complete this at the moment, please try again later.")
+        print("Error: ", e)
 
-    await ctx.author.send(message)
-    print("sent: ", message)
+
+@client.hybrid_command()
+async def ping(ctx):
+    latency = round(client.latency * 1000)
+    message = f'Discord BOT Server Latency: {latency} ms'
+    await ctx.send(message)
 
 
 client.run(os.environ.get("DISCORD_TOKEN"))
