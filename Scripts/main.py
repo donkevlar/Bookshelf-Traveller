@@ -10,7 +10,7 @@ from Bookshelf import bookshelfURL, bookshelfToken, \
     bookshelf_libraries
 
 # Version Info
-versionNumber = 'Alpha_0.03'
+versionNumber = 'Alpha_0.06'
 
 # Pulls from bookshelf file, if DOCKER == True, then this won't load local env file
 if not DOCKER_VARS:
@@ -45,7 +45,7 @@ else:
 # Will print username when successful
 auth_test = bookshelf_auth_test()
 
-time.sleep(1)
+time.sleep(0.5)
 
 # Bot basic setup
 intents = discord.Intents.default()
@@ -83,11 +83,43 @@ async def totalTime(ctx):
         print("Error: ", e)
 
 
-@client.hybrid_command()
+@client.hybrid_command(name="ping", description="Latency of the discord bot server to the discord central shard.")
 async def ping(ctx):
     latency = round(client.latency * 1000)
     message = f'Discord BOT Server Latency: {latency} ms'
     await ctx.send(message)
+
+
+@client.hybrid_command(name="all_libraries",
+                       description="Display all current libraries with their ID and if only audiobooks")
+async def show_all_libraries(ctx):
+    try:
+        # Get Library Data from API
+        library_data = bookshelf_libraries()
+        formatted_data = ""
+
+        # Iterate over each key-value pair in the dictionary
+        for name, (library_id, audiobooks_only) in library_data.items():
+            formatted_data += f'\nName: {name}, \nLibraryID: {library_id}, \nAudiobooks Only: {audiobooks_only}\n\n'
+
+        # Now you have the formatted data in the 'formatted_data' string
+        # You can use it later in your program
+        print(formatted_data)
+
+        # Create Embed Message
+        embed_message = discord.Embed(
+            title="All Libraries",
+            description="This will display all of the current libraries",
+            color=ctx.author.color
+        )
+        # Add Embed Field
+        embed_message.add_field(name="Libraries", value=formatted_data, inline=False)
+
+        await ctx.send(embed=embed_message)
+
+    except Exception as e:
+        await ctx.send("Could not complete this at the moment, please try again later.")
+        print("Error: ", e)
 
 
 client.run(os.environ.get("DISCORD_TOKEN"))

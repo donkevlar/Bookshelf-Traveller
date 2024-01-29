@@ -13,7 +13,6 @@ DOCKER_VARS = False
 if not DOCKER_VARS:
     load_dotenv()
 
-
 # Global Vars
 
 
@@ -93,12 +92,19 @@ def bookshelf_listening_stats():
 
 def bookshelf_libraries():
     endpoint = "/libraries"
+    library_data = {}
     r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
     if r.status_code == 200:
         data = r.json()
         successMSG(endpoint, r.status_code)
-        print(data)
+        for library in data['libraries']:
+            name = library['name']
+            library_id = library['id']
+            audiobooks_only = library['settings'].get('audiobooksOnly')
+            library_data[name] = (library_id, audiobooks_only)
+
+        print(library_data)
+        return library_data
 
 
-if __name__ == 'main':
-    pass
+bookshelf_libraries()
