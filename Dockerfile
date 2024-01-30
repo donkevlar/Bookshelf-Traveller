@@ -9,7 +9,7 @@ WORKDIR /ABSBOT
 
 # Copy the current directory contents into the container at /app
 COPY Scripts/main.py /ABSBOT
-COPY Scripts/Bookshelf.py /ABSBOT/Scripts
+COPY Scripts/Bookshelf.py /ABSBOT
 COPY Scripts/requirements.txt /ABSBOT
 
 # Install any needed packages specified in requirements.txt
