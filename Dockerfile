@@ -1,5 +1,5 @@
 # official Python runtime as a base image
-FROM python:latest
+FROM python:3.11-slim
 
 # Use an official MongoDB runtime as a base image
 # FROM mongo:latest
