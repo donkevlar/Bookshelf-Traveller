@@ -5,3 +5,5 @@ ENVIRONMENTAL VARS REQUIRED:
 DISCORD_TOKEN, 
 bookshelfToken,
 bookshelfURL
+
+https://hub.docker.com/r/donkevlar/bookshelf-traveller
