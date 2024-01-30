@@ -79,9 +79,6 @@ def bookshelf_auth_test():
         print("Cleaning up, authentication\n")
 
 
-from collections import defaultdict
-import requests
-
 def bookshelf_listening_stats():
     endpoint = "/me/listening-stats"
     formatted_sessions = []
@@ -94,14 +91,10 @@ def bookshelf_listening_stats():
         # Use a dictionary to count the number of times each session appears
         session_counts = defaultdict(int)
 
-        # Process each session
+        # Process each session and count the number of times each session appears
         for session in sessions:
             library_item_id = session["libraryItemId"]
             display_title = session["displayTitle"]
-            duration_seconds = session["duration"]  # Duration in seconds
-
-            # Convert duration to hours for each session
-            duration_hours = round(duration_seconds / 3600, 2)
 
             # Create a unique identifier for the session based on library item ID and title
             session_key = (library_item_id, display_title)
@@ -122,12 +115,17 @@ def bookshelf_listening_stats():
             # Extract author information directly from the session
             display_author = session.get('displayAuthor', 'Unknown')
 
+            # Calculate duration for the session
+            duration_seconds = session["duration"]
+            duration_hours = round(duration_seconds / 3600, 2)
+
+            # Format session information
             session_info = (
                 f"Display Title: {display_title}\n"
                 f"Display Author: {display_author}\n"
                 f"Duration: {duration_hours} Hours\n"
                 f"Library Item ID: {library_item_id}\n"
-                f"Number of Times Played: {count}\n"  # Add count information
+                f"Number of Times Played: {count}\n"
             )
             formatted_sessions.append(session_info)
 
@@ -138,6 +136,8 @@ def bookshelf_listening_stats():
     else:
         print(f"Error: {r.status_code}")
         return None
+
+
 
 
 
