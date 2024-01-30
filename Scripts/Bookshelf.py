@@ -77,17 +77,46 @@ def bookshelf_auth_test():
         print("Cleaning up, authentication\n")
 
 
+import requests
+
+
 def bookshelf_listening_stats():
     endpoint = "/me/listening-stats"
+    formatted_sessions = []
     r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
     if r.status_code == 200:
         data = r.json()
-        successMSG(endpoint, r.status_code)
-        return data
+        sessions = data.get("recentSessions", [])  # Extract sessions from the data
+        for session in sessions:
+            library_id = session["libraryId"]
+            library_item_id = session["libraryItemId"]
+            display_title = session["displayTitle"]
+            display_author = session["displayAuthor"]
+            duration = round(session["duration"] / 60)
 
+            # Create a formatted string for the session
+            session_info = (
+                f"Display Title: {display_title}\n"
+                f"Display Author: {display_author}\n"
+                f"Duration: {round(duration / 60)} Hours\n"
+                f"Library ID: {library_id}\n"
+                f"Library Item ID: {library_item_id}\n"
+            )
+            formatted_sessions.append(session_info)
+
+        # Join the formatted sessions into a single string with each session separated by a newline
+        formatted_sessions_string = "\n".join(formatted_sessions)
+
+        return formatted_sessions_string, data
     else:
-        print(r.status_code)
+        print(f"Error: {r.status_code}")
         return None
+
+
+# Define your defaultAPIURL and tokenInsert variables here
+
+# Call the function
+bookshelf_listening_stats()
 
 
 def bookshelf_libraries():
@@ -107,4 +136,4 @@ def bookshelf_libraries():
         return library_data
 
 
-bookshelf_libraries()
+bookshelf_listening_stats()

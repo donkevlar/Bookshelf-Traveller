@@ -69,7 +69,7 @@ async def sync_commands(ctx):
 @client.hybrid_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
 async def totalTime(ctx):
     try:
-        data = bookshelf_listening_stats()
+        formatted_sessions_string, data = bookshelf_listening_stats()
         total_time = round(data.get('totalTime') / 60)  # Convert to Minutes
         if total_time >= 60:
             total_time = round(total_time / 60)  # Convert to hours
@@ -109,11 +109,33 @@ async def show_all_libraries(ctx):
         # Create Embed Message
         embed_message = discord.Embed(
             title="All Libraries",
-            description="This will display all of the current libraries",
+            description="This will display all of the current libraries in your audiobookshelf server.",
             color=ctx.author.color
         )
         # Add Embed Field
         embed_message.add_field(name="Libraries", value=formatted_data, inline=False)
+
+        await ctx.send(embed=embed_message)
+
+    except Exception as e:
+        await ctx.send("Could not complete this at the moment, please try again later.")
+        print("Error: ", e)
+
+
+@client.hybrid_command(name="recent_sessions",
+                       description="Display last 10 sessions")
+async def show_recent_sessions(ctx):
+    try:
+        formatted_sessions_string, data = bookshelf_listening_stats()
+
+        # Create Embed Message
+        embed_message = discord.Embed(
+            title="Recent Sessions",
+            description="Display last 10 sessions.",
+            color=ctx.author.color
+        )
+        # Add Embed Field
+        embed_message.add_field(name="Most Recent Sessions", value=formatted_sessions_string, inline=False)
 
         await ctx.send(embed=embed_message)
 
