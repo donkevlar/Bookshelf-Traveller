@@ -12,7 +12,7 @@ from Bookshelf import bookshelfURL, bookshelfToken, \
     bookshelf_libraries
 
 # Version Info
-versionNumber = 'Alpha_0.08'
+versionNumber = 'Alpha_0.10'
 # Print Startup Time
 current_time = datetime.now()
 print("\nStartup time:", current_time)

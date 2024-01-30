@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import requests
 
 # Set to true when using Docker
-DOCKER_VARS = False
+DOCKER_VARS = True
 
 # DEV ENVIRON VARS
 if not DOCKER_VARS:
