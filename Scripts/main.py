@@ -159,6 +159,4 @@ async def show_recent_sessions(ctx):
         print("Error: ", e)
 
 
-
-
 client.run(os.environ.get("DISCORD_TOKEN"))

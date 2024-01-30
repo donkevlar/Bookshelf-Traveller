@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 import requests
 
 # Set to true when using Docker
-DOCKER_VARS = True
+DOCKER_VARS = False
 
 # DEV ENVIRON VARS
 if not DOCKER_VARS:
@@ -92,6 +92,7 @@ def bookshelf_listening_stats():
         session_counts = defaultdict(int)
 
         # Process each session
+        duration_hours = 0
         for session in sessions:
             library_item_id = session["libraryItemId"]
             display_title = session["displayTitle"]
@@ -106,19 +107,27 @@ def bookshelf_listening_stats():
             # Increment the count for this session
             session_counts[session_key] += 1
 
-            # Create formatted string for this session
+        # Sort sessions by play count (highest to lowest)
+        sorted_sessions = sorted(session_counts.items(), key=lambda x: x[1], reverse=True)[:5]  # Take only the top 5
+
+        # Create formatted strings with session info and count
+        for session_key, count in sorted_sessions:
+            library_item_id, display_title = session_key
+
+            # Retrieve the session from sessions based on library_item_id
+            session = next(session for session in sessions if session['libraryItemId'] == library_item_id)
+
+            # Extract author information directly from the session
             display_author = session.get('displayAuthor', 'Unknown')
+
             session_info = (
                 f"Display Title: {display_title}\n"
                 f"Display Author: {display_author}\n"
                 f"Duration: {duration_hours} Hours\n"
-                f"Number of Times Played: {session_counts[session_key]}\n"  # Use session count directly
                 f"Library Item ID: {library_item_id}\n"
+                f"Number of Times Played: {count}\n"  # Add count information
             )
             formatted_sessions.append(session_info)
-
-        # Sort sessions by play count (highest to lowest)
-        sorted_sessions = sorted(session_counts.items(), key=lambda x: x[1], reverse=True)[:5]  # Take only the top 5
 
         # Join the formatted sessions into a single string with each session separated by a newline
         formatted_sessions_string = "\n".join(formatted_sessions)
@@ -127,6 +136,7 @@ def bookshelf_listening_stats():
     else:
         print(f"Error: {r.status_code}")
         return None
+
 
 
 
