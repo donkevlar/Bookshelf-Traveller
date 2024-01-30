@@ -65,7 +65,7 @@ async def on_ready():
     print(f'Bot is ready. Logged in as {client.user}')
 
 
-@client.hybrid_command(name="sync_commands", description="Re-syncs all of the bots commands")
+@client.hybrid_command(name="sync", description="Re-syncs all of the bots commands")
 async def sync_commands(ctx):
     await client.tree.sync()
     await ctx.send("Successfully Synced Commands")
