@@ -3,6 +3,8 @@ import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 import time
+from datetime import datetime
+
 #
 # File Imports
 from Bookshelf import bookshelfURL, bookshelfToken, \
@@ -10,7 +12,10 @@ from Bookshelf import bookshelfURL, bookshelfToken, \
     bookshelf_libraries
 
 # Version Info
-versionNumber = 'Alpha_0.06'
+versionNumber = 'Alpha_0.08'
+# Print Startup Time
+current_time = datetime.now()
+print("\nStartup time:", current_time)
 
 # Pulls from bookshelf file, if DOCKER == True, then this won't load local env file
 if not DOCKER_VARS:
@@ -123,7 +128,7 @@ async def show_all_libraries(ctx):
 
 
 @client.hybrid_command(name="recent_sessions",
-                       description="Display last 10 sessions")
+                       description="Display last 5 sessions")
 async def show_recent_sessions(ctx):
     try:
         formatted_sessions_string, data = bookshelf_listening_stats()
@@ -131,17 +136,29 @@ async def show_recent_sessions(ctx):
         # Create Embed Message
         embed_message = discord.Embed(
             title="Recent Sessions",
-            description="Display last 10 sessions.",
+            description="Display last 5 sessions.",
             color=ctx.author.color
         )
-        # Add Embed Field
-        embed_message.add_field(name="Most Recent Sessions", value=formatted_sessions_string, inline=False)
+
+        # Split formatted_sessions_string by newline character to separate individual sessions
+        sessions_list = formatted_sessions_string.split('\n\n')
+
+        # Add each session as a separate field in the embed
+        for session_info in sessions_list:
+            # Split session info into lines
+            session_lines = session_info.strip().split('\n')
+            # Extract display title from the first line
+            display_title = session_lines[0].split(': ')[1]
+            # Use display title as the name for the field
+            embed_message.add_field(name=display_title, value=session_info, inline=False)
 
         await ctx.send(embed=embed_message)
 
     except Exception as e:
         await ctx.send("Could not complete this at the moment, please try again later.")
         print("Error: ", e)
+
+
 
 
 client.run(os.environ.get("DISCORD_TOKEN"))

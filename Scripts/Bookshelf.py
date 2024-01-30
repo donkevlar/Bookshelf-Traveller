@@ -1,5 +1,6 @@
 import os
 import time
+from collections import defaultdict
 
 import dotenv
 from dotenv import load_dotenv
@@ -27,6 +28,7 @@ bookshelfToken = os.environ.get("bookshelfToken")
 tokenInsert = "?token=" + bookshelfToken
 
 
+# Simple Success Message
 def successMSG(endpoint, status):
     print(f'Successfully Reached {endpoint} with Status {status}')
 
@@ -77,32 +79,46 @@ def bookshelf_auth_test():
         print("Cleaning up, authentication\n")
 
 
-import requests
-
-
 def bookshelf_listening_stats():
     endpoint = "/me/listening-stats"
     formatted_sessions = []
     r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
+
     if r.status_code == 200:
         data = r.json()
         sessions = data.get("recentSessions", [])  # Extract sessions from the data
+
+        # Use a dictionary to count the number of times each session appears
+        session_counts = defaultdict(int)
+
+        # Process each session
         for session in sessions:
-            library_id = session["libraryId"]
             library_item_id = session["libraryItemId"]
             display_title = session["displayTitle"]
-            display_author = session["displayAuthor"]
-            duration = round(session["duration"] / 60)
+            duration_seconds = session["duration"]  # Duration in seconds
 
-            # Create a formatted string for the session
+            # Convert duration to hours
+            duration_hours = round(duration_seconds / 3600, 2)
+
+            # Create a unique identifier for the session based on library item ID and title
+            session_key = (library_item_id, display_title)
+
+            # Increment the count for this session
+            session_counts[session_key] += 1
+
+            # Create formatted string for this session
+            display_author = session.get('displayAuthor', 'Unknown')
             session_info = (
                 f"Display Title: {display_title}\n"
                 f"Display Author: {display_author}\n"
-                f"Duration: {round(duration / 60)} Hours\n"
-                f"Library ID: {library_id}\n"
+                f"Duration: {duration_hours} Hours\n"
+                f"Number of Times Played: {session_counts[session_key]}\n"  # Use session count directly
                 f"Library Item ID: {library_item_id}\n"
             )
             formatted_sessions.append(session_info)
+
+        # Sort sessions by play count (highest to lowest)
+        sorted_sessions = sorted(session_counts.items(), key=lambda x: x[1], reverse=True)[:5]  # Take only the top 5
 
         # Join the formatted sessions into a single string with each session separated by a newline
         formatted_sessions_string = "\n".join(formatted_sessions)
@@ -113,10 +129,6 @@ def bookshelf_listening_stats():
         return None
 
 
-# Define your defaultAPIURL and tokenInsert variables here
-
-# Call the function
-bookshelf_listening_stats()
 
 
 def bookshelf_libraries():
@@ -134,6 +146,3 @@ def bookshelf_libraries():
 
         print(library_data)
         return library_data
-
-
-bookshelf_listening_stats()
