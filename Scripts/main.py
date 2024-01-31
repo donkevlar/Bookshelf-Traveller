@@ -1,3 +1,5 @@
+import requests
+
 import settings
 import discord
 from discord.ext import commands
@@ -272,6 +274,28 @@ async def search_user(ctx, *, name: str, password: str, user_type="user", email=
         await ctx.send("Could not complete this at the moment, please try again later.")
         logger.warning(
             f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: add-user')
+
+
+@client.hybrid_command(name="test-connection",
+                       description="Will test the connection between this bot and the audiobookshelf server, "
+                                   "optionally can place any url if your want")
+async def test_server_connection(ctx, URL=None):
+    try:
+        if URL is not None:
+            r = requests.get(URL)
+            status = r.status_code
+
+            await ctx.send(f"Successfully connected to {URL} with status: {status}")
+        else:
+            status = b.bookshelf_test_connection()
+            await ctx.send(f"Successfully connected to {b.bookshelfURL} with status: {status}")
+
+        logger.info(f' Successfully sent command: test-connection')
+
+    except Exception as e:
+        logger.warning(
+            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: add-user')
+
 
 
 class SimpleButtons(discord.ui.View):
