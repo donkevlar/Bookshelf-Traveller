@@ -13,9 +13,9 @@ ENVIRONMENTAL VARS REQUIRED:
 
 | ENV Variables      | Description                                                   |
 |--------------------|---------------------------------------------------------------|
-| **DISCORD_TOKEN**  | Discord API Token                                             |
-| **bookshelfToken** | Bookshelf User Token (being an admin is recommended)          |
-| **bookshelfURL**   | Bookshelf url with protocol and port, ex: http://localhost:80 |
+| **'DISCORD_TOKEN'**  | Discord API Token                                             |
+| **'bookshelfToken'** | Bookshelf User Token (being an admin is recommended)          |
+| **'bookshelfURL'**   | Bookshelf url with protocol and port, ex: http://localhost:80 |
 
 
 ## Docker Container
