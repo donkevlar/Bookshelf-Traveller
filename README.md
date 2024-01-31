@@ -18,7 +18,7 @@ bookshelfURL
 
 Docker Container Available:
 
-'''
+```
 docker pull donkevlar/bookshelf-traveller
-'''
+```
 
