@@ -6,4 +6,8 @@ DISCORD_TOKEN,
 bookshelfToken,
 bookshelfURL
 
-https://hub.docker.com/r/donkevlar/bookshelf-traveller
+Docker Container Available:
+
+docker pull donkevlar/bookshelf-traveller
+
+
