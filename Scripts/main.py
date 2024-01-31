@@ -123,22 +123,17 @@ async def show_all_libraries(ctx):
         library_data = c.bookshelf_libraries()
         formatted_data = ""
 
-        # Iterate over each key-value pair in the dictionary
-        for name, (library_id, audiobooks_only) in library_data.items():
-            formatted_data += f'\nName: {name} \nLibraryID: {library_id} \nAudiobooks Only: {audiobooks_only}\n\n'
-
-        # Now you have the formatted data in the 'formatted_data' string
-        # You can use it later in your program
-        print(formatted_data)
-
         # Create Embed Message
         embed_message = discord.Embed(
             title="All Libraries",
             description="This will display all of the current libraries in your audiobookshelf server.",
             color=ctx.author.color
         )
-        # Add Embed Field
-        embed_message.add_field(name="Libraries", value=formatted_data, inline=False)
+
+        # Iterate over each key-value pair in the dictionary
+        for name, (library_id, audiobooks_only) in library_data.items():
+            formatted_data += f'\nName: {name} \nLibraryID: {library_id} \nAudiobooks Only: {audiobooks_only}\n\n'
+            embed_message.add_field(name=f"{name}", value=formatted_data, inline=False)
 
         await ctx.send(embed=embed_message)
         logger.info(f' Successfully sent command: recent-sessions')
