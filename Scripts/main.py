@@ -279,13 +279,13 @@ async def search_user(ctx, *, name: str, password: str, user_type="user", email=
 @client.hybrid_command(name="test-connection",
                        description="Will test the connection between this bot and the audiobookshelf server, "
                                    "optionally can place any url if your want")
-async def test_server_connection(ctx, URL=None):
+async def test_server_connection(ctx, opt_url=None):
     try:
-        if URL is not None:
-            r = requests.get(URL)
+        if opt_url is not None:
+            r = requests.get(opt_url)
             status = r.status_code
 
-            await ctx.send(f"Successfully connected to {URL} with status: {status}")
+            await ctx.send(f"Successfully connected to {opt_url} with status: {status}")
         else:
             status = b.bookshelf_test_connection()
             await ctx.send(f"Successfully connected to {b.bookshelfURL} with status: {status}")
