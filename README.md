@@ -1,5 +1,11 @@
 # Bookshelf-Traveller
 
+![GitHub commit activity](https://img.shields.io/github/commit-activity/y/donkevlar/Bookshelf-Traveller)
+![GitHub License](https://img.shields.io/github/license/donkevlar/Bookshelf-Traveller)
+
+<a href="https://www.buymeacoffee.com/donkevlar" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-green.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
+
+
 A simple Audiobookshelf discord bot to help you manage your instance :)
 
 You'll need to create your own discord application in order to do this, you can google on how to do that. 
