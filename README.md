@@ -14,7 +14,7 @@ ENVIRONMENTAL VARS REQUIRED:
 | **bookshelfToken** | Bookshelf User Token (being an admin is recommended)          |
 | **bookshelfURL**   | Bookshelf url with protocol and port, ex: http://localhost:80 |
 
-bookshelfURL
+
 
 Docker Container Available:
 
