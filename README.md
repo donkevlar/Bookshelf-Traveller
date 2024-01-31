@@ -19,12 +19,20 @@ ENVIRONMENTAL VARS REQUIRED:
 
 | ENV Variables      | Description                                                   |
 |--------------------|---------------------------------------------------------------|
-| **'DISCORD_TOKEN'**  | Discord API Token                                             |
-| **'bookshelfToken'** | Bookshelf User Token (being an admin is recommended)          |
-| **'bookshelfURL'**   | Bookshelf url with protocol and port, ex: http://localhost:80 |
+| `DISCORD_TOKEN`  | Discord API Token                                             |
+| `bookshelfToken` | Bookshelf User Token (being an admin is recommended)          |
+| `bookshelfURL`   | Bookshelf url with protocol and port, ex: http://localhost:80 |
 
-
-## Docker Container
+## Installation
+*** Current Installation method is by docker container, however, you can also run main.py within a project folder. ***
+### Python Script
+Requirements: Python 3.11 or above
+you'll also need an '.env' file for loading the above ENV Variables
+```
+pip install discord.py
+pip install python-dotenv
+```
+### Docker Container
 Docker Container Available:
 
 ```
