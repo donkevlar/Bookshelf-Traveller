@@ -277,8 +277,8 @@ async def search_user(ctx, *, name: str, password: str, user_type="user", email=
 
 
 @client.hybrid_command(name="test-connection",
-                       description="Will test the connection between this bot and the audiobookshelf server, "
-                                   "optionally can place any url if your want")
+                       description="test the connection between this bot and the audiobookshelf server, "
+                                   "optionally can place any url")
 async def test_server_connection(ctx, opt_url=None):
     try:
         if opt_url is not None:
