@@ -302,7 +302,7 @@ async def test_server_connection(ctx, opt_url=None):
 
 @client.hybrid_command(name="book-list-csv",
                        description="Get complete list of items in a given library, outputs a csv")
-async def test_server_connection(ctx, libraryid: str):
+async def library_csv_booklist(ctx, libraryid: str):
     try:
         # Get Current Working Directory
         current_directory = os.getcwd()
