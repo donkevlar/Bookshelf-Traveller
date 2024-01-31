@@ -33,6 +33,7 @@ The following Commands are available:
 | sync-status           | Verify if sync command has already been executed since startup, returns boolean |
 | add-user              | Will create a user, requires username, password                                 | additional fields: user type, email.                                                                                                   |
 | all-libraries         | Displays all current libraries with their ID                                    |                                                                                                                                        |
+|book-list-csv|Get complete list of items in a given library, outputs a csv||
 | listening-stats       | Pulls your total listening time                                                 | Will be expanded in the future.                                                                                                        |
 | media-progress        | Searches for the media item's progress, note: ***requires Library Item ID***    |                                                                                                                                        |
 | ping                  | Displays the latency between your server and the discord server shard           |                                                                                                                                        |
