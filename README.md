@@ -1,3 +1,12 @@
+#Bookshelf-Traveller
+
+[![GitHub Release][releases-shield]][releases]
+[![GitHub Activity][commits-shield]][commits]
+[![License][license-shield]](LICENSE)
+
+[![Project Maintenance][maintenance-shield]][user_profile]
+[![BuyMeCoffee][buymecoffeebadge]][buymecoffee]
+
 A simple Audiobookshelf discord bot to help you manage your instance :)
 
 You'll need to create your own discord application in order to do this, you can google on how to do that. 
