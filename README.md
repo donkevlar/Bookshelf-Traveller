@@ -26,7 +26,8 @@ ENVIRONMENTAL VARS REQUIRED:
 ## Installation
 *** Current Installation method is by docker container, however, you can also run main.py within a project folder. ***
 ### Python Script
-Requirements: Python 3.11 or above
+Requirements: Python 3.11 or above.
+
 you'll also need an '.env' file for loading the above ENV Variables
 ```
 pip install discord.py
@@ -48,14 +49,14 @@ The following Commands are available:
 
 | Command               | Description                                                                     | Additional Information                                                                                                                 |
 |-----------------------|---------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|
-| sync                  | Sync commands with discord server                                               | useful if you just updated the bot and discord isn't displaying the full list. Sometimes, however, you simply need to restart discord. |
-| sync-status           | Verify if sync command has already been executed since startup, returns boolean |
-| add-user              | Will create a user, requires username, password                                 | additional fields: user type, email.                                                                                                   |
-| all-libraries         | Displays all current libraries with their ID                                    |                                                                                                                                        |
-|book-list-csv|Get complete list of items in a given library, outputs a csv||
-| listening-stats       | Pulls your total listening time                                                 | Will be expanded in the future.                                                                                                        |
-| media-progress        | Searches for the media item's progress, note: ***requires Library Item ID***    |                                                                                                                                        |
-| ping                  | Displays the latency between your server and the discord server shard           |                                                                                                                                        |
-| recent-sessions       | Will display ***up to*** 5 recent sessions in a filtered and formatted way.     |                                                                                                                                        |
- | user-search           | Search for a specific user by name                                              | current public release only has name, but ill update it to include search by ID                                                        |
-| test-connection       | Will test the connection of your bot to the audioboookshelf server              | Optionally you can test the connection to any url using the URL arg.                                                                   |
+| `/sync`                  | Sync commands with discord server                                               | useful if you just updated the bot and discord isn't displaying the full list. Sometimes, however, you simply need to restart discord. |
+| `/sync-status `          | Verify if sync command has already been executed since startup, returns boolean |
+| `/add-user`              | Will create a user, requires username, password                                 | additional fields: user type, email.                                                                                                   |
+| `/all-libraries`         | Displays all current libraries with their ID                                    |                                                                                                                                        |
+|`/book-list-csv`  |Get complete list of items in a given library, outputs a csv||
+| `/listening-stats`       | Pulls your total listening time                                                 | Will be expanded in the future.                                                                                                        |
+| `/media-progress`        | Searches for the media item's progress, note: ***requires Library Item ID***    |                                                                                                                                        |
+| `/ping`                  | Displays the latency between your server and the discord server shard           |                                                                                                                                        |
+| `/recent-sessions`       | Will display ***up to*** 5 recent sessions in a filtered and formatted way.     |                                                                                                                                        |
+ | `/user-search`           | Search for a specific user by name                                              | current public release only has name, but ill update it to include search by ID                                                        |
+| `/test-connection`       | Will test the connection of your bot to the audioboookshelf server              | Optionally you can test the connection to any url using the URL arg.                                                                   |
