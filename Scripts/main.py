@@ -125,10 +125,7 @@ async def show_all_libraries(ctx):
 
         # Iterate over each key-value pair in the dictionary
         for name, (library_id, audiobooks_only) in library_data.items():
-            # remove tailing ','
-            s_library_id = library_id.rstrip(",")
-
-            formatted_data += f'\nName: {name}, \nLibraryID: {s_library_id}, \nAudiobooks Only: {audiobooks_only}\n\n'
+            formatted_data += f'\nName: {name} \nLibraryID: {library_id} \nAudiobooks Only: {audiobooks_only}\n\n'
 
         # Now you have the formatted data in the 'formatted_data' string
         # You can use it later in your program
