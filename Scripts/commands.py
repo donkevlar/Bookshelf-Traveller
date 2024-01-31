@@ -2,6 +2,7 @@ import os
 import time
 from collections import defaultdict
 from datetime import datetime
+import csv
 
 import dotenv
 from dotenv import load_dotenv
@@ -237,3 +238,29 @@ def bookshelf_create_user(username: str, password, user_type: str, email=None):
             return user_id, username
         else:
             print(r.status_code)
+
+
+def bookshelf_library_csv(library_id: str, file_name='books.csv'):
+    headers = {'Authorization': f'Bearer {bookshelfToken}'}
+
+    library_items_api_url = defaultAPIURL + '/libraries/' + library_id + '/items?sort=media.metadata.authorName'
+
+    response = requests.get(library_items_api_url, headers=headers)
+    if response.status_code == 200:
+
+        data = response.json()['results']
+
+        # CSV file creation
+        with open(file_name, 'w', newline='') as file:
+            writer = csv.writer(file)
+            # Writing the headers
+            writer.writerow(["Title", "Author", "Series", "Year"])
+
+            for result in data:
+                title = result['media']['metadata']['title']
+                author = result['media']['metadata']['authorName']
+                series = result['media']['metadata']['seriesName']
+                year = result['media']['metadata']['publishedYear']
+
+                # Writing the data
+                writer.writerow([title, author, series, year])

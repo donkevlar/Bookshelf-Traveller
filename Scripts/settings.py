@@ -5,7 +5,7 @@ import time
 from datetime import datetime
 from logging.config import dictConfig
 from dotenv import load_dotenv
-from Bookshelf import DOCKER_VARS
+from commands import DOCKER_VARS
 
 if not DOCKER_VARS:
     load_dotenv()

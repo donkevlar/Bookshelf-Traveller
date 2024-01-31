@@ -9,7 +9,7 @@ import time
 from dotenv import load_dotenv
 
 # File Imports
-import Bookshelf as b
+import commands as c
 
 # Global Vars
 SYNC_STATUS = False
@@ -26,7 +26,7 @@ logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
 print("\nStartup time:", current_time)
 
 # Pulls from bookshelf file, if DOCKER == True, then this won't load local env file
-if not b.DOCKER_VARS:
+if not c.DOCKER_VARS:
     load_dotenv()
 
 # Get Discord Token from ENV
@@ -35,7 +35,7 @@ token = os.environ.get("DISCORD_TOKEN")
 logger.info(f'\nStarting up bookshelf traveller v.{versionNumber}\n')
 
 # Start Server Connection Prior to Running Bot
-server_status_code = b.bookshelf_test_connection()
+server_status_code = c.bookshelf_test_connection()
 
 # Quit if server does not respond
 if server_status_code != 200:
@@ -56,7 +56,7 @@ else:
 # print(f'\nDiscord Token: {token}\n')
 
 # Will print username when successful
-auth_test = b.bookshelf_auth_test()
+auth_test = c.bookshelf_auth_test()
 
 time.sleep(0.5)
 
@@ -90,7 +90,7 @@ async def sync_commands(ctx):
 @client.hybrid_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
 async def totalTime(ctx):
     try:
-        formatted_sessions_string, data = b.bookshelf_listening_stats()
+        formatted_sessions_string, data = c.bookshelf_listening_stats()
         total_time = round(data.get('totalTime') / 60)  # Convert to Minutes
         if total_time >= 60:
             total_time = round(total_time / 60)  # Convert to hours
@@ -120,12 +120,15 @@ async def ping(ctx):
 async def show_all_libraries(ctx):
     try:
         # Get Library Data from API
-        library_data = b.bookshelf_libraries()
+        library_data = c.bookshelf_libraries()
         formatted_data = ""
 
         # Iterate over each key-value pair in the dictionary
         for name, (library_id, audiobooks_only) in library_data.items():
-            formatted_data += f'\nName: {name}, \nLibraryID: {library_id}, \nAudiobooks Only: {audiobooks_only}\n\n'
+            # remove tailing ','
+            s_library_id = library_id.rstrip(",")
+
+            formatted_data += f'\nName: {name}, \nLibraryID: {s_library_id}, \nAudiobooks Only: {audiobooks_only}\n\n'
 
         # Now you have the formatted data in the 'formatted_data' string
         # You can use it later in your program
@@ -153,7 +156,7 @@ async def show_all_libraries(ctx):
                        description="Display up to 5 recent sessions")
 async def show_recent_sessions(ctx):
     try:
-        formatted_sessions_string, data = b.bookshelf_listening_stats()
+        formatted_sessions_string, data = c.bookshelf_listening_stats()
 
         # Split formatted_sessions_string by newline character to separate individual sessions
         sessions_list = formatted_sessions_string.split('\n\n')
@@ -198,7 +201,7 @@ async def show_recent_sessions(ctx):
                        "Searches for the media item's progress, note: use recent session to find library item id")
 async def search_media_progress(ctx, *, libraryitemid: str):
     try:
-        formatted_data, title, description = b.bookshelf_item_progress(libraryitemid)
+        formatted_data, title, description = c.bookshelf_item_progress(libraryitemid)
 
         # Create Embed Message
         embed_message = discord.Embed(
@@ -230,7 +233,7 @@ async def sync_status(ctx):
                        "Searches for a specific user, case sensitive")
 async def search_user(ctx, *, name: str):
     try:
-        isFound, username, user_id, last_seen, isActive = b.bookshelf_get_users(name)
+        isFound, username, user_id, last_seen, isActive = c.bookshelf_get_users(name)
 
         if isFound:
             formatted_data = (
@@ -266,7 +269,7 @@ async def search_user(ctx, *, name: str):
                        description="Will create a user, user types: 'admin', 'guest', 'user' | Default = user")
 async def search_user(ctx, *, name: str, password: str, user_type="user", email=None):
     try:
-        user_id, c_username = b.bookshelf_create_user(name, password, user_type)
+        user_id, c_username = c.bookshelf_create_user(name, password, user_type)
         await ctx.send(f"Successfully Created User: {c_username} with ID: {user_id}!")
         logger.info(f' Successfully sent command: add-user')
 
@@ -287,8 +290,8 @@ async def test_server_connection(ctx, opt_url=None):
 
             await ctx.send(f"Successfully connected to {opt_url} with status: {status}")
         else:
-            status = b.bookshelf_test_connection()
-            await ctx.send(f"Successfully connected to {b.bookshelfURL} with status: {status}")
+            status = c.bookshelf_test_connection()
+            await ctx.send(f"Successfully connected to {c.bookshelfURL} with status: {status}")
 
         logger.info(f' Successfully sent command: test-connection')
 
@@ -296,6 +299,29 @@ async def test_server_connection(ctx, opt_url=None):
         logger.warning(
             f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: add-user')
 
+
+@client.hybrid_command(name="book-list-csv",
+                       description="Get complete list of items in a given library, outputs a csv")
+async def test_server_connection(ctx, libraryid: str):
+    try:
+        # Get Current Working Directory
+        current_directory = os.getcwd()
+
+        # Create CSV File
+        c.bookshelf_library_csv(libraryid)
+
+        # Get Filepath
+        file_path = os.path.join(current_directory, 'books.csv')
+
+        await ctx.send(file=discord.File(file_path))
+        logger.info(f' Successfully sent command: test-connection')
+
+    except Exception as e:
+
+        await ctx.send("Could not complete this at the moment, please try again later.")
+
+        logger.warning(
+            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: add-user')
 
 
 class SimpleButtons(discord.ui.View):
