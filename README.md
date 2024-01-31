@@ -24,7 +24,7 @@ ENVIRONMENTAL VARS REQUIRED:
 | `bookshelfURL`   | Bookshelf url with protocol and port, ex: http://localhost:80 |
 
 ## Installation
-*** Current Installation method is by docker container, however, you can also run main.py within a project folder. ***
+**Current Installation method is by docker container, however, you can also run main.py within a project folder.**
 ### Python Script
 Requirements: Python 3.11 or above.
 
