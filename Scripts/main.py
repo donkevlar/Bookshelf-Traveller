@@ -133,7 +133,8 @@ async def show_all_libraries(ctx):
         # Iterate over each key-value pair in the dictionary
         for name, (library_id, audiobooks_only) in library_data.items():
             formatted_data += f'\nName: {name} \nLibraryID: {library_id} \nAudiobooks Only: {audiobooks_only}\n\n'
-            embed_message.add_field(name=f"{name}", value=formatted_data, inline=False)
+
+        embed_message.add_field(name=f"Libraries", value=formatted_data, inline=False)
 
         await ctx.send(embed=embed_message)
         logger.info(f' Successfully sent command: recent-sessions')
