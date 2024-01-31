@@ -8,6 +8,7 @@ Make sure that you select all intents when setting up your bot and that you have
 
 **Permissions for the bot should be done manually, currently with how I have it set up, there aren't any limiting factors, please setup your roles accordingly.**
 
+### Environmental Variables
 ENVIRONMENTAL VARS REQUIRED:
 
 | ENV Variables      | Description                                                   |
@@ -17,12 +18,14 @@ ENVIRONMENTAL VARS REQUIRED:
 | **bookshelfURL**   | Bookshelf url with protocol and port, ex: http://localhost:80 |
 
 
-
+## Docker Container
 Docker Container Available:
 
 ```
 docker pull donkevlar/bookshelf-traveller
 ```
+
+## Bot Commands
 The following Commands are available:
 
 **Note: Prefix is also usable, currently set to '$'**
