@@ -9,11 +9,14 @@ from dotenv import load_dotenv
 # File Imports
 import Bookshelf as b
 
+# Global Vars
+SYNC_STATUS = False
+
 # Logger Config
 logger = settings.logging.getLogger("bot")
 
 # Version Info
-versionNumber = 'Alpha_0.10'
+versionNumber = 'Alpha_0.12'
 # Print Startup Time
 current_time = datetime.now()
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
@@ -27,24 +30,24 @@ if not b.DOCKER_VARS:
 # Get Discord Token from ENV
 token = os.environ.get("DISCORD_TOKEN")
 
-print(f'\nStarting up bookshelf traveller v.{versionNumber}\n')
+logger.info(f'\nStarting up bookshelf traveller v.{versionNumber}\n')
 
 # Start Server Connection Prior to Running Bot
 server_status_code = b.bookshelf_test_connection()
 
 # Quit if server does not respond
 if server_status_code != 200:
-    print(f'Current Server Status = {server_status_code}')
-    print("Issue with connecting to Audiobookshelf server!")
-    print("Quitting!")
-    time.sleep(1)
+    logger.warning(f'Current Server Status = {server_status_code}')
+    logger.warning("Issue with connecting to Audiobookshelf server!")
+    logger.warning("Quitting!")
+    time.sleep(0.5)
     exit()
 
 elif server_status_code is None:
     pass
 
 else:
-    print(f'Current Server Status = {server_status_code}, Good to go!')
+    logger.info(f'Current Server Status = {server_status_code}, Good to go!')
 
 # DEV -> Not recommended when running in a prod instance
 # Remove comment to see token
@@ -70,9 +73,16 @@ async def on_ready():
 
 @client.hybrid_command(name="sync", description="Re-syncs all of the bots commands")
 async def sync_commands(ctx):
-    await client.tree.sync()
-    await ctx.send("Successfully Synced Commands")
-    logger.info(f' Successfully Synchronized Commands, for accuracy restart discord | Executed "sync"')
+    global SYNC_STATUS
+    try:
+        SYNC_STATUS = True
+        await client.tree.sync()
+        await ctx.send("Successfully Synced Commands")
+        logger.info(f' Successfully Synchronized Commands, for accuracy restart discord | Executed "sync"')
+    except Exception as e:
+        await ctx.send("Could not get complete this at the moment, please try again later.")
+        logger.warning(
+            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: sync')
 
 
 @client.hybrid_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
@@ -138,38 +148,150 @@ async def show_all_libraries(ctx):
 
 
 @client.hybrid_command(name="recent-sessions",
-                       description="Display last 5 sessions")
+                       description="Display up to 5 recent sessions")
 async def show_recent_sessions(ctx):
     try:
         formatted_sessions_string, data = b.bookshelf_listening_stats()
 
-        # Create Embed Message
-        embed_message = discord.Embed(
-            title="Recent Sessions",
-            description="Display last 5 sessions.",
-            color=ctx.author.color
-        )
-
         # Split formatted_sessions_string by newline character to separate individual sessions
         sessions_list = formatted_sessions_string.split('\n\n')
-
+        count = 0
         # Add each session as a separate field in the embed
         for session_info in sessions_list:
+            count = count + 1
+            # Create Embed Message
+            embed_message = discord.Embed(
+                title=f"Session {count}",
+                description=f"Recent Session Info",
+                color=ctx.author.color
+            )
             # Split session info into lines
             session_lines = session_info.strip().split('\n')
             # Extract display title from the first line
             display_title = session_lines[0].split(': ')[1]
-            # Use display title as the name for the field
-            embed_message.add_field(name=display_title, value=session_info, inline=False)
+            author = session_lines[1].split(': ')[1]
+            duration = session_lines[2].split(': ')[1]
+            library_ID = session_lines[3].split(': ')[1]
+            play_count = session_lines[4].split(': ')[1]
 
-        await ctx.send(embed=embed_message)
-        logger.info(f' Successfully sent command: recent-sessions')
+            # Use display title as the name for the field
+            embed_message.add_field(name='Title', value=display_title, inline=False)
+            embed_message.add_field(name='Author', value=author, inline=False)
+            embed_message.add_field(name='Duration', value=duration, inline=False)
+            embed_message.add_field(name='Number of Times Played', value=f'Play Count: {play_count}', inline=False)
+            embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
+
+            await ctx.send(embed=embed_message)
+            logger.info(f' Successfully sent command: recent-sessions')
 
     except Exception as e:
         await ctx.send("Could not complete this at the moment, please try again later.")
         logger.warning(
             f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: recent-sessions')
         print("Error: ", e)
+
+
+@client.hybrid_command(name="media-progress",
+                       description=
+                       "Searches for the media item's progress, note: use recent session to find library item id")
+async def search_media_progress(ctx, *, libraryitemid: str):
+    try:
+        formatted_data, title, description = b.bookshelf_item_progress(libraryitemid)
+
+        # Create Embed Message
+        embed_message = discord.Embed(
+            title=f"{title} | Media Progress",
+            description=f"Media Progress for {title}",
+            color=ctx.author.color
+        )
+        embed_message.add_field(name=title, value=formatted_data, inline=False)
+
+        # Send message
+        await ctx.send(embed=embed_message)
+        logger.info(f' Successfully sent command: media-progress')
+
+    except Exception as e:
+        await ctx.send("Could not complete this at the moment, please try again later.")
+        logger.warning(
+            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: media-progress')
+
+
+@client.hybrid_command(name="sync-status",
+                       description=
+                       "returns a boolean for if server commands have synced lately with discord server shard.")
+async def sync_status(ctx):
+    await ctx.send(f'Current Sync Status: {SYNC_STATUS}')
+
+
+@client.hybrid_command(name="user-search",
+                       description=
+                       "Searches for a specific user, case sensitive")
+async def search_user(ctx, *, name: str):
+    try:
+        isFound, username, user_id, last_seen, isActive = b.bookshelf_get_users(name)
+
+        if isFound:
+            formatted_data = (
+                f'Last Seen: {last_seen}\n'
+                f'is Active: {isActive}\n'
+            )
+
+            # Create Embed Message
+            embed_message = discord.Embed(
+                title=f"User Info | {username}",
+                description=f"User information for {username}",
+                color=ctx.author.color
+            )
+            embed_message.add_field(name="Username", value=username, inline=False)
+            embed_message.add_field(name="User ID", value=user_id, inline=False)
+            embed_message.add_field(name="General Information", value=formatted_data, inline=False)
+
+            # Send message
+            await ctx.send(embed=embed_message)
+            logger.info(f' Successfully sent command: search_user')
+
+    except TypeError as e:
+        await ctx.send("Could not find that user, try a different name or make sure that it is spelt correctly.")
+        logger.info(f' Successfully sent command: search_user')
+
+    except Exception as e:
+        await ctx.send("Could not complete this at the moment, please try again later.")
+        logger.warning(
+            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: search_user')
+
+
+@client.hybrid_command(name="add-user",
+                       description="Will create a user, user types: 'admin', 'guest', 'user' | Default = user")
+async def search_user(ctx, *, name: str, password: str, user_type="user", email=None):
+    try:
+        user_id, c_username = b.bookshelf_create_user(name, password, user_type)
+        await ctx.send(f"Successfully Created User: {c_username} with ID: {user_id}!")
+        logger.info(f' Successfully sent command: add-user')
+
+    except Exception as e:
+        await ctx.send("Could not complete this at the moment, please try again later.")
+        logger.warning(
+            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: add-user')
+
+
+class SimpleButtons(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="Yes", style=discord.ButtonStyle.red)
+    async def delete_user(self, interaction: discord.Interaction, Button: discord.ui.Button):
+        output = "yes"
+        return output
+
+    @discord.ui.button(label="No", style=discord.ButtonStyle.gray)
+    async def delete_user(self, interaction: discord.Interaction, Button: discord.ui.Button):
+        output = "no"
+        return output
+
+
+# @client.tree.command(name="delete-user", description="Delete a user on your server")
+# async def delete_user(ctx, *, name: str):
+# pass
 
 
 client.run(settings.DISCORD_API_SECRET, root_logger=True)

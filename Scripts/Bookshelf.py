@@ -1,6 +1,7 @@
 import os
 import time
 from collections import defaultdict
+from datetime import datetime
 
 import dotenv
 from dotenv import load_dotenv
@@ -8,7 +9,7 @@ from dotenv import load_dotenv
 import requests
 
 # Set to true when using Docker
-DOCKER_VARS = True
+DOCKER_VARS = False
 
 # DEV ENVIRON VARS
 if not DOCKER_VARS:
@@ -138,9 +139,6 @@ def bookshelf_listening_stats():
         return None
 
 
-
-
-
 def bookshelf_libraries():
     endpoint = "/libraries"
     library_data = {}
@@ -156,3 +154,86 @@ def bookshelf_libraries():
 
         print(library_data)
         return library_data
+
+
+def bookshelf_item_progress(item_id):
+    endpoint = f"/me/progress/{item_id}"
+    r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
+    if r.status_code == 200:
+        data = r.json()
+        successMSG(endpoint, r.status_code)
+
+        progress = round(data['progress'] * 100)
+        isFinished = data['isFinished']
+        currentTime = data['currentTime'] / 60
+        duration = data['duration'] / 60
+        lastUpdate = data['lastUpdate'] / 1000
+
+        # Convert lastUpdate Time from unix to standard time
+        lastUpdate = datetime.utcfromtimestamp(lastUpdate)
+        converted_lastUpdate = lastUpdate.strftime('%Y-%m-%d %H:%M')
+
+        # Get Media Title
+        secondary_url = f"/items/{item_id}"
+        r = requests.get(f'{defaultAPIURL}{secondary_url}{tokenInsert}')
+        data = r.json()
+        title = data['media']['metadata']['title']
+        description = data['media']['metadata']['description']
+
+        formatted_info = (
+            f'Title: {title}\n'
+            f'Progress: {progress}%\n'
+            f'Is Finished: {isFinished}\n'
+            f'Current Time (time progressed): {round(currentTime) / 60} hours \n'
+            f'Total Duration: {round(duration / 60)}\n'
+            f'Last Updated: {converted_lastUpdate}\n'
+
+        )
+
+        return formatted_info, title, description
+
+
+def bookshelf_get_users(name):
+    endpoint = f"/users"
+    isFound = False
+
+    r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
+    if r.status_code == 200:
+        data = r.json()
+
+        # Search users for specified name
+        for user in data['users']:
+            if user['username'] == name:
+                isFound = True
+                username = user['username']
+                user_id = user['id']
+                last_seen = user['lastSeen'] / 1000
+                isActive = user['isActive']
+
+                # convert last seen
+                c_last_seen = datetime.utcfromtimestamp(last_seen)
+                c_last_seen = c_last_seen.strftime('%Y-%m-%d %H:%M:%S')
+
+                return isFound, username, user_id, c_last_seen, isActive
+
+
+def bookshelf_create_user(username: str, password, user_type: str, email=None):
+    user_type = user_type.lower()
+    if user_type in ["guest", "user", "admin"]:
+        endpoint = "/users"
+        link = f'{defaultAPIURL}{endpoint}{tokenInsert}'
+        headers = {'Content-Type': 'application/json'}
+        user_params = {'username': username, 'password': str(password), 'type': user_type, 'email': email}
+
+        # Send Post request to generate user
+        r = requests.post(url=link, json=user_params, headers=headers)
+        if r.status_code == 200:
+            data = r.json()
+            print(data)
+
+            user_id = data['user']['id']
+            username = data['user']['username']
+
+            return user_id, username
+        else:
+            print(r.status_code)
