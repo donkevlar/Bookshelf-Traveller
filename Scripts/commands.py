@@ -167,7 +167,7 @@ def bookshelf_item_progress(item_id):
         progress = round(data['progress'] * 100)
         isFinished = data['isFinished']
         currentTime = data['currentTime'] / 60
-        duration = data['duration'] / 60
+        duration = data['duration'] / 3600
         lastUpdate = data['lastUpdate'] / 1000
 
         # Convert lastUpdate Time from unix to standard time
@@ -185,7 +185,7 @@ def bookshelf_item_progress(item_id):
             f'Title: {title}\n'
             f'Progress: {progress}%\n'
             f'Is Finished: {isFinished}\n'
-            f'Current Time (time progressed): {round(currentTime) / 60} hours \n'
+            f'Current Time (time progressed): {round(currentTime)} hours \n'
             f'Total Duration: {round(duration / 60)}\n'
             f'Last Updated: {converted_lastUpdate}\n'
 
