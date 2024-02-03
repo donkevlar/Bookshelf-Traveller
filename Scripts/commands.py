@@ -166,8 +166,8 @@ def bookshelf_item_progress(item_id):
 
         progress = round(data['progress'] * 100)
         isFinished = data['isFinished']
-        currentTime = data['currentTime'] / 60
-        duration = data['duration'] / 3600
+        currentTime = data['currentTime'] / 3600
+        duration = data['duration'] / 60
         lastUpdate = data['lastUpdate'] / 1000
 
         # Convert lastUpdate Time from unix to standard time
