@@ -1,9 +1,9 @@
 import requests
-
+import os
 import settings
 import discord
 from discord.ext import commands
-import os
+import Paginator
 from datetime import datetime
 import time
 from dotenv import load_dotenv
@@ -155,6 +155,7 @@ async def show_recent_sessions(ctx):
         sessions_list = formatted_sessions_string.split('\n\n')
         count = 0
         # Add each session as a separate field in the embed
+        embeds = []
         for session_info in sessions_list:
             count = count + 1
             # Create Embed Message
@@ -179,8 +180,10 @@ async def show_recent_sessions(ctx):
             embed_message.add_field(name='Number of Times Played', value=f'Play Count: {play_count}', inline=False)
             embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
 
-            await ctx.send(embed=embed_message)
-            logger.info(f' Successfully sent command: recent-sessions')
+            embeds += embed_message
+
+        await Paginator.Simple().start(ctx, pages=embeds)
+        logger.info(f' Successfully sent command: recent-sessions')
 
     except Exception as e:
         await ctx.send("Could not complete this at the moment, please try again later.")
