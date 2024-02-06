@@ -3,9 +3,9 @@ import os
 import settings
 import discord
 from discord.ext import commands
-import Paginator
 from datetime import datetime
 import time
+import Paginator
 from dotenv import load_dotenv
 
 # File Imports
@@ -26,8 +26,10 @@ logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
 print("\nStartup time:", current_time)
 
 # Pulls from bookshelf file, if DOCKER == True, then this won't load local env file
-if not c.DOCKER_VARS:
+try:
     load_dotenv()
+except Exception as e:
+    pass
 
 # Get Discord Token from ENV
 token = os.environ.get("DISCORD_TOKEN")
@@ -154,8 +156,8 @@ async def show_recent_sessions(ctx):
         # Split formatted_sessions_string by newline character to separate individual sessions
         sessions_list = formatted_sessions_string.split('\n\n')
         count = 0
-        # Add each session as a separate field in the embed
         embeds = []
+        # Add each session as a separate field in the embed
         for session_info in sessions_list:
             count = count + 1
             # Create Embed Message
@@ -180,9 +182,10 @@ async def show_recent_sessions(ctx):
             embed_message.add_field(name='Number of Times Played', value=f'Play Count: {play_count}', inline=False)
             embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
 
-            embeds += embed_message
+            embeds.append(embed_message)
 
-        await Paginator.Simple().start(ctx, pages=embeds)
+        await Paginator.Simple(ephemeral=True).start(ctx, pages=embeds)
+
         logger.info(f' Successfully sent command: recent-sessions')
 
     except Exception as e:
@@ -194,7 +197,8 @@ async def show_recent_sessions(ctx):
 
 @client.hybrid_command(name="media-progress",
                        description=
-                       "Searches for the media item's progress, note: use recent session to find library item id")
+                       "Searches for the media item's progress, note: use recent session to find library item id",
+                       ephemeral=True)
 async def search_media_progress(ctx, *, libraryitemid: str):
     try:
         formatted_data, title, description = c.bookshelf_item_progress(libraryitemid)
@@ -219,14 +223,16 @@ async def search_media_progress(ctx, *, libraryitemid: str):
 
 @client.hybrid_command(name="sync-status",
                        description=
-                       "returns a boolean for if server commands have synced lately with discord server shard.")
+                       "returns a boolean for if server commands have synced lately with discord server shard.",
+                       ephemeral=True)
 async def sync_status(ctx):
     await ctx.send(f'Current Sync Status: {SYNC_STATUS}')
 
 
 @client.hybrid_command(name="user-search",
                        description=
-                       "Searches for a specific user, case sensitive")
+                       "Searches for a specific user, case sensitive",
+                       ephemeral=True)
 async def search_user(ctx, *, name: str):
     try:
         isFound, username, user_id, last_seen, isActive = c.bookshelf_get_users(name)
@@ -262,7 +268,8 @@ async def search_user(ctx, *, name: str):
 
 
 @client.hybrid_command(name="add-user",
-                       description="Will create a user, user types: 'admin', 'guest', 'user' | Default = user")
+                       description="Will create a user, user types: 'admin', 'guest', 'user' | Default = user",
+                       ephemeral=True)
 async def search_user(ctx, *, name: str, password: str, user_type="user", email=None):
     try:
         user_id, c_username = c.bookshelf_create_user(name, password, user_type)
@@ -277,7 +284,8 @@ async def search_user(ctx, *, name: str, password: str, user_type="user", email=
 
 @client.hybrid_command(name="test-connection",
                        description="test the connection between this bot and the audiobookshelf server, "
-                                   "optionally can place any url")
+                                   "optionally can place any url",
+                       ephemeral=True)
 async def test_server_connection(ctx, opt_url=None):
     try:
         if opt_url is not None:
@@ -297,7 +305,8 @@ async def test_server_connection(ctx, opt_url=None):
 
 
 @client.hybrid_command(name="book-list-csv",
-                       description="Get complete list of items in a given library, outputs a csv")
+                       description="Get complete list of items in a given library, outputs a csv",
+                       ephemeral=True)
 async def library_csv_booklist(ctx, libraryid: str):
     try:
         # Get Current Working Directory

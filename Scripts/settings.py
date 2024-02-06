@@ -5,10 +5,11 @@ import time
 from datetime import datetime
 from logging.config import dictConfig
 from dotenv import load_dotenv
-from commands import DOCKER_VARS
 
-if not DOCKER_VARS:
+try:
     load_dotenv()
+except Exception as e:
+    pass
 
 DISCORD_API_SECRET = os.getenv("DISCORD_TOKEN")
 

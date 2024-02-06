@@ -9,13 +9,11 @@ from dotenv import load_dotenv
 
 import requests
 
-# Set to true when using Docker
-DOCKER_VARS = False
-
 # DEV ENVIRON VARS
-if not DOCKER_VARS:
+try:
     load_dotenv()
-
+except Exception as e:
+    pass
 # Global Vars
 
 
@@ -105,7 +103,7 @@ def bookshelf_listening_stats():
             session_counts[session_key] += 1
 
         # Sort sessions by play count (highest to lowest)
-        sorted_sessions = sorted(session_counts.items(), key=lambda x: x[1], reverse=True)[:5]  # Take only the top 5
+        sorted_sessions = sorted(session_counts.items(), key=lambda x: x[1], reverse=True)
 
         # Create formatted strings with session info and count
         for session_key, count in sorted_sessions:
