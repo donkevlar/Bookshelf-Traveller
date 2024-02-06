@@ -1,8 +1,5 @@
-import pathlib
 import os
 import logging
-import time
-from datetime import datetime
 from logging.config import dictConfig
 from dotenv import load_dotenv
 
