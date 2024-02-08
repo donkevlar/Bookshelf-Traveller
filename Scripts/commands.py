@@ -10,10 +10,8 @@ from dotenv import load_dotenv
 import requests
 
 # DEV ENVIRON VARS
-try:
-    load_dotenv()
-except Exception as e:
-    pass
+load_dotenv()
+
 # Global Vars
 
 

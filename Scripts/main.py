@@ -1,11 +1,8 @@
 import requests
 import os
 import settings
-import discord
-from discord.ext import commands
 from interactions import Client, Intents, slash_command, SlashContext, listen, AutocompleteContext, \
     OptionType, slash_option, Permissions, slash_default_member_permission, BaseContext, check, Task, IntervalTrigger
-from interactions.ext.paginators import Paginator
 from datetime import datetime
 import time
 import Paginator
@@ -29,10 +26,7 @@ logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
 print("\nStartup time:", current_time)
 
 # Pulls from bookshelf file, if DOCKER == True, then this won't load local env file
-try:
-    load_dotenv()
-except Exception as e:
-    pass
+load_dotenv()
 
 # Get Discord Token from ENV
 token = os.environ.get("DISCORD_TOKEN")
@@ -56,44 +50,35 @@ elif server_status_code is None:
 else:
     logger.info(f'Current Server Status = {server_status_code}, Good to go!')
 
-# DEV -> Not recommended when running in a prod instance
-# Remove comment to see token
-# print(f'\nDiscord Token: {token}\n')
 
 # Will print username when successful
 auth_test = c.bookshelf_auth_test()
 
-time.sleep(0.5)
-
 # Bot basic setup
-intents = discord.Intents.default()
-intents.members = True
-intents.message_content = True
-
-client = commands.Bot(command_prefix="$", intents=discord.Intents.all())
+bot = Client(command_prefix="$", intents=Intents.DEFAULT, basic_logging=True)
 
 
-@client.event
-async def on_ready():
-    print(f'Bot is ready. Logged in as {client.user}')
+@listen()
+async def on_startup():
+    print(f'Bot is ready. Logged in as {bot.user}')
 
 
-@client.hybrid_command(name="sync", description="Re-syncs all of the bots commands")
-async def sync_commands(ctx):
+@slash_command(name="sync", description="Re-syncs all of the bots commands")
+async def sync_commands(ctx: SlashContext):
     global SYNC_STATUS
     try:
         SYNC_STATUS = True
-        await client.tree.sync()
+        await bot.tree.sync()
         await ctx.send("Successfully Synced Commands")
         logger.info(f' Successfully Synchronized Commands, for accuracy restart discord | Executed "sync"')
     except Exception as e:
         await ctx.send("Could not get complete this at the moment, please try again later.")
         logger.warning(
-            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: sync')
+            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: sync')
 
 
-@client.hybrid_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
-async def totalTime(ctx):
+@slash_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
+async def totalTime(ctx: SlashContext):
     try:
         formatted_sessions_string, data = c.bookshelf_listening_stats()
         total_time = round(data.get('totalTime') / 60)  # Convert to Minutes
@@ -106,30 +91,30 @@ async def totalTime(ctx):
         logger.info(f' Successfully sent command: listening-stats')
 
     except Exception as e:
-        ctx.send("Could not get complete this at the moment, please try again later.")
+        await ctx.send("Could not get complete this at the moment, please try again later.")
         print("Error: ", e)
         logger.warning(
-            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: listening-stats')
+            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: listening-stats')
 
 
-@client.hybrid_command(name="ping", description="Latency of the discord bot server to the discord central shard.")
+@slash_command(name="ping", description="Latency of the discord bot server to the discord central shard.")
 async def ping(ctx):
-    latency = round(client.latency * 1000)
+    latency = round(bot.latency * 1000)
     message = f'Discord BOT Server Latency: {latency} ms'
     await ctx.send(message)
     logger.info(f' Successfully sent command: ping')
 
 
-@client.hybrid_command(name="all-libraries",
-                       description="Display all current libraries with their ID and if only audiobooks")
-async def show_all_libraries(ctx):
+@slash_command(name="all-libraries",
+               description="Display all current libraries with their ID and if only audiobooks")
+async def show_all_libraries(ctx: SlashContext):
     try:
         # Get Library Data from API
         library_data = c.bookshelf_libraries()
         formatted_data = ""
 
         # Create Embed Message
-        embed_message = discord.Embed(
+        embed_message = bot.Embed(
             title="All Libraries",
             description="This will display all of the current libraries in your audiobookshelf server.",
             color=ctx.author.color
@@ -146,13 +131,13 @@ async def show_all_libraries(ctx):
 
     except Exception as e:
         await ctx.send("Could not complete this at the moment, please try again later.")
-        logger.warning(f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: all-libraries')
+        logger.warning(f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: all-libraries')
         print("Error: ", e)
 
 
-@client.hybrid_command(name="recent-sessions",
-                       description="Display up to 5 recent sessions")
-async def show_recent_sessions(ctx):
+@slash_command(name="recent-sessions",
+               description="Display up to 5 recent sessions")
+async def show_recent_sessions(ctx: SlashContext):
     try:
         formatted_sessions_string, data = c.bookshelf_listening_stats()
 
@@ -164,7 +149,7 @@ async def show_recent_sessions(ctx):
         for session_info in sessions_list:
             count = count + 1
             # Create Embed Message
-            embed_message = discord.Embed(
+            embed_message = bot.Embed(
                 title=f"Session {count}",
                 description=f"Recent Session Info",
                 color=ctx.author.color
@@ -194,20 +179,19 @@ async def show_recent_sessions(ctx):
     except Exception as e:
         await ctx.send("Could not complete this at the moment, please try again later.")
         logger.warning(
-            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: recent-sessions')
+            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: recent-sessions')
         print("Error: ", e)
 
 
-@client.hybrid_command(name="media-progress",
-                       description=
-                       "Searches for the media item's progress, note: use recent session to find library item id",
-                       ephemeral=True)
-async def search_media_progress(ctx, *, libraryitemid: str):
+@slash_command(name="media-progress",
+               description="Searches for the media item's progress, note: use recent session to find library "
+                           "item id")
+async def search_media_progress(ctx: SlashContext, *, libraryitemid: str):
     try:
         formatted_data, title, description = c.bookshelf_item_progress(libraryitemid)
 
         # Create Embed Message
-        embed_message = discord.Embed(
+        embed_message = bot.Embed(
             title=f"{title} | Media Progress",
             description=f"Media Progress for {title}",
             color=ctx.author.color
@@ -215,27 +199,24 @@ async def search_media_progress(ctx, *, libraryitemid: str):
         embed_message.add_field(name=title, value=formatted_data, inline=False)
 
         # Send message
-        await ctx.send(embed=embed_message)
+        await ctx.send(embed=embed_message, ephemeral=True)
         logger.info(f' Successfully sent command: media-progress')
 
     except Exception as e:
-        await ctx.send("Could not complete this at the moment, please try again later.")
+        await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=True)
         logger.warning(
-            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: media-progress')
+            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: media-progress')
 
 
-@client.hybrid_command(name="sync-status",
-                       description=
-                       "returns a boolean for if server commands have synced lately with discord server shard.",
-                       ephemeral=True)
+@slash_command(name="sync-status",
+               description=
+               "returns a boolean for if server commands have synced lately with discord server shard.")
 async def sync_status(ctx):
     await ctx.send(f'Current Sync Status: {SYNC_STATUS}')
 
 
-@client.hybrid_command(name="user-search",
-                       description=
-                       "Searches for a specific user, case sensitive",
-                       ephemeral=True)
+@slash_command(name="user-search",
+               description="Searches for a specific user, case sensitive", )
 async def search_user(ctx, *, name: str):
     try:
         isFound, username, user_id, last_seen, isActive = c.bookshelf_get_users(name)
@@ -247,7 +228,7 @@ async def search_user(ctx, *, name: str):
             )
 
             # Create Embed Message
-            embed_message = discord.Embed(
+            embed_message = bot.Embed(
                 title=f"User Info | {username}",
                 description=f"User information for {username}",
                 color=ctx.author.color
@@ -257,22 +238,22 @@ async def search_user(ctx, *, name: str):
             embed_message.add_field(name="General Information", value=formatted_data, inline=False)
 
             # Send message
-            await ctx.send(embed=embed_message)
+            await ctx.send(embed=embed_message,ephemeral=True)
             logger.info(f' Successfully sent command: search_user')
 
     except TypeError as e:
-        await ctx.send("Could not find that user, try a different name or make sure that it is spelt correctly.")
+        await ctx.send("Could not find that user, try a different name or make sure that it is spelt correctly.",
+                       ephemeral=True)
         logger.info(f' Successfully sent command: search_user')
 
     except Exception as e:
-        await ctx.send("Could not complete this at the moment, please try again later.")
+        await ctx.send("Could not complete this at the moment, please try again later.",ephemeral=True)
         logger.warning(
-            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: search_user')
+            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: search_user')
 
 
-@client.hybrid_command(name="add-user",
-                       description="Will create a user, user types: 'admin', 'guest', 'user' | Default = user",
-                       ephemeral=True)
+@slash_command(name="add-user",
+               description="Will create a user, user types: 'admin', 'guest', 'user' | Default = user")
 async def search_user(ctx, *, name: str, password: str, user_type="user", email=None):
     try:
         user_id, c_username = c.bookshelf_create_user(name, password, user_type)
@@ -282,35 +263,33 @@ async def search_user(ctx, *, name: str, password: str, user_type="user", email=
     except Exception as e:
         await ctx.send("Could not complete this at the moment, please try again later.")
         logger.warning(
-            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: add-user')
+            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: add-user')
 
 
-@client.hybrid_command(name="test-connection",
-                       description="test the connection between this bot and the audiobookshelf server, "
-                                   "optionally can place any url",
-                       ephemeral=True)
-async def test_server_connection(ctx, opt_url=None):
+@slash_command(name="test-connection",
+               description="test the connection between this bot and the audiobookshelf server, "
+                           "optionally can place any url")
+async def test_server_connection(ctx: SlashContext, opt_url=None):
     try:
         if opt_url is not None:
             r = requests.get(opt_url)
             status = r.status_code
 
-            await ctx.send(f"Successfully connected to {opt_url} with status: {status}")
+            await ctx.send(f"Successfully connected to {opt_url} with status: {status}", ephemeral=True)
         else:
             status = c.bookshelf_test_connection()
-            await ctx.send(f"Successfully connected to {c.bookshelfURL} with status: {status}")
+            await ctx.send(f"Successfully connected to {c.bookshelfURL} with status: {status}", ephemeral=True)
 
         logger.info(f' Successfully sent command: test-connection')
 
     except Exception as e:
         logger.warning(
-            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: add-user')
+            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: add-user')
 
 
-@client.hybrid_command(name="book-list-csv",
-                       description="Get complete list of items in a given library, outputs a csv",
-                       ephemeral=True)
-async def library_csv_booklist(ctx, libraryid: str):
+@slash_command(name="book-list-csv",
+               description="Get complete list of items in a given library, outputs a csv")
+async def library_csv_booklist(ctx: SlashContext, libraryid: str):
     try:
         # Get Current Working Directory
         current_directory = os.getcwd()
@@ -321,35 +300,16 @@ async def library_csv_booklist(ctx, libraryid: str):
         # Get Filepath
         file_path = os.path.join(current_directory, 'books.csv')
 
-        await ctx.send(file=discord.File(file_path))
+        await ctx.send(file=bot.File(file_path), ephemeral=True)
         logger.info(f' Successfully sent command: test-connection')
 
     except Exception as e:
 
-        await ctx.send("Could not complete this at the moment, please try again later.")
+        await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=True)
 
         logger.warning(
-            f'User:{client.user} (ID: {client.user.id}) | Error occured: {e} | Command Name: add-user')
+            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: add-user')
 
 
-class SimpleButtons(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="Yes", style=discord.ButtonStyle.red)
-    async def delete_user(self, interaction: discord.Interaction, Button: discord.ui.Button):
-        output = "yes"
-        return output
-
-    @discord.ui.button(label="No", style=discord.ButtonStyle.gray)
-    async def delete_user(self, interaction: discord.Interaction, Button: discord.ui.Button):
-        output = "no"
-        return output
-
-
-# @client.tree.command(name="delete-user", description="Delete a user on your server")
-# async def delete_user(ctx, *, name: str):
-# pass
-
-
-client.run(settings.DISCORD_API_SECRET, root_logger=True)
+if __name__ == '__main__':
+    bot.start(settings.DISCORD_API_SECRET)

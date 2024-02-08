@@ -3,10 +3,9 @@ import logging
 from logging.config import dictConfig
 from dotenv import load_dotenv
 
-try:
-    load_dotenv()
-except Exception as e:
-    pass
+
+load_dotenv()
+
 
 DISCORD_API_SECRET = os.getenv("DISCORD_TOKEN")
 
