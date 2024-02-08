@@ -292,7 +292,7 @@ async def search_user(ctx: SlashContext, name: str):
 @slash_option(name="user_type", description="select user type", required=True, opt_type=OptionType.STRING,
               autocomplete=True)
 @slash_option(name="email", description="enter a valid email address", required=False, opt_type=OptionType.STRING)
-async def search_user(ctx: SlashContext, name: str, password: str, user_type="user", email=None):
+async def add_user(ctx: SlashContext, name: str, password: str, user_type="user", email=None):
     try:
         user_id, c_username = c.bookshelf_create_user(name, password, user_type)
         await ctx.send(f"Successfully Created User: {c_username} with ID: {user_id}!")
@@ -304,7 +304,7 @@ async def search_user(ctx: SlashContext, name: str, password: str, user_type="us
             f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: add-user')
 
 
-@search_user.autocomplete("user_type")
+@add_user.autocomplete("user_type")
 async def autocomplete_user_search_type(ctx: AutocompleteContext):
     choices = [
         {"name": "Admin", "value": "admin"},
