@@ -289,7 +289,8 @@ async def search_user(ctx: SlashContext, name: str):
 @slash_option(name="name", description="enter a valid username", required=True, opt_type=OptionType.STRING)
 @slash_option(name="password", description="enter a unique password, note: CHANGE THIS LATER", required=True,
               opt_type=OptionType.STRING)
-@slash_option(name="user_type", description="select user type", required=True, opt_type=OptionType.STRING)
+@slash_option(name="user_type", description="select user type", required=True, opt_type=OptionType.STRING,
+              autocomplete=True)
 @slash_option(name="email", description="enter a valid email address", required=False, opt_type=OptionType.STRING)
 async def search_user(ctx: SlashContext, name: str, password: str, user_type="user", email=None):
     try:
@@ -301,6 +302,17 @@ async def search_user(ctx: SlashContext, name: str, password: str, user_type="us
         await ctx.send("Could not complete this at the moment, please try again later.")
         logger.warning(
             f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: add-user')
+
+
+@search_user.autocomplete("user_type")
+async def autocomplete_user_search_type(ctx: AutocompleteContext):
+    choices = [
+        {"name": "Admin", "value": "admin"},
+        {"name": "User", "value": "user"},
+        {"name": "Guest", "value": "guest"}
+    ]
+
+    await ctx.send(choices=choices)
 
 
 @slash_command(name="test-connection",
