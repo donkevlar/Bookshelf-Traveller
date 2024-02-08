@@ -65,26 +65,15 @@ async def ownership_check(ctx: BaseContext):
         # Check to see if user is the owner while ownership var is true
         if ctx.bot.owner.username == ctx.user.username:
             print(f"{ctx.user.username}, you are the owner and ownership is enabled!")
+            logger.info(f"{ctx.user.username}, you are the owner and ownership is enabled!")
             return True
 
         else:
             print(f"{ctx.user.username}, is not the owner and ownership is enabled!")
+            logger.warning(f"{ctx.user.username}, is not the owner and ownership is enabled!")
             return False
     else:
         return True
-
-
-def option_container_name():
-    def wrapper(func):
-        return slash_option(
-            name="container_name",
-            opt_type=OptionType.STRING,
-            description="Enter Container Name",
-            required=True,
-            autocomplete=True
-        )(func)
-
-    return wrapper
 
 
 @listen()
@@ -207,18 +196,19 @@ async def show_recent_sessions(ctx: SlashContext):
                description="Searches for the media item's progress, note: use recent session to find library "
                            "item id")
 @check(ownership_check)
-@slash_option(name="libraryitemid", description="Enter Library Item ID", required=True, opt_type=OptionType.STRING)
-async def search_media_progress(ctx: SlashContext, libraryitemid: str):
+@slash_option(name="book_title", description="Enter Library Item ID", required=True, opt_type=OptionType.STRING,
+              autocomplete=True)
+async def search_media_progress(ctx: SlashContext, book_title: str):
     try:
-        formatted_data, title, description = c.bookshelf_item_progress(libraryitemid)
+        formatted_data, title, description = c.bookshelf_item_progress(book_title)
 
         # Create Embed Message
-        embed_message = bot.Embed(
+        embed_message = Embed(
             title=f"{title} | Media Progress",
             description=f"Media Progress for {title}",
-            color=ctx.author.color
+            color=ctx.author.accent_color
         )
-        embed_message.add_field(name=title, value=formatted_data, inline=False)
+        embed_message.add_field(name="Media Progress", value=formatted_data, inline=False)
 
         # Send message
         await ctx.send(embed=embed_message, ephemeral=True)
@@ -228,6 +218,29 @@ async def search_media_progress(ctx: SlashContext, libraryitemid: str):
         await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=True)
         logger.warning(
             f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: media-progress')
+
+
+@search_media_progress.autocomplete("book_title")
+async def search_media_auto_complete(ctx: AutocompleteContext):
+    user_input = ctx.input_text
+    choices = []
+    print(user_input)
+    if user_input != "":
+        try:
+            titles_ = c.bookshelf_title_search(user_input)
+
+            book_title = titles_["title"]
+            book_id = titles_["id"]
+            choices.append({"name": f"{book_title}", "value": f"{book_id}"})
+
+            await ctx.send(choices=choices)
+
+        except Exception as e:
+            choices.append({"name": "NO TITLES AVAILABLE!", "value": -1})
+            await ctx.send(choices=choices)
+    else:
+        choices.append({"name": "NO TITLES AVAILABLE!", "value": -1})
+        await ctx.send(choices=choices)
 
 
 @slash_command(name="user-search",

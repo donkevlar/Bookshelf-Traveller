@@ -7,6 +7,7 @@ import csv
 from dotenv import load_dotenv
 
 import requests
+from requests import utils
 
 # DEV ENVIRON VARS
 load_dotenv()
@@ -189,6 +190,60 @@ def bookshelf_item_progress(item_id):
         return formatted_info, title, description
 
 
+def bookshelf_title_search(display_title: str, only_audio=True):
+    libraries = bookshelf_libraries()
+
+    valid_libraries = []
+    valid_library_count = 0
+    found_titles = {}
+
+    # Get valid libraries using filter only_audio
+    for name, (library_id, audiobooks_only) in libraries.items():
+        # Parse for the library that is only audio
+        if only_audio and audiobooks_only:
+            valid_libraries.append({"id": library_id, "name": name})
+            valid_library_count += 1
+            print(f"\nValid Libraries Found: {valid_library_count}\n")
+        # Parse for the library that is anything
+        elif only_audio is False and audiobooks_only is False:
+            valid_libraries.append({"id": library_id, "name": name})
+            valid_library_count += 1
+            print(f"Valid Libraries Found: {valid_library_count}\n")
+
+    if valid_library_count > 0:
+
+        # Search the libraries for the title name
+        for lib_id in valid_libraries:
+            library_iD = lib_id.get('id')
+            print(f"Beginning to search libraries: {lib_id.get('name')} | {library_iD}\n")
+            # Search for the title name using endpoint
+            try:
+
+                endpoint = f"/libraries/{library_iD}/search?q={display_title}&limit=5"
+                r = requests.get(f'{defaultAPIURL}{endpoint}&token={bookshelfToken}')
+                print(f"\nstatus code: {r.status_code}")
+                count = 0
+                if r.status_code == 200:
+                    data = r.json()
+                    # print(f"returned data: {data}")
+
+                    successMSG(endpoint, r.status_code)
+
+                    for titles in data['book']:
+                        title = titles['libraryItem']['media']['metadata']['title']
+                        book_id = titles['libraryItem']['id']
+                        found_titles['id'] = book_id
+                        found_titles['title'] = title
+
+                    # Append None to book_titles if nothing is found
+
+                    print(f"Found book titles: {found_titles['title']}")
+                    return found_titles
+
+            except Exception as e:
+                print(f'Error occured: {e}')
+
+
 def bookshelf_get_users(name):
     endpoint = f"/users"
     isFound = False
@@ -259,3 +314,9 @@ def bookshelf_library_csv(library_id: str, file_name='books.csv'):
 
                 # Writing the data
                 writer.writerow([title, author, series, year])
+
+
+if __name__ == '__main__':
+    print("TESTING COMMENCES")
+    bookshelf_title_search("Christopher Paolini")
+
