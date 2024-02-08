@@ -1,11 +1,11 @@
 import requests
 import os
 import settings
-from interactions import Client, Intents, slash_command, SlashContext, listen, AutocompleteContext, \
+from interactions import Client, Embed, Intents, slash_command, SlashContext, listen, AutocompleteContext, \
     OptionType, slash_option, Permissions, slash_default_member_permission, BaseContext, check, Task, IntervalTrigger
+from interactions.ext.paginators import Paginator
 from datetime import datetime
 import time
-import Paginator
 from dotenv import load_dotenv
 
 # File Imports
@@ -156,7 +156,7 @@ async def show_all_libraries(ctx: SlashContext):
 @slash_command(name="recent-sessions",
                description="Display up to 5 recent sessions")
 @check(ownership_check)
-async def show_recent_sessions(ctx):
+async def show_recent_sessions(ctx: SlashContext):
     try:
         formatted_sessions_string, data = c.bookshelf_listening_stats()
 
@@ -168,10 +168,10 @@ async def show_recent_sessions(ctx):
         for session_info in sessions_list:
             count = count + 1
             # Create Embed Message
-            embed_message = bot.Embed(
+            embed_message = Embed(
                 title=f"Session {count}",
                 description=f"Recent Session Info",
-                color=ctx.author.color
+                color=ctx.author.accent_color
             )
             # Split session info into lines
             session_lines = session_info.strip().split('\n')
@@ -191,7 +191,8 @@ async def show_recent_sessions(ctx):
 
             embeds.append(embed_message)
 
-        await Paginator.Simple(ephemeral=True).start(ctx, pages=embeds)
+        paginator = Paginator.create_from_embeds(bot, *embeds)
+        await paginator.send(ctx)
 
         logger.info(f' Successfully sent command: recent-sessions')
 
