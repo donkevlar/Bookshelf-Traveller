@@ -156,7 +156,7 @@ async def show_all_libraries(ctx: SlashContext):
 @slash_command(name="recent-sessions",
                description="Display up to 5 recent sessions")
 @check(ownership_check)
-async def show_recent_sessions(ctx: SlashContext):
+async def show_recent_sessions(ctx):
     try:
         formatted_sessions_string, data = c.bookshelf_listening_stats()
 
