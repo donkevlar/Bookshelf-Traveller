@@ -58,6 +58,35 @@ auth_test = c.bookshelf_auth_test()
 bot = Client(intents=Intents.DEFAULT, basic_logging=True)
 
 
+# Custom check for ownership
+async def ownership_check(ctx: BaseContext):
+    # Default only owner can use this bot
+    ownership = os.getenv('OWNER_ONLY', True)
+    if ownership:
+        # Check to see if user is the owner while ownership var is true
+        if ctx.bot.owner.username == ctx.user.username:
+            print(f"{ctx.user.username}, you are the owner and ownership is enabled!")
+            return True
+
+        else:
+            print(f"{ctx.user.username}, is not the owner and ownership is enabled!")
+            return False
+    else:
+        return True
+
+
+def option_container_name():
+    def wrapper(func):
+        return slash_option(
+            name="container_name",
+            opt_type=OptionType.STRING,
+            description="Enter Container Name",
+            required=True,
+            autocomplete=True
+        )(func)
+
+    return wrapper
+
 @listen()
 async def on_startup():
     print(f'Bot is ready. Logged in as {bot.user}')
@@ -98,7 +127,7 @@ async def totalTime(ctx: SlashContext):
 
 
 @slash_command(name="ping", description="Latency of the discord bot server to the discord central shard.")
-async def ping(ctx):
+async def ping(ctx: SlashContext):
     latency = round(bot.latency * 1000)
     message = f'Discord BOT Server Latency: {latency} ms'
     await ctx.send(message)
@@ -186,7 +215,8 @@ async def show_recent_sessions(ctx: SlashContext):
 @slash_command(name="media-progress",
                description="Searches for the media item's progress, note: use recent session to find library "
                            "item id")
-async def search_media_progress(ctx: SlashContext, *, libraryitemid: str):
+@slash_option(name="libraryitemid", description="Enter Library Item ID", required=True, opt_type=OptionType.STRING)
+async def search_media_progress(ctx: SlashContext, libraryitemid: str):
     try:
         formatted_data, title, description = c.bookshelf_item_progress(libraryitemid)
 
@@ -211,13 +241,14 @@ async def search_media_progress(ctx: SlashContext, *, libraryitemid: str):
 @slash_command(name="sync-status",
                description=
                "returns a boolean for if server commands have synced lately with discord server shard.")
-async def sync_status(ctx):
+async def sync_status(ctx: SlashContext):
     await ctx.send(f'Current Sync Status: {SYNC_STATUS}')
 
 
 @slash_command(name="user-search",
-               description="Searches for a specific user, case sensitive", )
-async def search_user(ctx, *, name: str):
+               description="Searches for a specific user, case sensitive")
+@slash_option(name="name", description="enter a valid username", required=True, opt_type=OptionType.STRING)
+async def search_user(ctx: SlashContext, name: str):
     try:
         isFound, username, user_id, last_seen, isActive = c.bookshelf_get_users(name)
 
@@ -254,7 +285,12 @@ async def search_user(ctx, *, name: str):
 
 @slash_command(name="add-user",
                description="Will create a user, user types: 'admin', 'guest', 'user' | Default = user")
-async def search_user(ctx, *, name: str, password: str, user_type="user", email=None):
+@slash_option(name="name", description="enter a valid username", required=True, opt_type=OptionType.STRING)
+@slash_option(name="password", description="enter a unique password, note: CHANGE THIS LATER", required=True,
+              opt_type=OptionType.STRING)
+@slash_option(name="user_type", description="select user type", required=True, opt_type=OptionType.STRING)
+@slash_option(name="email", description="enter a valid email address", required=False, opt_type=OptionType.STRING)
+async def search_user(ctx: SlashContext, name: str, password: str, user_type="user", email=None):
     try:
         user_id, c_username = c.bookshelf_create_user(name, password, user_type)
         await ctx.send(f"Successfully Created User: {c_username} with ID: {user_id}!")
@@ -269,6 +305,8 @@ async def search_user(ctx, *, name: str, password: str, user_type="user", email=
 @slash_command(name="test-connection",
                description="test the connection between this bot and the audiobookshelf server, "
                            "optionally can place any url")
+@slash_option(name="opt_url", description="enter an optional url to test outside of server", required=True,
+              opt_type=OptionType.STRING)
 async def test_server_connection(ctx: SlashContext, opt_url=None):
     try:
         if opt_url is not None:
@@ -289,6 +327,7 @@ async def test_server_connection(ctx: SlashContext, opt_url=None):
 
 @slash_command(name="book-list-csv",
                description="Get complete list of items in a given library, outputs a csv")
+@slash_option(name="libraryid", description="enter a valid libraryid", required=True, opt_type=OptionType.STRING)
 async def library_csv_booklist(ctx: SlashContext, libraryid: str):
     try:
         # Get Current Working Directory
