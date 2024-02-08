@@ -92,21 +92,6 @@ async def on_startup():
     print(f'Bot is ready. Logged in as {bot.user}')
 
 
-@slash_command(name="sync", description="Re-syncs all of the bots commands")
-@check(ownership_check)
-async def sync_commands(ctx: SlashContext):
-    global SYNC_STATUS
-    try:
-        SYNC_STATUS = True
-        await bot.tree.sync()
-        await ctx.send("Successfully Synced Commands")
-        logger.info(f' Successfully Synchronized Commands, for accuracy restart discord | Executed "sync"')
-    except Exception as e:
-        await ctx.send("Could not get complete this at the moment, please try again later.")
-        logger.warning(
-            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: sync')
-
-
 @slash_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
 @check(ownership_check)
 async def totalTime(ctx: SlashContext):
