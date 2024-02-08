@@ -4,7 +4,6 @@ from collections import defaultdict
 from datetime import datetime
 import csv
 
-import dotenv
 from dotenv import load_dotenv
 
 import requests
