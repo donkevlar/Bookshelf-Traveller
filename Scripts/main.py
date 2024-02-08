@@ -3,6 +3,9 @@ import os
 import settings
 import discord
 from discord.ext import commands
+from interactions import Client, Intents, slash_command, SlashContext, listen, AutocompleteContext, \
+    OptionType, slash_option, Permissions, slash_default_member_permission, BaseContext, check, Task, IntervalTrigger
+from interactions.ext.paginators import Paginator
 from datetime import datetime
 import time
 import Paginator
