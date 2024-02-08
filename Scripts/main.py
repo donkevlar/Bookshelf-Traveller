@@ -18,7 +18,7 @@ SYNC_STATUS = False
 logger = settings.logging.getLogger("bot")
 
 # Version Info
-versionNumber = 'Alpha_0.12'
+versionNumber = 'Alpha_0.20'
 # Print Startup Time
 current_time = datetime.now()
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
