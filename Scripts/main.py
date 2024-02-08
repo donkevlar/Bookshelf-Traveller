@@ -54,7 +54,7 @@ else:
 auth_test = c.bookshelf_auth_test()
 
 # Bot basic setup
-bot = Client(intents=Intents.DEFAULT, basic_logging=True)
+bot = Client(intents=Intents.DEFAULT, logger=logger)
 
 
 # Custom check for ownership
