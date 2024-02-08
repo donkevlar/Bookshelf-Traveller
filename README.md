@@ -45,12 +45,10 @@ The following Commands are available:
 
 **Note: Prefix is also usable, currently set to '$'**
 
-**By default setup as '/' commands, or a.k.a app commands**
+**By default, setup as '/' commands, or a.k.a app commands**
 
 | Command               | Description                                                                     | Additional Information                                                                                                                 |
 |-----------------------|---------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|
-| `/sync`                  | Sync commands with discord server                                               | useful if you just updated the bot and discord isn't displaying the full list. Sometimes, however, you simply need to restart discord. |
-| `/sync-status `          | Verify if sync command has already been executed since startup, returns boolean |
 | `/add-user`              | Will create a user, requires username, password                                 | additional fields: user type, email.                                                                                                   |
 | `/all-libraries`         | Displays all current libraries with their ID                                    |                                                                                                                                        |
 |`/book-list-csv`  |Get complete list of items in a given library, outputs a csv||
@@ -58,5 +56,5 @@ The following Commands are available:
 | `/media-progress`        | Searches for the media item's progress, note: ***requires Library Item ID***    |                                                                                                                                        |
 | `/ping`                  | Displays the latency between your server and the discord server shard           |                                                                                                                                        |
 | `/recent-sessions`       | Will display ***up to*** 5 recent sessions in a filtered and formatted way.     |                                                                                                                                        |
- | `/user-search`           | Search for a specific user by name                                              | current public release only has name, but ill update it to include search by ID                                                        |
+| `/user-search`           | Search for a specific user by name                                              | current public release only has name, but ill update it to include search by ID                                                        |
 | `/test-connection`       | Will test the connection of your bot to the audioboookshelf server              | Optionally you can test the connection to any url using the URL arg.                                                                   |
