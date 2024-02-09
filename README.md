@@ -48,7 +48,6 @@ docker run -d \
 -e bookshelfToken="INSERT_TOKEN" \
 -e bookshelfURL="http://myurl.domain.com" \
 donkevlar/bookshelf-traveller
-
 ```
 
 ## Bot Commands
@@ -58,14 +57,14 @@ The following Commands are available:
 
 **By default, setup as '/' commands, or a.k.a app commands**
 
-| Command               | Description                                                                     | Additional Information                                                                                                                 |
-|-----------------------|---------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|
-| `/add-user`              | Will create a user, requires username, password                                 | additional fields: user type, email.                                                                                                   |
-| `/all-libraries`         | Displays all current libraries with their ID                                    |                                                                                                                                        |
-|`/book-list-csv`  |Get complete list of items in a given library, outputs a csv||
-| `/listening-stats`       | Pulls your total listening time                                                 | Will be expanded in the future.                                                                                                        |
-| `/media-progress`        | Searches for the media item's progress, note: ***requires Library Item ID***    |                                                                                                                                        |
-| `/ping`                  | Displays the latency between your server and the discord server shard           |                                                                                                                                        |
-| `/recent-sessions`       | Will display ***up to*** 5 recent sessions in a filtered and formatted way.     |                                                                                                                                        |
-| `/user-search`           | Search for a specific user by name                                              | current public release only has name, but ill update it to include search by ID                                                        |
-| `/test-connection`       | Will test the connection of your bot to the audioboookshelf server              | Optionally you can test the connection to any url using the URL arg.                                                                   |
+| Command               | Description                                                                  | Arguments                                       | Additional Information                                                                                        | Additional Functionality |
+|-----------------------|------------------------------------------------------------------------------|-------------------------------------------------|---------------------------------------------------------------------------------------------------------------|--------------------------|
+| `/add-user`              | Will create a user, requires username, password                              | `name`, `password`, `user_type`, optional: `email` |                                                                                                               |
+| `/all-libraries`         | Displays all current libraries with their ID                                 |                                                 |                                                                                                               |
+|`/book-list-csv`  | Get complete list of items in a given library, outputs a csv                 | `libraryid`                                     |                                                                                                               | **Autocomplete Enabled** |
+| `/listening-stats`       | Pulls your total listening time                                              |                                                 | Will be expanded in the future.                                                                               |                          |
+| `/media-progress`        | Searches for the media item's progress                                       | `book_title`                                    | Feautres autocomplete, simply type in the name of the book and it will return the name and ID for you.        | **Autocomplete Enabled** |
+| `/ping`                  | Displays the latency between your server and the discord server shard        |                                                 |                                                                                                               |
+| `/recent-sessions`       | Will display ***up to*** 10 recent sessions in a filtered and formatted way. |                                                 |                                                                                                               |
+| `/user-search`           | Search for a specific user by name                                           | `name`                                          | current public release only has name, but ill update it to include search by ID, or by using the autocomplete | **Autocomplete Enabled** |
+| `/test-connection`       | Will test the connection of your bot to the audioboookshelf server           | optional: `opt_url`                             | Optionally you can test the connection to any url.                                                            |                          |
