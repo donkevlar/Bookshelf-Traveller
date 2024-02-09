@@ -1,6 +1,6 @@
 # Bookshelf-Traveller
 
-![GitHub commit activity](https://img.shields.io/github/commit-activity/y/donkevlar/Bookshelf-Traveller)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/m/donkevlar/bookshelf-traveller)
 ![GitHub License](https://img.shields.io/github/license/donkevlar/Bookshelf-Traveller)
 
 <a href="https://www.buymeacoffee.com/donkevlar" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-green.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
