@@ -40,7 +40,7 @@ Docker Container Available:
 ```
 docker pull donkevlar/bookshelf-traveller
 ```
-
+To run the container, paste the following command:
 ```
 docker run -d \
 --name bookshelf-traveller \
