@@ -31,8 +31,7 @@ Requirements: Python 3.11 or above.
 
 you'll also need an '.env' file for loading the above ENV Variables
 ```
-pip install discord.py
-pip install python-dotenv
+pip install discord-py-interactions && pip install python-dotenv && pip install requests
 ```
 ### Docker Container
 Docker Container Available:
