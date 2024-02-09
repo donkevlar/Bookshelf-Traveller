@@ -17,13 +17,13 @@ Make sure that you select all intents when setting up your bot and that you have
 ### Environmental Variables
 ENVIRONMENTAL VARS REQUIRED:
 
-| ENV Variables     | Description                                                                | Type    | Required? |
-|-------------------|----------------------------------------------------------------------------|---------|-----------|
-| `DISCORD_TOKEN` | Discord API Token                                                          | String  | **YES**   |
-| `bookshelfToken` | Bookshelf User Token (being an admin is required)                          | String  | **YES**   |
-| `bookshelfURL`  | Bookshelf url with protocol and port, ex: http://localhost:80              | String  | **YES**   |
-|`OWNER_ONLY`| By default set to `True`. Only allow bot owner to use bot.                 | Boolean | **NO**    |
-|`EPHEMERAL_OUTPUT`| By default set to `True`, this sets all commands to ephemeral (shown only to you) | Boolean | **NO**    |
+| ENV Variables      | Description                                                                       | Type    | Required? |
+|--------------------|-----------------------------------------------------------------------------------|---------|-----------|
+| `DISCORD_TOKEN`    | Discord API Token                                                                 | String  | **YES**   |
+| `bookshelfToken`   | Bookshelf User Token (being an admin is required)                                 | String  | **YES**   |
+| `bookshelfURL`     | Bookshelf url with protocol and port, ex: http://localhost:80                     | String  | **YES**   |
+| `OWNER_ONLY`       | By default set to `True`. Only allow bot owner to use bot.                        | Boolean | **NO**    |
+| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you) | Boolean | **NO**    |
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**
