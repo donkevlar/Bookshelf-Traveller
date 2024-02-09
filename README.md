@@ -8,7 +8,9 @@
 
 A simple Audiobookshelf discord bot to help you manage your instance :)
 
-You'll need to create your own discord application in order to do this, you can google on how to do that. 
+You'll need to create your own discord application in order to do this, this is fairly straight forward, here is a guide:
+
+[Create a Discord App - Getting Started](https://discord.com/developers/docs/getting-started#step-1-creating-an-app)
 
 Make sure that you select all intents when setting up your bot and that you have created a url to add it to your desired discord server.
 
