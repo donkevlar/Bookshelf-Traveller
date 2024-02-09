@@ -12,16 +12,17 @@ You'll need to create your own discord application in order to do this, you can 
 
 Make sure that you select all intents when setting up your bot and that you have created a url to add it to your desired discord server.
 
-**Permissions for the bot should be done manually, currently with how I have it set up, there aren't any limiting factors, please setup your roles accordingly.**
+**, there aren't any limiting factors, please setup your roles accordingly.**
 
 ### Environmental Variables
 ENVIRONMENTAL VARS REQUIRED:
 
-| ENV Variables      | Description                                                   |
-|--------------------|---------------------------------------------------------------|
-| `DISCORD_TOKEN`  | Discord API Token                                             |
-| `bookshelfToken` | Bookshelf User Token (being an admin is recommended)          |
-| `bookshelfURL`   | Bookshelf url with protocol and port, ex: http://localhost:80 |
+| ENV Variables     | Description                                                      | Required? |
+|-------------------|------------------------------------------------------|-----------|
+| `DISCORD_TOKEN` | Discord API Token                                                | **YES**   |
+| `bookshelfToken` | Bookshelf User Token (being an admin is recommended)             | **YES**   |
+| `bookshelfURL`  | Bookshelf url with protocol and port, ex: http://localhost:80    | **YES**   |
+|`OWNER_ONLY`| Only allow bot owner to user bot. By default this is set to True | **NO**    |
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**
@@ -38,6 +39,16 @@ Docker Container Available:
 
 ```
 docker pull donkevlar/bookshelf-traveller
+```
+
+```
+docker run -d \
+--name bookshelf-traveller \
+-e DISCORD_TOKEN="INSERT_TOKEN" \
+-e bookshelfToken="INSERT_TOKEN" \
+-e bookshelfURL="http://myurl.domain.com" \
+donkevlar/bookshelf-traveller
+
 ```
 
 ## Bot Commands
