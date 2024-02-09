@@ -1,8 +1,7 @@
 import requests
 import os
 import settings
-from interactions import Client, Embed, Intents, slash_command, SlashContext, listen, AutocompleteContext, \
-    OptionType, slash_option, Permissions, slash_default_member_permission, BaseContext, check, Task, IntervalTrigger
+from interactions import *
 from interactions.ext.paginators import Paginator
 from datetime import datetime
 import time
