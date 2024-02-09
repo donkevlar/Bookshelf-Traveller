@@ -53,8 +53,6 @@ donkevlar/bookshelf-traveller
 ## Bot Commands
 The following Commands are available:
 
-**Note: Prefix is also usable, currently set to '$'**
-
 **By default, setup as '/' commands, or a.k.a app commands**
 
 | Command               | Description                                                                  | Arguments                                       | Additional Information                                                                                        | Additional Functionality |
