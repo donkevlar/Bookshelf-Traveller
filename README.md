@@ -17,11 +17,11 @@ Make sure that you select all intents when setting up your bot and that you have
 ### Environmental Variables
 ENVIRONMENTAL VARS REQUIRED:
 
-| ENV Variables     | Description                                    | Type    | Required? |
-|-------------------|------------------------------------------------|---------|-----------|
-| `DISCORD_TOKEN` | Discord API Token                              | String  | **YES**   |
-| `bookshelfToken` | Bookshelf User Token (being an admin is recommended) | String  | **YES**   |
-| `bookshelfURL`  | Bookshelf url with protocol and port, ex: http://localhost:80 | String  | **YES**   |
+| ENV Variables     | Description                                                      | Type    | Required? |
+|-------------------|------------------------------------------------------------------|---------|-----------|
+| `DISCORD_TOKEN` | Discord API Token                                                | String  | **YES**   |
+| `bookshelfToken` | Bookshelf User Token (being an admin is required)                | String  | **YES**   |
+| `bookshelfURL`  | Bookshelf url with protocol and port, ex: http://localhost:80    | String  | **YES**   |
 |`OWNER_ONLY`| Only allow bot owner to user bot. By default this is set to True | Boolean | **NO**    |
 
 ## Installation
