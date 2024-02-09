@@ -12,7 +12,7 @@ You'll need to create your own discord application in order to do this, you can 
 
 Make sure that you select all intents when setting up your bot and that you have created a url to add it to your desired discord server.
 
-**, there aren't any limiting factors, please setup your roles accordingly.**
+**Ownership by default will allow you to run all commands by default (NOT ADMIN), to disable this, use the env variable `OWNER_ONLY`.**
 
 ### Environmental Variables
 ENVIRONMENTAL VARS REQUIRED:
