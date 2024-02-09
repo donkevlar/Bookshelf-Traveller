@@ -121,10 +121,10 @@ async def show_all_libraries(ctx: SlashContext):
         formatted_data = ""
 
         # Create Embed Message
-        embed_message = bot.Embed(
+        embed_message = Embed(
             title="All Libraries",
             description="This will display all of the current libraries in your audiobookshelf server.",
-            color=ctx.author.color
+            color=ctx.author.accent_color
         )
 
         # Iterate over each key-value pair in the dictionary
