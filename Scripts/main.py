@@ -11,8 +11,13 @@ from dotenv import load_dotenv
 # File Imports
 import commands as c
 
+# Pulls from bookshelf file, if DOCKER == True, then this won't load local env file
+load_dotenv()
+
 # Global Vars
-SYNC_STATUS = False
+
+# Controls if ALL commands are ephemeral
+EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
 
 # Logger Config
 logger = settings.logging.getLogger("bot")
@@ -24,9 +29,6 @@ current_time = datetime.now()
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
 
 print("\nStartup time:", current_time)
-
-# Pulls from bookshelf file, if DOCKER == True, then this won't load local env file
-load_dotenv()
 
 # Get Discord Token from ENV
 token = os.environ.get("DISCORD_TOKEN")
@@ -64,12 +66,10 @@ async def ownership_check(ctx: BaseContext):
     if ownership:
         # Check to see if user is the owner while ownership var is true
         if ctx.bot.owner.username == ctx.user.username:
-            print(f"{ctx.user.username}, you are the owner and ownership is enabled!")
             logger.info(f"{ctx.user.username}, you are the owner and ownership is enabled!")
             return True
 
         else:
-            print(f"{ctx.user.username}, is not the owner and ownership is enabled!")
             logger.warning(f"{ctx.user.username}, is not the owner and ownership is enabled!")
             return False
     else:
@@ -107,7 +107,7 @@ async def totalTime(ctx: SlashContext):
 async def ping(ctx: SlashContext):
     latency = round(bot.latency * 1000)
     message = f'Discord BOT Server Latency: {latency} ms'
-    await ctx.send(message)
+    await ctx.send(message, ephemeral=EPHEMERAL_OUTPUT)
     logger.info(f' Successfully sent command: ping')
 
 
@@ -143,7 +143,7 @@ async def show_all_libraries(ctx: SlashContext):
 
 
 @slash_command(name="recent-sessions",
-               description="Display up to 5 recent sessions")
+               description="Display up to 10 recent sessions")
 @check(ownership_check)
 async def show_recent_sessions(ctx: SlashContext):
     try:
@@ -175,13 +175,14 @@ async def show_recent_sessions(ctx: SlashContext):
             embed_message.add_field(name='Title', value=display_title, inline=False)
             embed_message.add_field(name='Author', value=author, inline=False)
             embed_message.add_field(name='Duration', value=duration, inline=False)
-            embed_message.add_field(name='Number of Times Played', value=f'Play Count: {play_count}', inline=False)
+            embed_message.add_field(name='Number of Times a Session was Played', value=f'Play Count: {play_count}',
+                                    inline=False)
             embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
 
             embeds.append(embed_message)
 
         paginator = Paginator.create_from_embeds(bot, *embeds)
-        await paginator.send(ctx)
+        await paginator.send(ctx, ephemeral=EPHEMERAL_OUTPUT)
 
         logger.info(f' Successfully sent command: recent-sessions')
 
@@ -211,11 +212,11 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
         embed_message.add_field(name="Media Progress", value=formatted_data, inline=False)
 
         # Send message
-        await ctx.send(embed=embed_message, ephemeral=True)
+        await ctx.send(embed=embed_message, ephemeral=EPHEMERAL_OUTPUT)
         logger.info(f' Successfully sent command: media-progress')
 
     except Exception as e:
-        await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=True)
+        await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=EPHEMERAL_OUTPUT)
         logger.warning(
             f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: media-progress')
 
@@ -236,10 +237,8 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
             await ctx.send(choices=choices)
 
         except Exception as e:
-            choices.append({"name": "NO TITLES AVAILABLE!", "value": -1})
             await ctx.send(choices=choices)
     else:
-        choices.append({"name": "NO TITLES AVAILABLE!", "value": -1})
         await ctx.send(choices=choices)
 
 
@@ -258,28 +257,39 @@ async def search_user(ctx: SlashContext, name: str):
             )
 
             # Create Embed Message
-            embed_message = bot.Embed(
+            embed_message = Embed(
                 title=f"User Info | {username}",
                 description=f"User information for {username}",
-                color=ctx.author.color
+                color=ctx.author.accent_color
             )
             embed_message.add_field(name="Username", value=username, inline=False)
             embed_message.add_field(name="User ID", value=user_id, inline=False)
             embed_message.add_field(name="General Information", value=formatted_data, inline=False)
 
             # Send message
-            await ctx.send(embed=embed_message, ephemeral=True)
+            await ctx.send(embed=embed_message, ephemeral=EPHEMERAL_OUTPUT)
             logger.info(f' Successfully sent command: search_user')
 
     except TypeError as e:
         await ctx.send("Could not find that user, try a different name or make sure that it is spelt correctly.",
-                       ephemeral=True)
+                       ephemeral=EPHEMERAL_OUTPUT)
         logger.info(f' Successfully sent command: search_user')
 
     except Exception as e:
-        await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=True)
+        await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=EPHEMERAL_OUTPUT)
         logger.warning(
             f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: search_user')
+
+
+@search_user.autocomplete("name")
+async def user_search_autocomplete(ctx: AutocompleteContext):
+    user_input = ctx.input_text
+    isFound, username, user_id, last_seen, isActive = c.bookshelf_get_users(user_input)
+    choice = []
+    if user_input.lower() == username.lower():
+        choice = [{"name": f"{username}", "value": f"{username}"}]
+
+    await ctx.send(choices=choice)
 
 
 @slash_command(name="add-user",
@@ -326,10 +336,11 @@ async def test_server_connection(ctx: SlashContext, opt_url=None):
             r = requests.get(opt_url)
             status = r.status_code
 
-            await ctx.send(f"Successfully connected to {opt_url} with status: {status}", ephemeral=True)
+            await ctx.send(f"Successfully connected to {opt_url} with status: {status}", ephemeral=EPHEMERAL_OUTPUT)
         else:
             status = c.bookshelf_test_connection()
-            await ctx.send(f"Successfully connected to {c.bookshelfURL} with status: {status}", ephemeral=True)
+            await ctx.send(f"Successfully connected to {c.bookshelfURL} with status: {status}",
+                           ephemeral=EPHEMERAL_OUTPUT)
 
         logger.info(f' Successfully sent command: test-connection')
 
@@ -341,7 +352,8 @@ async def test_server_connection(ctx: SlashContext, opt_url=None):
 @slash_command(name="book-list-csv",
                description="Get complete list of items in a given library, outputs a csv")
 @check(ownership_check)
-@slash_option(name="libraryid", description="enter a valid libraryid", required=True, opt_type=OptionType.STRING)
+@slash_option(name="libraryid", description="enter a valid libraryid", required=EPHEMERAL_OUTPUT,
+              opt_type=OptionType.STRING)
 async def library_csv_booklist(ctx: SlashContext, libraryid: str):
     try:
         # Get Current Working Directory
@@ -353,12 +365,12 @@ async def library_csv_booklist(ctx: SlashContext, libraryid: str):
         # Get Filepath
         file_path = os.path.join(current_directory, 'books.csv')
 
-        await ctx.send(file=bot.File(file_path), ephemeral=True)
+        await ctx.send(file=bot.File(file_path), ephemeral=EPHEMERAL_OUTPUT)
         logger.info(f' Successfully sent command: test-connection')
 
     except Exception as e:
 
-        await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=True)
+        await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=EPHEMERAL_OUTPUT)
 
         logger.warning(
             f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: add-user')
