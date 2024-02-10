@@ -146,6 +146,7 @@ async def show_all_libraries(ctx: SlashContext):
 @check(ownership_check)
 async def show_recent_sessions(ctx: SlashContext):
     try:
+        await ctx.defer()
         formatted_sessions_string, data = c.bookshelf_listening_stats()
 
         # Split formatted_sessions_string by newline character to separate individual sessions
@@ -180,7 +181,7 @@ async def show_recent_sessions(ctx: SlashContext):
             embed_message.add_field(name='Number of Times a Session was Played', value=f'Play Count: {play_count}',
                                     inline=False)
             embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
-            embed_message.set_thumbnail(url=cover)
+            embed_message.add_image(cover)
 
             embeds.append(embed_message)
 

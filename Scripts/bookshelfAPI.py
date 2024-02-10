@@ -319,7 +319,17 @@ def bookshelf_cover_image(item_id):
     # Generates Cover Link
     endpoint = f"/items/{item_id}/cover"
     link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
-    return link
+    try:
+        r = requests.get(link)
+        if r.status_code == 200:
+            filename = item_id + ".webp"
+            with open(filename, 'wb') as file:
+                file.write(r.content)
+            return filename
+        else:
+            print(r.status_code)
+    except Exception as e:
+        print(e)
 
 
 if __name__ == '__main__':
