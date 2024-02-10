@@ -180,7 +180,7 @@ async def show_recent_sessions(ctx: SlashContext):
             embed_message.add_field(name='Number of Times a Session was Played', value=f'Play Count: {play_count}',
                                     inline=False)
             embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
-            embed_message.add_image(cover)
+            embed_message.set_footer("Brought to you by Kevuntu Media Group", cover)
 
             embeds.append(embed_message)
 
