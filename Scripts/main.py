@@ -171,8 +171,8 @@ async def show_recent_sessions(ctx: SlashContext):
             library_ID = session_lines[3].split(': ')[1]
             play_count = session_lines[4].split(': ')[1]
 
-            cover = c.bookshelf_cover_image(library_ID)
-            logger.info(f"cover url: {cover}")
+            cover_link, filename = c.bookshelf_cover_image(library_ID)
+            logger.info(f"cover url: {cover_link}")
 
             # Use display title as the name for the field
             embed_message.add_field(name='Title', value=display_title, inline=False)
@@ -181,7 +181,7 @@ async def show_recent_sessions(ctx: SlashContext):
             embed_message.add_field(name='Number of Times a Session was Played', value=f'Play Count: {play_count}',
                                     inline=False)
             embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
-            embed_message.add_image(cover)
+            embed_message.set_thumbnail(cover_link)
 
             embeds.append(embed_message)
 
@@ -207,7 +207,7 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
     try:
         formatted_data, title, description = c.bookshelf_item_progress(book_title)
 
-        cover_title = c.bookshelf_cover_image(book_title)
+        cover_title, filename = c.bookshelf_cover_image(book_title)
 
         # Create Embed Message
         embed_message = Embed(
@@ -216,7 +216,7 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
             color=ctx.author.accent_color
         )
         embed_message.add_field(name="Media Progress", value=formatted_data, inline=False)
-        embed_message.add_image(cover_title)
+        embed_message.set_thumbnail(cover_title)
 
         # Send message
         await ctx.send(embed=embed_message, ephemeral=EPHEMERAL_OUTPUT)
