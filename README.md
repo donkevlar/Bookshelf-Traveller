@@ -72,3 +72,12 @@ The following Commands are available:
 | `/recent-sessions` | Will display ***up to*** 10 recent sessions in a filtered and formatted way. |                                                    |                                                                                                               |
 | `/user-search`     | Search for a specific user by name                                           | `name`                                             | current public release only has name, but ill update it to include search by ID, or by using the autocomplete | **Autocomplete Enabled**                |
 | `/test-connection` | Will test the connection of your bot to the audioboookshelf server           | optional: `opt_url`                                | Optionally you can test the connection to any url.                                                            |                                         |
+
+### Screenshots
+Below are a few examples of the commands shown above.
+
+![img.png](images/img.png)
+
+![img.png](images/mediaprogress.png)
+
+![img.png](images/autocomplete.png)
