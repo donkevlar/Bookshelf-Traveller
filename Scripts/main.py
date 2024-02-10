@@ -201,7 +201,7 @@ async def show_recent_sessions(ctx: SlashContext):
                description="Searches for the media item's progress, note: use recent session to find library "
                            "item id")
 @check(ownership_check)
-@slash_option(name="book_title", description="Enter Library Item ID", required=True, opt_type=OptionType.STRING,
+@slash_option(name="book_title", description="Enter a book title", required=True, opt_type=OptionType.STRING,
               autocomplete=True)
 async def search_media_progress(ctx: SlashContext, book_title: str):
     try:
