@@ -171,7 +171,7 @@ async def show_recent_sessions(ctx: SlashContext):
             library_ID = session_lines[3].split(': ')[1]
             play_count = session_lines[4].split(': ')[1]
 
-            cover_link, filename = c.bookshelf_cover_image(library_ID)
+            cover_link = c.bookshelf_cover_image(library_ID)
             logger.info(f"cover url: {cover_link}")
 
             # Use display title as the name for the field
@@ -182,8 +182,6 @@ async def show_recent_sessions(ctx: SlashContext):
                                     inline=False)
             embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
             embed_message.add_image(cover_link)
-            images = embed_message.images
-            print(f"Images Found: {images}")
 
             embeds.append(embed_message)
 
@@ -207,9 +205,20 @@ async def show_recent_sessions(ctx: SlashContext):
               autocomplete=True)
 async def search_media_progress(ctx: SlashContext, book_title: str):
     try:
-        formatted_data, title, description = c.bookshelf_item_progress(book_title)
+        formatted_data = c.bookshelf_item_progress(book_title)
 
-        cover_title, filename = c.bookshelf_cover_image(book_title)
+        cover_title = c.bookshelf_cover_image(book_title)
+
+        title = formatted_data['title']
+        progress = formatted_data['progress']
+        finished = formatted_data['finished']
+        currentTime = formatted_data['currentTime']
+        totalDuration = formatted_data['totalDuration']
+        lastUpdated = formatted_data['lastUpdated']
+
+        media_progress = (f"Progress: {progress}\n Time Progressed: {currentTime} Hours\n "
+                          f"Total Duration:{totalDuration} Hours\n")
+        media_status = f"Is Finished: {finished}\n " f"Last Updated: {lastUpdated}\n"
 
         # Create Embed Message
         embed_message = Embed(
@@ -217,8 +226,10 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
             description=f"Media Progress for {title}",
             color=ctx.author.accent_color
         )
-        embed_message.add_field(name="Media Progress", value=formatted_data, inline=False)
-        embed_message.set_thumbnail(cover_title)
+        embed_message.add_field(name="Title", value=title, inline=False)
+        embed_message.add_field(name="Media Progress", value=media_progress, inline=False)
+        embed_message.add_field(name="Media Status", value=media_status, inline=False)
+        embed_message.add_image(cover_title)
 
         # Send message
         await ctx.send(embed=embed_message, ephemeral=EPHEMERAL_OUTPUT)

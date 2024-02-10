@@ -163,7 +163,7 @@ def bookshelf_item_progress(item_id):
         progress = round(data['progress'] * 100)
         isFinished = data['isFinished']
         currentTime = data['currentTime'] / 3600
-        duration = data['duration'] / 60
+        duration = data['duration'] / 3600
         lastUpdate = data['lastUpdate'] / 1000
 
         # Convert lastUpdate Time from unix to standard time
@@ -175,19 +175,17 @@ def bookshelf_item_progress(item_id):
         r = requests.get(f'{defaultAPIURL}{secondary_url}{tokenInsert}')
         data = r.json()
         title = data['media']['metadata']['title']
-        description = data['media']['metadata']['description']
 
-        formatted_info = (
-            f'Title: {title}\n'
-            f'Progress: {progress}%\n'
-            f'Is Finished: {isFinished}\n'
-            f'Current Time (time progressed): {round(currentTime)} hours \n'
-            f'Total Duration: {round(duration / 60)}\n'
-            f'Last Updated: {converted_lastUpdate}\n'
+        formatted_info = {
+            'title': f'{title}',
+            'progress': f'{progress}%',
+            'finished': f'{isFinished}',
+            'currentTime': f'{round(currentTime)}',
+            'totalDuration': f'{round(duration)}',
+            'lastUpdated': f'{converted_lastUpdate}'
+        }
 
-        )
-
-        return formatted_info, title, description
+        return formatted_info
 
 
 def bookshelf_title_search(display_title: str, only_audio=True):
@@ -319,19 +317,11 @@ def bookshelf_cover_image(item_id):
     # Generates Cover Link
     endpoint = f"/items/{item_id}/cover"
     link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
-    filename = item_id + ".webp"
-    try:
-        r = requests.get(link)
-        if r.status_code == 200:
-            with open(filename, 'wb') as file:
-                file.write(r.content)
-        else:
-            print(r.status_code)
-        return link, filename
-    except Exception as e:
-        print(e)
+    return link
 
 
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    bookshelf_title_search("Eragon")
+    formatted = bookshelf_item_progress('36ef8311-f3cb-48cf-a698-a34548792c36')
+    print(formatted['title'])
+
