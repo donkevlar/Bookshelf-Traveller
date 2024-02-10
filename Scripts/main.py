@@ -22,7 +22,7 @@ EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
 logger = settings.logging.getLogger("bot")
 
 # Version Info
-versionNumber = 'Alpha_0.22'
+versionNumber = 'Alpha_0.24'
 # Print Startup Time
 current_time = datetime.now()
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
@@ -98,7 +98,7 @@ async def totalTime(ctx: SlashContext):
         await ctx.send("Could not get complete this at the moment, please try again later.")
         print("Error: ", e)
         logger.warning(
-            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: listening-stats')
+            f'User:{bot.user} (ID: {bot.user.id}) | Error occurred: {e} | Command Name: listening-stats')
 
 
 @slash_command(name="ping", description="Latency of the discord bot server to the discord central shard.")
@@ -148,7 +148,6 @@ async def show_recent_sessions(ctx: SlashContext):
     try:
         formatted_sessions_string, data = c.bookshelf_listening_stats()
 
-
         # Split formatted_sessions_string by newline character to separate individual sessions
         sessions_list = formatted_sessions_string.split('\n\n')
         count = 0
@@ -180,7 +179,7 @@ async def show_recent_sessions(ctx: SlashContext):
             embed_message.add_field(name='Number of Times a Session was Played', value=f'Play Count: {play_count}',
                                     inline=False)
             embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
-            embed_message.set_footer("Brought to you by Kevuntu Media Group", cover)
+            embed_message.set_thumbnail(url=cover)
 
             embeds.append(embed_message)
 
@@ -242,7 +241,7 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
 
             await ctx.send(choices=choices)
 
-        except Exception as e: # NOQA
+        except Exception as e:  # NOQA
             await ctx.send(choices=choices)
     else:
         await ctx.send(choices=choices)
