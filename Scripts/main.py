@@ -22,7 +22,7 @@ EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
 logger = settings.logging.getLogger("bot")
 
 # Version Info
-versionNumber = 'Alpha_0.20'
+versionNumber = 'Alpha_0.22'
 # Print Startup Time
 current_time = datetime.now()
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
