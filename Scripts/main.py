@@ -171,6 +171,7 @@ async def show_recent_sessions(ctx: SlashContext):
             play_count = session_lines[4].split(': ')[1]
 
             cover = c.bookshelf_cover_image(library_ID)
+            logger.info(f"cover url: {cover}")
 
             # Use display title as the name for the field
             embed_message.add_field(name='Title', value=display_title, inline=False)
