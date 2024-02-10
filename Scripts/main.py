@@ -22,7 +22,7 @@ EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
 logger = settings.logging.getLogger("bot")
 
 # Version Info
-versionNumber = 'Alpha_0.24'
+versionNumber = 'Alpha_0.26'
 # Print Startup Time
 current_time = datetime.now()
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
@@ -181,7 +181,9 @@ async def show_recent_sessions(ctx: SlashContext):
             embed_message.add_field(name='Number of Times a Session was Played', value=f'Play Count: {play_count}',
                                     inline=False)
             embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
-            embed_message.set_thumbnail(cover_link)
+            embed_message.add_image(cover_link)
+            images = embed_message.images
+            print(f"Images Found: {images}")
 
             embeds.append(embed_message)
 
