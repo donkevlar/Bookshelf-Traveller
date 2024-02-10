@@ -148,6 +148,7 @@ async def show_recent_sessions(ctx: SlashContext):
     try:
         formatted_sessions_string, data = c.bookshelf_listening_stats()
 
+
         # Split formatted_sessions_string by newline character to separate individual sessions
         sessions_list = formatted_sessions_string.split('\n\n')
         count = 0
@@ -170,6 +171,8 @@ async def show_recent_sessions(ctx: SlashContext):
             library_ID = session_lines[3].split(': ')[1]
             play_count = session_lines[4].split(': ')[1]
 
+            cover = c.bookshelf_cover_image(library_ID)
+
             # Use display title as the name for the field
             embed_message.add_field(name='Title', value=display_title, inline=False)
             embed_message.add_field(name='Author', value=author, inline=False)
@@ -177,6 +180,7 @@ async def show_recent_sessions(ctx: SlashContext):
             embed_message.add_field(name='Number of Times a Session was Played', value=f'Play Count: {play_count}',
                                     inline=False)
             embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
+            embed_message.add_image(cover)
 
             embeds.append(embed_message)
 
