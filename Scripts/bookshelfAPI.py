@@ -245,8 +245,7 @@ def bookshelf_title_search(display_title: str, only_audio=True):
 
 
 def bookshelf_get_users(name):
-    endpoint = f"/users"
-    isFound = False
+    endpoint = "/users"
 
     r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
     if r.status_code == 200:
@@ -316,7 +315,13 @@ def bookshelf_library_csv(library_id: str, file_name='books.csv'):
                 writer.writerow([title, author, series, year])
 
 
+def bookshelf_cover_image(item_id):
+    # Generates Cover Link
+    endpoint = f"/items/{item_id}/cover"
+    link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
+    return link
+
+
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    bookshelf_title_search("Christopher Paolini")
-
+    bookshelf_title_search("Eragon")

@@ -8,7 +8,7 @@ import time
 from dotenv import load_dotenv
 
 # File Imports
-import commands as c
+import bookshelfAPI as c
 
 # Pulls from bookshelf file, if DOCKER == True, then this won't load local env file
 load_dotenv()
@@ -188,7 +188,7 @@ async def show_recent_sessions(ctx: SlashContext):
     except Exception as e:
         await ctx.send("Could not complete this at the moment, please try again later.")
         logger.warning(
-            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: recent-sessions')
+            f'User:{bot.user} (ID: {bot.user.id}) | Error occurred: {e} | Command Name: recent-sessions')
         print("Error: ", e)
 
 
@@ -202,6 +202,8 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
     try:
         formatted_data, title, description = c.bookshelf_item_progress(book_title)
 
+        cover_link = c.bookshelf_cover_image(book_title)
+
         # Create Embed Message
         embed_message = Embed(
             title=f"{title} | Media Progress",
@@ -209,6 +211,7 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
             color=ctx.author.accent_color
         )
         embed_message.add_field(name="Media Progress", value=formatted_data, inline=False)
+        embed_message.set_image(cover_link)
 
         # Send message
         await ctx.send(embed=embed_message, ephemeral=EPHEMERAL_OUTPUT)
@@ -235,7 +238,7 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
 
             await ctx.send(choices=choices)
 
-        except Exception as e:
+        except Exception as e: # NOQA
             await ctx.send(choices=choices)
     else:
         await ctx.send(choices=choices)
@@ -277,7 +280,7 @@ async def search_user(ctx: SlashContext, name: str):
     except Exception as e:
         await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=EPHEMERAL_OUTPUT)
         logger.warning(
-            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: search_user')
+            f'User:{bot.user} (ID: {bot.user.id}) | Error occurred: {e} | Command Name: search_user')
 
 
 @search_user.autocomplete("name")
@@ -309,7 +312,7 @@ async def add_user(ctx: SlashContext, name: str, password: str, user_type="user"
     except Exception as e:
         await ctx.send("Could not complete this at the moment, please try again later.")
         logger.warning(
-            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: add-user')
+            f'User:{bot.user} (ID: {bot.user.id}) | Error occurred: {e} | Command Name: add-user')
 
 
 @add_user.autocomplete("user_type")
