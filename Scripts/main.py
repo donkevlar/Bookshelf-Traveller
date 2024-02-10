@@ -207,7 +207,7 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
     try:
         formatted_data, title, description = c.bookshelf_item_progress(book_title)
 
-        cover_link = c.bookshelf_cover_image(book_title)
+        cover_title = c.bookshelf_cover_image(book_title)
 
         # Create Embed Message
         embed_message = Embed(
@@ -216,7 +216,7 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
             color=ctx.author.accent_color
         )
         embed_message.add_field(name="Media Progress", value=formatted_data, inline=False)
-        embed_message.set_image(cover_link)
+        embed_message.add_image(cover_title)
 
         # Send message
         await ctx.send(embed=embed_message, ephemeral=EPHEMERAL_OUTPUT)
