@@ -348,7 +348,7 @@ async def autocomplete_user_search_type(ctx: AutocompleteContext):
                description="test the connection between this bot and the audiobookshelf server, "
                            "optionally can place any url")
 @check(ownership_check)
-@slash_option(name="opt_url", description="enter an optional url to test outside of server", required=True,
+@slash_option(name="opt_url", description="enter an optional url to test outside of server", required=False,
               opt_type=OptionType.STRING)
 async def test_server_connection(ctx: SlashContext, opt_url=None):
     try:
