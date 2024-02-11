@@ -2,6 +2,7 @@ import os
 import time
 from collections import defaultdict
 from datetime import datetime
+import traceback
 import csv
 
 from dotenv import load_dotenv
@@ -193,7 +194,7 @@ def bookshelf_title_search(display_title: str, only_audio=True):
 
     valid_libraries = []
     valid_library_count = 0
-    found_titles = {}
+    found_titles = []
 
     # Get valid libraries using filter only_audio
     for name, (library_id, audiobooks_only) in libraries.items():
@@ -216,30 +217,32 @@ def bookshelf_title_search(display_title: str, only_audio=True):
             print(f"Beginning to search libraries: {lib_id.get('name')} | {library_iD}\n")
             # Search for the title name using endpoint
             try:
-
-                endpoint = f"/libraries/{library_iD}/search?q={display_title}&limit=5"
+                limit = 6
+                endpoint = f"/libraries/{library_iD}/search?q={display_title}&limit={limit}"
                 r = requests.get(f'{defaultAPIURL}{endpoint}&token={bookshelfToken}')
                 print(f"\nstatus code: {r.status_code}")
                 count = 0
                 if r.status_code == 200:
                     data = r.json()
+
                     # print(f"returned data: {data}")
 
                     successMSG(endpoint, r.status_code)
-
-                    for titles in data['book']:
-                        title = titles['libraryItem']['media']['metadata']['title']
-                        book_id = titles['libraryItem']['id']
-                        found_titles['id'] = book_id
-                        found_titles['title'] = title
+                    dataset = data.get('book', [])
+                    for book in dataset:
+                        print(book)
+                        title = book['libraryItem']['media']['metadata']['title']
+                        book_id = book['libraryItem']['id']
+                        # Add to dict
+                        found_titles.append({'id': book_id, 'title': title})
 
                     # Append None to book_titles if nothing is found
 
-                    print(f"Found book titles: {found_titles['title']}")
                     return found_titles
 
             except Exception as e:
                 print(f'Error occured: {e}')
+                traceback.print_exc()
 
 
 def bookshelf_get_users(name):

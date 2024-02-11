@@ -1,3 +1,5 @@
+import traceback
+
 import requests
 import os
 import settings
@@ -236,7 +238,8 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
         logger.info(f' Successfully sent command: media-progress')
 
     except Exception as e:
-        await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=EPHEMERAL_OUTPUT)
+        await ctx.send("Could not complete this at the moment, likely due to no progress found. Please try again later",
+                       ephemeral=EPHEMERAL_OUTPUT)
         logger.warning(
             f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: media-progress')
 
@@ -249,15 +252,17 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
     if user_input != "":
         try:
             titles_ = c.bookshelf_title_search(user_input)
-
-            book_title = titles_["title"]
-            book_id = titles_["id"]
-            choices.append({"name": f"{book_title}", "value": f"{book_id}"})
+            for info in titles_:
+                book_title = info["title"]
+                book_id = info["id"]
+                choices.append({"name": f"{book_title}", "value": f"{book_id}"})
 
             await ctx.send(choices=choices)
 
         except Exception as e:  # NOQA
             await ctx.send(choices=choices)
+            logger.error(e)
+            traceback.print_exc()
     else:
         await ctx.send(choices=choices)
 
@@ -372,20 +377,20 @@ async def test_server_connection(ctx: SlashContext, opt_url=None):
 @slash_command(name="book-list-csv",
                description="Get complete list of items in a given library, outputs a csv")
 @check(ownership_check)
-@slash_option(name="libraryid", description="enter a valid libraryid", required=EPHEMERAL_OUTPUT,
+@slash_option(name="library_name", description="enter a valid library name", required=True,
               opt_type=OptionType.STRING)
-async def library_csv_booklist(ctx: SlashContext, libraryid: str):
+async def library_csv_booklist(ctx: SlashContext, library_name: str, audiobooks_only: bool = False):
     try:
         # Get Current Working Directory
         current_directory = os.getcwd()
 
         # Create CSV File
-        c.bookshelf_library_csv(libraryid)
+        c.bookshelf_library_csv(library_name)
 
         # Get Filepath
         file_path = os.path.join(current_directory, 'books.csv')
 
-        await ctx.send(file=bot.File(file_path), ephemeral=EPHEMERAL_OUTPUT)
+        await ctx.send(file=File(file_path), ephemeral=EPHEMERAL_OUTPUT)
         logger.info(f' Successfully sent command: test-connection')
 
     except Exception as e:
@@ -394,6 +399,17 @@ async def library_csv_booklist(ctx: SlashContext, libraryid: str):
 
         logger.warning(
             f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: add-user')
+
+
+@library_csv_booklist.autocomplete("library_name")
+async def autocomplete_library_csv(ctx: AutocompleteContext):
+    library_data = c.bookshelf_libraries()
+    choices = []
+
+    for name, (library_id) in library_data.items():
+        choices.append({"name": name, "value": library_id})
+
+    await ctx.send(choices=choices)
 
 
 if __name__ == '__main__':
