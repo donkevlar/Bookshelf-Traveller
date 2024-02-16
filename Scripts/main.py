@@ -94,8 +94,10 @@ async def ownership_check(ctx: BaseContext):
 # Events
 #
 @listen()
-async def on_startup():
+async def on_startup(event: Startup):
     print(f'Bot is ready. Logged in as {bot.user}')
+    owner = event.client.owner
+    await owner.send(f'Bot is ready. Logged in as {bot.user}')
 
 
 @listen(Resume)
