@@ -5,7 +5,7 @@ import os
 import settings
 from interactions import *
 from interactions.ext.paginators import Paginator
-from interactions.api.voice.audio import AudioVolume
+from interactions.api.events import *
 from datetime import datetime
 import time
 from dotenv import load_dotenv
@@ -91,9 +91,23 @@ async def ownership_check(ctx: BaseContext):
         return True
 
 
+# Events
+#
 @listen()
 async def on_startup():
     print(f'Bot is ready. Logged in as {bot.user}')
+
+
+@listen(Resume)
+async def on_resume(event: Resume):
+    owner = event.client.owner
+    await owner.send("Bot has resumed connection!")
+
+
+@listen(Disconnect)
+async def on_disconnect(event: Disconnect, ctx):
+    owner = event.client.owner
+    await owner.send("Bot has disconnected!")
 
 
 @slash_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
