@@ -16,7 +16,6 @@ COPY Scripts/settings.py /ABSBOT
 # Install any needed packages specified in requirements.txt
 RUN pip install --trusted-host pypi.python.org -r requirements.txt
 
-RUN sudo apt install ffmpeg libffi-dev libnacl-dev -y
 
 RUN set -ex \
     && apt-get update \

@@ -342,5 +342,24 @@ def bookshelf_all_library_items(library_id):
         return found_titles
 
 
+def bookshelf_playback_type():
+    endpoint = f"/items/955edf34-be2a-48c8-b928-41ad7e579764/file/648799825613029523"
+    link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
+    try:
+        # Make a HEAD request to fetch the headers
+        response = requests.head(endpoint)
+        response.raise_for_status()  # Raise an exception if the request fails
+
+        # Extract the content type from the response headers
+        content_type = response.headers.get('content-type')
+
+        print("Content-Type:", content_type)
+
+    except requests.exceptions.RequestException as e:
+        print("Error occurred during HTTP request:", e)
+    except Exception as e:
+        print("Error occurred:", e)
+
+
 if __name__ == '__main__':
     print("TESTING COMMENCES")
