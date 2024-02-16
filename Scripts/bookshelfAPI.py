@@ -230,14 +230,13 @@ def bookshelf_title_search(display_title: str, only_audio=True):
                     successMSG(endpoint, r.status_code)
                     dataset = data.get('book', [])
                     for book in dataset:
-                        print(book)
                         title = book['libraryItem']['media']['metadata']['title']
                         book_id = book['libraryItem']['id']
                         # Add to dict
                         found_titles.append({'id': book_id, 'title': title})
 
                     # Append None to book_titles if nothing is found
-
+                    print(found_titles)
                     return found_titles
 
             except Exception as e:
