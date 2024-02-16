@@ -5,6 +5,7 @@ import os
 import settings
 from interactions import *
 from interactions.ext.paginators import Paginator
+from interactions.api.voice.audio import AudioVolume
 from datetime import datetime
 import time
 from dotenv import load_dotenv
@@ -24,7 +25,7 @@ EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
 logger = settings.logging.getLogger("bot")
 
 # Version Info
-versionNumber = 'Alpha_0.26'
+versionNumber = 'Alpha_0.30'
 # Print Startup Time
 current_time = datetime.now()
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
@@ -60,6 +61,19 @@ auth_test = c.bookshelf_auth_test()
 bot = Client(intents=Intents.DEFAULT, logger=logger)
 
 
+def option_library_name():
+    def wrapper(func):
+        return slash_option(
+            name="library_name",
+            opt_type=OptionType.STRING,
+            description="Select a library",
+            required=True,
+            autocomplete=True
+        )(func)
+
+    return wrapper
+
+
 # Custom check for ownership
 async def ownership_check(ctx: BaseContext):
     # Default only owner can use this bot
@@ -93,7 +107,7 @@ async def totalTime(ctx: SlashContext):
             message = f'Total Listening Time : {total_time} Hours'
         else:
             message = f'Total Listening Time : {total_time} Minutes'
-        await ctx.send(message)
+        await ctx.send(message, ephemeral=EPHEMERAL_OUTPUT)
         logger.info(f' Successfully sent command: listening-stats')
 
     except Exception as e:
@@ -134,7 +148,7 @@ async def show_all_libraries(ctx: SlashContext):
 
         embed_message.add_field(name=f"Libraries", value=formatted_data, inline=False)
 
-        await ctx.send(embed=embed_message)
+        await ctx.send(embed=embed_message, ephemeral=EPHEMERAL_OUTPUT)
         logger.info(f' Successfully sent command: recent-sessions')
 
     except Exception as e:
@@ -148,7 +162,7 @@ async def show_all_libraries(ctx: SlashContext):
 @check(ownership_check)
 async def show_recent_sessions(ctx: SlashContext):
     try:
-        await ctx.defer()
+        await ctx.defer(ephemeral=EPHEMERAL_OUTPUT)
         formatted_sessions_string, data = c.bookshelf_listening_stats()
 
         # Split formatted_sessions_string by newline character to separate individual sessions
@@ -187,7 +201,7 @@ async def show_recent_sessions(ctx: SlashContext):
 
             embeds.append(embed_message)
 
-        paginator = Paginator.create_from_embeds(bot, *embeds)
+        paginator = Paginator.create_from_embeds(bot, *embeds, timeout=120)
         await paginator.send(ctx, ephemeral=EPHEMERAL_OUTPUT)
 
         logger.info(f' Successfully sent command: recent-sessions')
@@ -378,9 +392,10 @@ async def test_server_connection(ctx: SlashContext, opt_url=None):
                description="Get complete list of items in a given library, outputs a csv")
 @check(ownership_check)
 @slash_option(name="library_name", description="enter a valid library name", required=True,
-              opt_type=OptionType.STRING)
+              opt_type=OptionType.STRING, autocomplete=True)
 async def library_csv_booklist(ctx: SlashContext, library_name: str, audiobooks_only: bool = False):
     try:
+        await ctx.defer(ephemeral=True)
         # Get Current Working Directory
         current_directory = os.getcwd()
 
@@ -406,10 +421,53 @@ async def autocomplete_library_csv(ctx: AutocompleteContext):
     library_data = c.bookshelf_libraries()
     choices = []
 
-    for name, (library_id) in library_data.items():
+    for name, (library_id, audiobooks_only) in library_data.items():
         choices.append({"name": name, "value": library_id})
 
+    print(choices)
     await ctx.send(choices=choices)
+
+
+@slash_command(name="all-library-items", description="Get all library items")
+@check(ownership_check)
+@option_library_name()
+async def all_library_items(ctx: SlashContext, library_name: str):
+    try:
+        await ctx.defer()
+        library_items = c.bookshelf_all_library_items(library_name)
+        print(library_items)
+        formatted_info = ""
+
+        for items in library_items:
+            print(items)
+            title = items['title']
+            author = items['author']
+            # book_id = items['id']
+            formatted_info += f"\nTitle: {title} | Author: {author}\n"
+
+        paginator = Paginator.create_from_string(bot, formatted_info, page_size=1000, timeout=120, prefix="\n",
+                                                 suffix="\n")
+
+        await paginator.send(ctx, ephemeral=True)
+
+    except Exception as e:
+        print(e)
+        traceback.print_exc()
+        logger.error(e)
+        await ctx.send("Could not complete this at the moment, please try again later.")
+
+
+@all_library_items.autocomplete("library_name")
+async def autocomplete_all_library_items(ctx: AutocompleteContext):
+    library_data = c.bookshelf_libraries()
+    choices = []
+
+    for name, (library_id, audiobooks_only) in library_data.items():
+        choices.append({"name": name, "value": library_id})
+
+    print(choices)
+    if choices:
+        await ctx.send(choices=choices)
 
 
 if __name__ == '__main__':

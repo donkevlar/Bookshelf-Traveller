@@ -316,15 +316,31 @@ def bookshelf_library_csv(library_id: str, file_name='books.csv'):
                 writer.writerow([title, author, series, year])
 
 
-def bookshelf_cover_image(item_id):
+def bookshelf_cover_image(item_id: str):
     # Generates Cover Link
     endpoint = f"/items/{item_id}/cover"
     link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
     return link
 
 
+def bookshelf_all_library_items(library_id):
+    found_titles = []
+    endpoint = f"/libraries/{library_id}/items"
+    r = requests.get(f"{defaultAPIURL}{endpoint}{tokenInsert}&sort=media.metadata.title")
+    if r.status_code == 200:
+        data = r.json()
+
+        dataset = data.get('results', [])
+        for items in dataset:
+            book_title = items['media']['metadata']['title']
+            author = items['media']['metadata']['authorName']
+            book_id = items['media']['id']
+
+            found_titles.append({'id': book_id, 'title': book_title, 'author': author})
+
+        print(found_titles)
+        return found_titles
+
+
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    formatted = bookshelf_item_progress('36ef8311-f3cb-48cf-a698-a34548792c36')
-    print(formatted['title'])
-
