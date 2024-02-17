@@ -100,18 +100,6 @@ async def on_startup(event: Startup):
     await owner.send(f'Bot is ready. Logged in as {bot.user}')
 
 
-@listen(Resume)
-async def on_resume(event: Resume):
-    owner = event.client.owner
-    await owner.send("Bot has resumed connection!")
-
-
-@listen(Disconnect)
-async def on_disconnect(event: Disconnect, ctx):
-    owner = event.client.owner
-    await owner.send("Bot has disconnected!")
-
-
 @slash_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
 @check(ownership_check)
 async def totalTime(ctx: SlashContext):
