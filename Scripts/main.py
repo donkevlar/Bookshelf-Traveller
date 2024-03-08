@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 # File Imports
 import bookshelfAPI as c
+from bookshelfAPI import asyncio
 
 # Pulls from bookshelf file, if DOCKER == True, then this won't load local env file
 load_dotenv()
@@ -475,3 +476,4 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 
 if __name__ == '__main__':
     bot.start(settings.DISCORD_API_SECRET)
+

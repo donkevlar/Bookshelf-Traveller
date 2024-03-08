@@ -1,6 +1,7 @@
 import os
 import time
 from collections import defaultdict
+import asyncio
 from datetime import datetime
 import traceback
 import csv
@@ -36,8 +37,10 @@ def bookshelf_test_connection():
     print("Testing Server Connection")
     print("Server URL ", bookshelfURL, "\n")
     connected = False
+    count = 0
 
     while not connected:
+        count += 1
         try:
             # Using /healthcheck to avoid domain mismatch, since this is an api endpoint in bookshelf
             r = requests.get(f'{bookshelfURL}/healthcheck')
@@ -45,7 +48,17 @@ def bookshelf_test_connection():
             if status == 200:
                 connected = True
                 print("\nConnection Established!\n")
-            return status
+                return status
+
+            elif status != 200 and count >= 11:
+                print("Connection could not be established, Quitting!")
+                time.sleep(1)
+                exit()
+
+            else:
+                print("\nConnection Error, retrying in 5 seconds!")
+                time.sleep(5)
+                print(f"Retrying! Attempt: {count}")
 
         except requests.RequestException as e:
             print("Error occured while testing server connection: ", e, "\n")
@@ -54,9 +67,15 @@ def bookshelf_test_connection():
             print("No URL PROVIDED!\n")
 
 
+async def bookshelf_periodic_conn_test(time_period: int = 60):
+    while True:
+        print("Initializing Connection Test!")
+        bookshelf_test_connection()
+        await asyncio.sleep(time_period)
+
+
 def bookshelf_auth_test():
     print("\nProviding Auth Token to Server\n")
-    time.sleep(0.25)
     try:
         endpoint = "/me"
         r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
