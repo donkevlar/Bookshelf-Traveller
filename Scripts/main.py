@@ -25,7 +25,7 @@ EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
 logger = settings.logging.getLogger("bot")
 
 # Version Info
-versionNumber = 'Alpha_0.30'
+versionNumber = 'Alpha_0.35'
 # Print Startup Time
 current_time = datetime.now()
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
@@ -449,8 +449,7 @@ async def all_library_items(ctx: SlashContext, library_name: str):
             # book_id = items['id']
             formatted_info += f"\nTitle: {title} | Author: {author}\n"
 
-        paginator = Paginator.create_from_string(bot, formatted_info, page_size=1000, timeout=120, prefix="\n",
-                                                 suffix="\n")
+        paginator = Paginator.create_from_string(bot, formatted_info, timeout=120, page_size=2000)
 
         await paginator.send(ctx, ephemeral=True)
 

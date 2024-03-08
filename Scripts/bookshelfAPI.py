@@ -8,13 +8,12 @@ import csv
 from dotenv import load_dotenv
 
 import requests
-from requests import utils
 
 # DEV ENVIRON VARS
 load_dotenv()
 
 # Global Vars
-
+keep_active = False
 
 # Bookshelf Server IP
 bookshelfURL = os.environ.get("bookshelfURL")
@@ -36,18 +35,23 @@ def successMSG(endpoint, status):
 def bookshelf_test_connection():
     print("Testing Server Connection")
     print("Server URL ", bookshelfURL, "\n")
+    connected = False
 
-    try:
-        # Using /healthcheck to avoid domain mismatch, since this is an api endpoint in bookshelf
-        r = requests.get(f'{bookshelfURL}/healthcheck')
-        status = r.status_code
-        return status
+    while not connected:
+        try:
+            # Using /healthcheck to avoid domain mismatch, since this is an api endpoint in bookshelf
+            r = requests.get(f'{bookshelfURL}/healthcheck')
+            status = r.status_code
+            if status == 200:
+                connected = True
+                print("\nConnection Established!\n")
+            return status
 
-    except requests.RequestException as e:
-        print("Error occured while testing server connection: ", e, "\n")
+        except requests.RequestException as e:
+            print("Error occured while testing server connection: ", e, "\n")
 
-    except UnboundLocalError as e:
-        print("No URL PROVIDED!\n")
+        except UnboundLocalError as e:
+            print("No URL PROVIDED!\n")
 
 
 def bookshelf_auth_test():
@@ -341,24 +345,29 @@ def bookshelf_all_library_items(library_id):
         return found_titles
 
 
-def bookshelf_playback_type():
-    endpoint = f"/items/955edf34-be2a-48c8-b928-41ad7e579764/file/648799825613029523"
+def bookshelf_monitor(itemID, sleep_counter: int = 1):
+    sleep_counter *= 60
+    count = 0
+    while keep_active:
+        count += 1
+        print(f"Loop Count: {count}")
+        bookshelf_item_progress(itemID)
+        time.sleep(sleep_counter)
+
+
+def bookshelf_create_backup():
+    endpoint = "/backups"
     link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
-    try:
-        # Make a HEAD request to fetch the headers
-        response = requests.head(endpoint)
-        response.raise_for_status()  # Raise an exception if the request fails
-
-        # Extract the content type from the response headers
-        content_type = response.headers.get('content-type')
-
-        print("Content-Type:", content_type)
-
-    except requests.exceptions.RequestException as e:
-        print("Error occurred during HTTP request:", e)
-    except Exception as e:
-        print("Error occurred:", e)
+    backup_IDs = []
+    r = requests.post(link)
+    if r.status_code == 200:
+        data = r.json()
+        for item in data['backups']:
+            backup_id = item['id']
+            backup_IDs.append(backup_id)
+        print(backup_IDs)
 
 
 if __name__ == '__main__':
     print("TESTING COMMENCES")
+    bookshelf_create_backup()
