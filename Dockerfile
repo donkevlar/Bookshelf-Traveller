@@ -1,5 +1,5 @@
 # official Python runtime as a base image
-FROM python:alpine3.12
+FROM python:slim-bookworm
 
 # Set the working directory
 WORKDIR /ABSBOT
