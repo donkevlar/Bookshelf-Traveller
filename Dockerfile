@@ -1,10 +1,7 @@
 # official Python runtime as a base image
-FROM python:alpine
+FROM python:alpine3.12
 
-# Use an official MongoDB runtime as a base image
-# FROM mongo:latest
-
-# Set the working directory to /AudiblePy
+# Set the working directory
 WORKDIR /ABSBOT
 
 # Copy the current directory contents into the container at /app
