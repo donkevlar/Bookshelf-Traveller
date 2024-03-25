@@ -17,6 +17,7 @@ RUN pip install --trusted-host pypi.python.org -r requirements.txt
 RUN set -ex \
     && apt-get update \
     && apt-get install -y ffmpeg \
+    && apt-get install -y libffi-dev libnacl-dev \
     && apt-get upgrade -y \
     && apt-get autoremove -y \
     && apt-get clean -y \
