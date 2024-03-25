@@ -20,13 +20,14 @@ load_dotenv()
 # Global Vars
 
 # Controls if ALL commands are ephemeral
-EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
+EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
 
 # Logger Config
 logger = settings.logging.getLogger("bot")
 
-# Version Info
-versionNumber = 'Alpha_0.35'
+# alert monitor
+monitor_enabled = False
+
 # Print Startup Time
 current_time = datetime.now()
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
@@ -36,7 +37,7 @@ print("\nStartup time:", current_time)
 # Get Discord Token from ENV
 token = os.environ.get("DISCORD_TOKEN")
 
-logger.info(f'\nStarting up bookshelf traveller v.{versionNumber}\n')
+logger.info(f'\nStarting up bookshelf traveller v.{settings.versionNumber}\n')
 
 # Start Server Connection Prior to Running Bot
 server_status_code = c.bookshelf_test_connection()
@@ -93,7 +94,6 @@ async def ownership_check(ctx: BaseContext):
 
 
 # Events
-#
 @listen()
 async def on_startup(event: Startup):
     print(f'Bot is ready. Logged in as {bot.user}')
@@ -476,4 +476,3 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 
 if __name__ == '__main__':
     bot.start(settings.DISCORD_API_SECRET)
-

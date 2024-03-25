@@ -6,8 +6,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# Version Info
+versionNumber = 'Alpha_0.40'
 
+# Enables monitor to send alerts to the owner
+MONITOR_ALERTS = os.getenv("MONITOR_ALERTS", False)
+
+# Discord token
 DISCORD_API_SECRET = os.getenv("DISCORD_TOKEN")
+
+# Controls if ALL commands are ephemeral
+EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
 
 LOGGING_CONFIG = {
     "version": 1,
