@@ -7,7 +7,6 @@ import settings
 from interactions import *
 from interactions.ext.paginators import Paginator
 from interactions.api.events import *
-from interactions.api.voice.audio import AudioVolume
 from datetime import datetime
 import time
 from dotenv import load_dotenv
@@ -101,6 +100,8 @@ async def on_startup(event: Startup):
     print(f'Bot is ready. Logged in as {bot.user}')
     owner = event.client.owner
     await owner.send(f'Bot is ready. Logged in as {bot.user}')
+    if settings.EXPERIMENTAL:
+        logger.warning(f'EXPERIMENTAL FEATURES ENABLED!')
 
 
 @slash_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
@@ -475,18 +476,6 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
     if choices:
         await ctx.send(choices=choices)
 
-
-# Experimental
-if settings.EXPERIMENTAL:
-    @interactions.slash_command(name="play", description="Test Play Functionality")
-    async def play_file(self, ctx: interactions.SlashContext):
-        if not ctx.voice_state:
-            # if we haven't already joined a voice channel
-            # join the authors vc
-            await ctx.author.voice.channel.connect()
-        audio = AudioVolume(settings.TEST_ENV1)
-        await ctx.voice_state.play(audio)
-
-
 if __name__ == '__main__':
+    bot.load_extension("audio")
     bot.start(settings.DISCORD_API_SECRET)
