@@ -485,6 +485,7 @@ if settings.EXPERIMENTAL:
             # join the authors vc
             await ctx.author.voice.channel.connect()
         audio = AudioVolume(settings.TEST_ENV1)
+        await ctx.voice_state.play(audio)
 
 
 if __name__ == '__main__':
