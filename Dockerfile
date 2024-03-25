@@ -5,10 +5,8 @@ FROM python:slim-bookworm
 WORKDIR /ABSBOT
 
 # Copy the current directory contents into the container at /app
-COPY Scripts/main.py /ABSBOT
-COPY Scripts/bookshelfAPI.py /ABSBOT
-COPY Scripts/requirements.txt /ABSBOT
-COPY Scripts/settings.py /ABSBOT
+COPY Scripts/ /ABSBOT
+
 
 # Install any needed packages specified in requirements.txt
 RUN pip install --trusted-host pypi.python.org -r requirements.txt
