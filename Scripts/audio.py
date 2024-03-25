@@ -5,11 +5,11 @@ from interactions import Extension, slash_command, SlashContext
 import settings
 
 
-class AudioPlayBack(Extension):
+class AudioPlayBack(Extension, interactions):
     # Experimental
     if settings.EXPERIMENTAL:
         @slash_command(name="play", description="Test Play Functionality")
-        async def play_file(self, ctx: SlashContext):
+        async def play_file(self, ctx):
             if not ctx.voice_state:
                 # if we haven't already joined a voice channel
                 # join the authors vc
