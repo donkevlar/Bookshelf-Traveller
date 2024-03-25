@@ -9,7 +9,7 @@ COPY Scripts/ /ABSBOT
 
 
 # Install any needed packages specified in requirements.txt
-RUN pip install discord.py-interactions[voice] -y
+RUN pip install discord.py-interactions[voice]
 RUN pip install --trusted-host pypi.python.org -r requirements.txt
 
 
