@@ -5,7 +5,7 @@ from interactions import Extension, slash_command, SlashContext
 import settings
 
 
-class AudioPlayBack(Extension, interactions):
+class AudioPlayBack(Extension):
     # Experimental
     if settings.EXPERIMENTAL:
         @slash_command(name="play", description="Test Play Functionality")
