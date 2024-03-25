@@ -18,6 +18,12 @@ DISCORD_API_SECRET = os.getenv("DISCORD_TOKEN")
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
 
+# Enables Experimental Commands
+EXPERIMENTAL = os.getenv('EXPERIMENTAL', False)
+
+# TEST ENV1
+TEST_ENV1 = os.getenv('TEST_ENV1')
+
 LOGGING_CONFIG = {
     "version": 1,
     "disabled_existing_loggers": False,

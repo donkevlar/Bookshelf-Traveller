@@ -1,11 +1,13 @@
 import traceback
 
+import interactions
 import requests
 import os
 import settings
 from interactions import *
 from interactions.ext.paginators import Paginator
 from interactions.api.events import *
+from interactions.api.voice.audio import AudioVolume
 from datetime import datetime
 import time
 from dotenv import load_dotenv
@@ -472,6 +474,17 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
     print(choices)
     if choices:
         await ctx.send(choices=choices)
+
+
+# Experimental
+if settings.EXPERIMENTAL:
+    @interactions.slash_command(name="play", description="Test Play Functionality")
+    async def play_file(self, ctx: interactions.SlashContext):
+        if not ctx.voice_state:
+            # if we haven't already joined a voice channel
+            # join the authors vc
+            await ctx.author.voice.channel.connect()
+        audio = AudioVolume(settings.TEST_ENV1)
 
 
 if __name__ == '__main__':
