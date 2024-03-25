@@ -8,8 +8,8 @@ import settings
 class AudioPlayBack(Extension):
     # Experimental
     if settings.EXPERIMENTAL:
-        @interactions.slash_command(name="play", description="Test Play Functionality")
-        async def play_file(self, ctx: interactions.SlashContext):
+        @slash_command(name="play", description="Test Play Functionality")
+        async def play_file(self, ctx: SlashContext):
             if not ctx.voice_state:
                 # if we haven't already joined a voice channel
                 # join the authors vc
