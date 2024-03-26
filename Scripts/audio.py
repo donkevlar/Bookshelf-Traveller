@@ -16,3 +16,8 @@ class AudioPlayBack(Extension):
                 await ctx.author.voice.channel.connect()
             audio = AudioVolume(settings.TEST_ENV1)
             await ctx.voice_state.play(audio)
+
+        @slash_command(name="disconnect", description="Will disconnect from the voice channel")
+        async def disconnect_voice(self, ctx: SlashContext):
+            if not ctx.voice_state:
+                await ctx.author.voice.channel.disconnect()
