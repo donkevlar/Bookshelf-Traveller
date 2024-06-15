@@ -32,6 +32,10 @@ def successMSG(endpoint, status):
     print(f'Successfully Reached {endpoint} with Status {status}')
 
 
+def keepAlive():
+    pass
+
+
 # Test initial Connection to Bookshelf Server
 def bookshelf_test_connection():
     print("Testing Server Connection")

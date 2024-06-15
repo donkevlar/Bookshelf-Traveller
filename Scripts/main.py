@@ -1,6 +1,4 @@
 import traceback
-
-import interactions
 import requests
 import os
 import settings
@@ -13,12 +11,18 @@ from dotenv import load_dotenv
 
 # File Imports
 import bookshelfAPI as c
-from bookshelfAPI import asyncio
 
 # Pulls from bookshelf file, if DOCKER == True, then this won't load local env file
 load_dotenv()
 
 # Global Vars
+
+# TO DOs Placed in here
+#
+#
+#
+#
+##
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
@@ -31,7 +35,7 @@ monitor_enabled = False
 
 # Print Startup Time
 current_time = datetime.now()
-logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
+logger.info(f'Bot is Starting Up! | Startup Time: {current_time}\n')
 
 print("\nStartup time:", current_time)
 
@@ -45,9 +49,9 @@ server_status_code = c.bookshelf_test_connection()
 
 # Quit if server does not respond
 if server_status_code != 200:
-    logger.warning(f'Current Server Status = {server_status_code}')
-    logger.warning("Issue with connecting to Audiobookshelf server!")
-    logger.warning("Quitting!")
+    logger.warning(f'\nCurrent Server Status = {server_status_code}')
+    logger.warning("\nIssue with connecting to Audiobookshelf server!")
+    logger.warning("\nQuitting!")
     time.sleep(0.5)
     exit()
 
@@ -64,6 +68,7 @@ auth_test = c.bookshelf_auth_test()
 bot = Client(intents=Intents.DEFAULT, logger=logger)
 
 
+# Function which holds the library options for related autocomplete
 def option_library_name():
     def wrapper(func):
         return slash_option(
@@ -94,7 +99,7 @@ async def ownership_check(ctx: BaseContext):
         return True
 
 
-# Events
+# Event listener
 @listen()
 async def on_startup(event: Startup):
     print(f'Bot is ready. Logged in as {bot.user}')
@@ -104,6 +109,7 @@ async def on_startup(event: Startup):
         logger.warning(f'EXPERIMENTAL FEATURES ENABLED!')
 
 
+# Listening Stats, currently pulls the total time listened and converts it to hours
 @slash_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
 @check(ownership_check)
 async def totalTime(ctx: SlashContext):
@@ -125,6 +131,7 @@ async def totalTime(ctx: SlashContext):
             f'User:{bot.user} (ID: {bot.user.id}) | Error occurred: {e} | Command Name: listening-stats')
 
 
+# Pings the server, can ping other servers, why? IDK, cause why not.
 @slash_command(name="ping", description="Latency of the discord bot server to the discord central shard.")
 @check(ownership_check)
 async def ping(ctx: SlashContext):
@@ -134,8 +141,9 @@ async def ping(ctx: SlashContext):
     logger.info(f' Successfully sent command: ping')
 
 
+# Display a formatted list (embedded) of current libraries
 @slash_command(name="all-libraries",
-               description="Display all current libraries with their ID and if only audiobooks")
+               description="Display all current libraries with their ID and a boolean ")
 @check(ownership_check)
 async def show_all_libraries(ctx: SlashContext):
     try:
@@ -165,6 +173,7 @@ async def show_all_libraries(ctx: SlashContext):
         print("Error: ", e)
 
 
+# List the recent sessions, limited to 10 with API. Will merge if books are the same.
 @slash_command(name="recent-sessions",
                description="Display up to 10 recent sessions")
 @check(ownership_check)
@@ -221,9 +230,9 @@ async def show_recent_sessions(ctx: SlashContext):
         print("Error: ", e)
 
 
+# Retrieves a specific media item and it's progress
 @slash_command(name="media-progress",
-               description="Searches for the media item's progress, note: use recent session to find library "
-                           "item id")
+               description="Searches for the media item's progress")
 @check(ownership_check)
 @slash_option(name="book_title", description="Enter a book title", required=True, opt_type=OptionType.STRING,
               autocomplete=True)
@@ -266,6 +275,7 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
             f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: media-progress')
 
 
+# Autocomplete function, looks for the book title
 @search_media_progress.autocomplete("book_title")
 async def search_media_auto_complete(ctx: AutocompleteContext):
     user_input = ctx.input_text
@@ -289,6 +299,7 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
         await ctx.send(choices=choices)
 
 
+# Searches for a specific user, uses autocomplete to retrieve the inputed name
 @slash_command(name="user-search",
                description="Searches for a specific user, case sensitive")
 @check(ownership_check)
@@ -328,6 +339,7 @@ async def search_user(ctx: SlashContext, name: str):
             f'User:{bot.user} (ID: {bot.user.id}) | Error occurred: {e} | Command Name: search_user')
 
 
+# Autocomplete searches the username within the abs api
 @search_user.autocomplete("name")
 async def user_search_autocomplete(ctx: AutocompleteContext):
     user_input = ctx.input_text
@@ -339,6 +351,7 @@ async def user_search_autocomplete(ctx: AutocompleteContext):
     await ctx.send(choices=choice)
 
 
+# Create user, kind of works
 @slash_command(name="add-user",
                description="Will create a user, user types: 'admin', 'guest', 'user' | Default = user")
 @check(ownership_check)
@@ -360,6 +373,7 @@ async def add_user(ctx: SlashContext, name: str, password: str, user_type="user"
             f'User:{bot.user} (ID: {bot.user.id}) | Error occurred: {e} | Command Name: add-user')
 
 
+# Autocomplete for user types, static choices
 @add_user.autocomplete("user_type")
 async def autocomplete_user_search_type(ctx: AutocompleteContext):
     choices = [
@@ -371,6 +385,7 @@ async def autocomplete_user_search_type(ctx: AutocompleteContext):
     await ctx.send(choices=choices)
 
 
+# tests the connection to the server, option to use a different url if you want. WHY IDK, stop asking.
 @slash_command(name="test-connection",
                description="test the connection between this bot and the audiobookshelf server, "
                            "optionally can place any url")
@@ -396,6 +411,7 @@ async def test_server_connection(ctx: SlashContext, opt_url=None):
             f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: add-user')
 
 
+# Pulls the complete list of items in a library in csv
 @slash_command(name="book-list-csv",
                description="Get complete list of items in a given library, outputs a csv")
 @check(ownership_check)
@@ -424,6 +440,7 @@ async def library_csv_booklist(ctx: SlashContext, library_name: str, audiobooks_
             f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: add-user')
 
 
+# Autocomplete, pulls all the libraries
 @library_csv_booklist.autocomplete("library_name")
 async def autocomplete_library_csv(ctx: AutocompleteContext):
     library_data = c.bookshelf_libraries()
@@ -436,6 +453,7 @@ async def autocomplete_library_csv(ctx: AutocompleteContext):
     await ctx.send(choices=choices)
 
 
+# Self-explanatory, pulls all a library's items
 @slash_command(name="all-library-items", description="Get all library items")
 @check(ownership_check)
 @option_library_name()
@@ -464,6 +482,7 @@ async def all_library_items(ctx: SlashContext, library_name: str):
         await ctx.send("Could not complete this at the moment, please try again later.")
 
 
+# Another Library Name autocomplete
 @all_library_items.autocomplete("library_name")
 async def autocomplete_all_library_items(ctx: AutocompleteContext):
     library_data = c.bookshelf_libraries()
@@ -476,6 +495,8 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
     if choices:
         await ctx.send(choices=choices)
 
+
+# Main Loop
 if __name__ == '__main__':
     bot.load_extension("audio")
     bot.start(settings.DISCORD_API_SECRET)
