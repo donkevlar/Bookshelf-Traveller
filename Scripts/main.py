@@ -201,6 +201,7 @@ async def show_recent_sessions(ctx: SlashContext):
             duration = session_lines[2].split(': ')[1]
             library_ID = session_lines[3].split(': ')[1]
             play_count = session_lines[4].split(': ')[1]
+            aggregate_time = session_lines[5].split(': ')[1]
 
             cover_link = c.bookshelf_cover_image(library_ID)
             logger.info(f"cover url: {cover_link}")
@@ -208,7 +209,8 @@ async def show_recent_sessions(ctx: SlashContext):
             # Use display title as the name for the field
             embed_message.add_field(name='Title', value=display_title, inline=False)
             embed_message.add_field(name='Author', value=author, inline=False)
-            embed_message.add_field(name='Duration', value=duration, inline=False)
+            embed_message.add_field(name='Book Length', value=duration, inline=False)
+            embed_message.add_field(name='Aggregate Session Time', value=aggregate_time, inline=False)
             embed_message.add_field(name='Number of Times a Session was Played', value=f'Play Count: {play_count}',
                                     inline=False)
             embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
