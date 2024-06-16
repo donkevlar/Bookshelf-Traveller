@@ -242,6 +242,12 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
 
         cover_title = c.bookshelf_cover_image(book_title)
 
+        chapter_progress = c.bookshelf_get_current_chapter(book_title)
+        if chapter_progress is None:
+            chapterTitle = "Book Finished"
+        else:
+            chapterTitle = chapter_progress['title']
+
         title = formatted_data['title']
         progress = formatted_data['progress']
         finished = formatted_data['finished']
@@ -249,8 +255,8 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
         totalDuration = formatted_data['totalDuration']
         lastUpdated = formatted_data['lastUpdated']
 
-        media_progress = (f"Progress: {progress}\n Time Progressed: {currentTime} Hours\n "
-                          f"Total Duration:{totalDuration} Hours\n")
+        media_progress = (f"Progress: {progress}\nChapter Title: {chapterTitle}\n Time Progressed: {currentTime} Hours\n "
+                          f"Total Duration: {totalDuration} Hours\n")
         media_status = f"Is Finished: {finished}\n " f"Last Updated: {lastUpdated}\n"
 
         # Create Embed Message
@@ -498,5 +504,10 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 
 # Main Loop
 if __name__ == '__main__':
-    bot.load_extension("audio")
+
+    # enables experimental features and modules
+    if settings.EXPERIMENTAL:
+        bot.load_extension("audio")
+
+    # Start Bot
     bot.start(settings.DISCORD_API_SECRET)

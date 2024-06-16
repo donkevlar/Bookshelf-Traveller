@@ -32,6 +32,7 @@ def successMSG(endpoint, status):
     print(f'Successfully Reached {endpoint} with Status {status}')
 
 
+# Keep alive, eventually want this to periodically keep the connection open, not really sure how this will work yet.
 def keepAlive():
     pass
 
@@ -78,6 +79,7 @@ async def bookshelf_periodic_conn_test(time_period: int = 60):
         await asyncio.sleep(time_period)
 
 
+# Authenticate the user with bookshelf server provided
 def bookshelf_auth_test():
     print("\nProviding Auth Token to Server\n")
     try:
@@ -195,6 +197,7 @@ def bookshelf_item_progress(item_id):
         lastUpdate = data['lastUpdate'] / 1000
 
         # Convert lastUpdate Time from unix to standard time
+        # Conversions Below
         lastUpdate = datetime.utcfromtimestamp(lastUpdate)
         converted_lastUpdate = lastUpdate.strftime('%Y-%m-%d %H:%M')
 
@@ -208,8 +211,8 @@ def bookshelf_item_progress(item_id):
             'title': f'{title}',
             'progress': f'{progress}%',
             'finished': f'{isFinished}',
-            'currentTime': f'{round(currentTime)}',
-            'totalDuration': f'{round(duration)}',
+            'currentTime': f'{round(currentTime, 2)}',
+            'totalDuration': f'{round(duration, 2)}',
             'lastUpdated': f'{converted_lastUpdate}'
         }
 
@@ -368,7 +371,7 @@ def bookshelf_all_library_items(library_id):
         return found_titles
 
 
-def bookshelf_monitor(itemID, sleep_counter: int = 1):
+def bookshelf_monitor(itemID: str, sleep_counter: int = 1):
     sleep_counter *= 60
     count = 0
     while keep_active:
@@ -378,7 +381,7 @@ def bookshelf_monitor(itemID, sleep_counter: int = 1):
         time.sleep(sleep_counter)
 
 
-def bookshelf_create_backup():
+def bookshelf_list_backup():
     endpoint = "/backups"
     link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
     backup_IDs = []
@@ -391,6 +394,40 @@ def bookshelf_create_backup():
         print(backup_IDs)
 
 
+def bookshelf_get_current_chapter(itemID: str):
+    # Get the formatted data from item progress
+    formatted_data = bookshelf_item_progress(itemID)
+    # print("\n" + str(formatted_data))
+
+    book_finished = eval(formatted_data['finished'])
+
+    # Convert current location time back into seconds from hours
+    currentTimeSec = float(formatted_data['currentTime'])*3600
+    # print("\nCurrent Time: " + str(currentTimeSec) + "\n")
+
+    try:
+        endpoint = f"/items/{itemID}"
+        r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
+
+        if r.status_code == 200:
+            # Place data in JSON Format
+            data = r.json()
+
+            for chapters in data['media']['chapters']:
+                chapter_start = float(chapters.get('start'))
+                chapter_end = float(chapters.get('end'))
+
+                # Verify if in current chapter
+                if currentTimeSec >= chapter_start and currentTimeSec < chapter_end and book_finished is False:
+                    chapters["currentTime"] = currentTimeSec
+                    print("Chapter Found: " + chapters['title'])
+
+                    return chapters
+
+    except requests.RequestException as e:
+        print("Could not retrieve item", e)
+
+
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    bookshelf_create_backup()
+    bookshelf_get_current_chapter("adc7c114-678c-4873-8ed6-7c4767e7574e")
