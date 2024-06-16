@@ -68,7 +68,7 @@ def bookshelf_test_connection():
         except requests.RequestException as e:
             print("Error occured while testing server connection: ", e, "\n")
 
-        except UnboundLocalError as e:
+        except UnboundLocalError:
             print("No URL PROVIDED!\n")
 
 
@@ -119,8 +119,12 @@ def bookshelf_listening_stats():
         # Use a dictionary to count the number of times each session appears
         session_counts = defaultdict(int)
 
+        # Aggregate time matching
+        aggregated_time = {}
+
         # Process each session and count the number of times each session appears
         for session in sessions:
+
             library_item_id = session["libraryItemId"]
             display_title = session["displayTitle"]
 
@@ -129,6 +133,14 @@ def bookshelf_listening_stats():
 
             # Increment the count for this session
             session_counts[session_key] += 1
+
+            # Extract Listening Time
+            time_listening = session.get('timeListening')
+
+            if library_item_id in aggregated_time:
+                aggregated_time[library_item_id] += time_listening
+            else:
+                aggregated_time[library_item_id] = time_listening
 
         # Sort sessions by play count (highest to lowest)
         sorted_sessions = sorted(session_counts.items(), key=lambda x: x[1], reverse=True)
@@ -153,12 +165,30 @@ def bookshelf_listening_stats():
                 f"Display Author: {display_author}\n"
                 f"Duration: {duration_hours} Hours\n"
                 f"Library Item ID: {library_item_id}\n"
-                f"Number of Times Played: {count}\n"
+                f"Number of Times Played: {count}"
             )
             formatted_sessions.append(session_info)
 
+            # Add Session Time to formatted sessions string
+            if library_item_id in aggregated_time:
+                # Pull session time, seconds
+                session_time = int(aggregated_time.get(library_item_id))
+                # Convert session time to minutes
+                if session_time >= 60 and session_time < 3600:
+                    format_time = f"{round(session_time / 60, 2)} Minutes"
+                # convert session time to hours
+                elif session_time >= 3600:
+                    format_time = f"{round(session_time / 3600, 2)} Hours"
+                # keep in seconds
+                else:
+                    format_time = f"{session_time} Seconds"
+                formatted_time_string = f"Aggregate Session Time: {str(format_time)}\n"
+                formatted_sessions.append(formatted_time_string)
+
         # Join the formatted sessions into a single string with each session separated by a newline
         formatted_sessions_string = "\n".join(formatted_sessions)
+
+        print(formatted_sessions_string)
 
         return formatted_sessions_string, data
     else:
@@ -251,7 +281,6 @@ def bookshelf_title_search(display_title: str, only_audio=True):
                 endpoint = f"/libraries/{library_iD}/search?q={display_title}&limit={limit}"
                 r = requests.get(f'{defaultAPIURL}{endpoint}&token={bookshelfToken}')
                 print(f"\nstatus code: {r.status_code}")
-                count = 0
                 if r.status_code == 200:
                     data = r.json()
 
@@ -431,4 +460,4 @@ def bookshelf_get_current_chapter(itemID: str):
 if __name__ == '__main__':
     print("TESTING COMMENCES")
     test_id = os.environ.get("book_test_id")
-    bookshelf_get_current_chapter(test_id)
+    bookshelf_listening_stats()

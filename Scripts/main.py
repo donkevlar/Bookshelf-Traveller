@@ -506,7 +506,7 @@ if __name__ == '__main__':
 
     # enables experimental features and modules
     if settings.EXPERIMENTAL:
-        bot.load_extension("audio")
+        pass
 
     # Start Bot
     bot.start(settings.DISCORD_API_SECRET)
