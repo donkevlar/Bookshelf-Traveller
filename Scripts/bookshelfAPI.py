@@ -430,4 +430,5 @@ def bookshelf_get_current_chapter(itemID: str):
 
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    bookshelf_get_current_chapter("adc7c114-678c-4873-8ed6-7c4767e7574e")
+    test_id = os.environ.get("book_test_id")
+    bookshelf_get_current_chapter(test_id)

@@ -2,6 +2,7 @@ import traceback
 import requests
 import os
 import settings
+import logging
 from interactions import *
 from interactions.ext.paginators import Paginator
 from interactions.api.events import *
@@ -19,16 +20,13 @@ load_dotenv()
 
 # TO DOs Placed in here
 #
-#
-#
-#
 ##
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
 
 # Logger Config
-logger = settings.logging.getLogger("bot")
+logger = logging.getLogger("bot")
 
 # alert monitor
 monitor_enabled = False
@@ -255,7 +253,8 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
         totalDuration = formatted_data['totalDuration']
         lastUpdated = formatted_data['lastUpdated']
 
-        media_progress = (f"Progress: {progress}\nChapter Title: {chapterTitle}\n Time Progressed: {currentTime} Hours\n "
+        media_progress = (f"Progress: {progress}\nChapter Title: {chapterTitle}\n "
+                          f"Time Progressed: {currentTime} Hours\n "
                           f"Total Duration: {totalDuration} Hours\n")
         media_status = f"Is Finished: {finished}\n " f"Last Updated: {lastUpdated}\n"
 
@@ -337,7 +336,7 @@ async def search_user(ctx: SlashContext, name: str):
     except TypeError as e:
         await ctx.send("Could not find that user, try a different name or make sure that it is spelt correctly.",
                        ephemeral=EPHEMERAL_OUTPUT)
-        logger.info(f' Successfully sent command: search_user')
+        logger.warning(f' Error: {e}')
 
     except Exception as e:
         await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=EPHEMERAL_OUTPUT)
@@ -369,7 +368,7 @@ async def user_search_autocomplete(ctx: AutocompleteContext):
 @slash_option(name="email", description="enter a valid email address", required=False, opt_type=OptionType.STRING)
 async def add_user(ctx: SlashContext, name: str, password: str, user_type="user", email=None):
     try:
-        user_id, c_username = c.bookshelf_create_user(name, password, user_type)
+        user_id, c_username = c.bookshelf_create_user(name, password, user_type, email=email)
         await ctx.send(f"Successfully Created User: {c_username} with ID: {user_id}!")
         logger.info(f' Successfully sent command: add-user')
 
@@ -423,7 +422,7 @@ async def test_server_connection(ctx: SlashContext, opt_url=None):
 @check(ownership_check)
 @slash_option(name="library_name", description="enter a valid library name", required=True,
               opt_type=OptionType.STRING, autocomplete=True)
-async def library_csv_booklist(ctx: SlashContext, library_name: str, audiobooks_only: bool = False):
+async def library_csv_booklist(ctx: SlashContext, library_name: str):
     try:
         await ctx.defer(ephemeral=True)
         # Get Current Working Directory
