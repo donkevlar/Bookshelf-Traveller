@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Version Info
-versionNumber = 'Alpha_0.40'
+versionNumber = 'Alpha_0.50'
 
 # Enables monitor to send alerts to the owner
 MONITOR_ALERTS = os.getenv("MONITOR_ALERTS", False)
