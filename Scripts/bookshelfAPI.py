@@ -495,11 +495,11 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float):
                 serverCurrentTime = float(data['currentTime'])
                 session_itemID = data['libraryItemId']
                 # Create Updated Time
-                updatedTime = round(serverCurrentTime + currentTime, 2)
+                updatedTime = round(serverCurrentTime + currentTime)
                 print(f"Duration: {duration}, Current Time: {serverCurrentTime}, Updated Time: {updatedTime}, Item ID: {session_itemID}") # NOQA
 
                 # Check if session matches the current item playing
-                if itemID == session_itemID:
+                if itemID == session_itemID and updatedTime <= duration:
                     sessionOK = True
 
             if sessionOK:

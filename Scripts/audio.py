@@ -12,7 +12,8 @@ updateFrequency = settings.UPDATES
 
 class AudioPlayBack(Extension):
     def __init__(self, bot):
-        pass
+        self.sessionID = ''
+        self.bookID = ''
 
     @Task.create(IntervalTrigger(seconds=updateFrequency))
     async def session_update(self, book_title: str, session_id: str, current_time=updateFrequency):
@@ -33,6 +34,10 @@ class AudioPlayBack(Extension):
         audio.locked_stream = True
         audio.ffmpeg_before_args = f"-ss {currentTime}"
 
+        # Class VARS
+        self.sessionID = sessionID
+        self.bookID = book_title
+
         # check if bot currently connected to voice
         if not ctx.voice_state:
 
@@ -41,10 +46,11 @@ class AudioPlayBack(Extension):
                 # Connect to voice channel
                 await ctx.author.voice.channel.connect()
 
+                # Start Session Updates
+                self.session_update.start(self.bookID, self.sessionID)
+
                 # Start audio playback
                 await ctx.voice_state.play_no_wait(audio)
-                # Start Session Updates
-                self.session_update.start(book_title, sessionID)
 
             except Exception as e:
                 # Stop Session Update Tasks
@@ -85,12 +91,19 @@ class AudioPlayBack(Extension):
         if ctx.voice_state:
             print("Pausing Audio")
             ctx.voice_state.pause()
+        # Stop Any Tasks Running
+        if self.session_update.running:
+            self.session_update.stop()
 
     @slash_command(name="resume", description="resume audio")
     async def resume_audio(self, ctx):
         if ctx.voice_state:
-            print("Resuming Audio")
-            ctx.voice_state.resume()
+            if self.sessionID != "":
+                print("Resuming Audio")
+                ctx.voice_state.resume()
+
+                # Start session
+                self.session_update.start(self.bookID, self.sessionID)
 
     @play_audio.autocomplete("book_title")
     async def search_media_auto_complete(self, ctx: AutocompleteContext):
