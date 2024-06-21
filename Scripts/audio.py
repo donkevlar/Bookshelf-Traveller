@@ -1,6 +1,6 @@
-import interactions
 from interactions import Extension, slash_command, SlashContext, slash_option, OptionType, AutocompleteContext, Task, \
-    BaseTrigger, IntervalTrigger
+    BaseTrigger, IntervalTrigger, listen
+import interactions.api.events
 from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
 import settings
@@ -19,6 +19,10 @@ class AudioPlayBack(Extension):
     async def session_update(self, book_title: str, session_id: str, current_time=updateFrequency):
         print("Initializing Session Sync")
         c.bookshelf_session_update(itemID=book_title, sessionID=session_id, currentTime=current_time)
+
+    @listen(interactions.events.VoiceStateUpdate)
+    async def voice_state_event(self,  event: interactions.events.VoiceStateUpdate):
+        if event.
 
     @slash_command(name="play", description="Test Play Functionality")
     @slash_option(name="book_title", description="Enter a book title", required=True, opt_type=OptionType.STRING,
@@ -131,3 +135,6 @@ class AudioPlayBack(Extension):
         if ctx.voice_state:
             await ctx.author.voice.channel.disconnect()
             await ctx.author.send("Disconnected from Audio Channel")
+
+            if self.session_update.running:
+                self.session_update.stop()
