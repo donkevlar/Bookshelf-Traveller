@@ -49,7 +49,7 @@ class AudioPlayBack(Extension):
                 # Start Session Updates
                 self.session_update.start(self.bookID, self.sessionID)
 
-                await ctx.send("Playing Music")
+                await ctx.send("Playing Music", ephemeral=True)
 
                 # Start audio playback
                 await ctx.voice_state.play_no_wait(audio)
