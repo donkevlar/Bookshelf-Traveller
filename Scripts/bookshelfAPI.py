@@ -518,6 +518,18 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float):
             print(e)
 
 
+def bookshelf_close_session(sessionID: str):
+    endpoint = f"/session/{sessionID}/close"
+    try:
+        r = requests.post(f'{bookshelfURL}{endpoint}{tokenInsert}')
+        if r.status_code == 200:
+            print(f'Session {sessionID} closed successfully')
+
+    except requests.RequestException as e:
+        print(f"Failed to close session {sessionID}")
+        print(f"{e}")
+
+
 if __name__ == '__main__':
     print("TESTING COMMENCES")
     test_id = os.environ.get("book_test_id")

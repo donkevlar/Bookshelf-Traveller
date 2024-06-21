@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Version Info
-versionNumber = 'Alpha_0.50'
+versionNumber = 'Alpha_Audio_0.65'
 
 # Enables monitor to send alerts to the owner
 MONITOR_ALERTS = os.getenv("MONITOR_ALERTS", False)
@@ -19,6 +19,9 @@ EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
 
 # Enables Experimental Commands
 EXPERIMENTAL = os.getenv('EXPERIMENTAL', False)
+
+# Update Frequency for internal tasks, default 5 seconds
+UPDATES = os.getenv('UPDATES', 5)
 
 # TEST ENV1
 TEST_ENV1 = os.getenv('TEST_ENV1')
