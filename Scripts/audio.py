@@ -20,10 +20,6 @@ class AudioPlayBack(Extension):
         print("Initializing Session Sync")
         c.bookshelf_session_update(itemID=book_title, sessionID=session_id, currentTime=current_time)
 
-    @listen(interactions.events.VoiceStateUpdate)
-    async def voice_state_event(self,  event: interactions.events.VoiceStateUpdate):
-        if event.
-
     @slash_command(name="play", description="Test Play Functionality")
     @slash_option(name="book_title", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
@@ -52,6 +48,8 @@ class AudioPlayBack(Extension):
 
                 # Start Session Updates
                 self.session_update.start(self.bookID, self.sessionID)
+
+                await ctx.send("Playing Music")
 
                 # Start audio playback
                 await ctx.voice_state.play_no_wait(audio)
@@ -91,8 +89,9 @@ class AudioPlayBack(Extension):
             c.bookshelf_close_session(sessionID)
 
     @slash_command(name="pause", description="pause audio")
-    async def pause_audio(self, ctx: interactions):
+    async def pause_audio(self, ctx):
         if ctx.voice_state:
+            ctx.send("Pausing Audio", ephemeral=True)
             print("Pausing Audio")
             ctx.voice_state.pause()
         # Stop Any Tasks Running
@@ -103,6 +102,7 @@ class AudioPlayBack(Extension):
     async def resume_audio(self, ctx):
         if ctx.voice_state:
             if self.sessionID != "":
+                ctx.send("Resuming Audio", ephemeral=True)
                 print("Resuming Audio")
                 ctx.voice_state.resume()
 
@@ -133,8 +133,8 @@ class AudioPlayBack(Extension):
     @slash_command(name="disconnect", description="Will disconnect from the voice channel")
     async def disconnect_voice(self, ctx: SlashContext):
         if ctx.voice_state:
+            await ctx.send(content="Disconnected from Audio Channel", ephemeral=True)
             await ctx.author.voice.channel.disconnect()
-            await ctx.author.send("Disconnected from Audio Channel")
 
             if self.session_update.running:
                 self.session_update.stop()
