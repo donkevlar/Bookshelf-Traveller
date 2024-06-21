@@ -81,7 +81,7 @@ class AudioPlayBack(Extension):
                 print(e)
 
         # Check if bot is playing something
-        if not ctx.voice_state.playing() and ctx.voice_state:
+        if not ctx.voice_state:
             # Stop any running tasks
             if self.session_update.running:
                 self.session_update.stop()
@@ -91,7 +91,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="pause", description="pause audio")
     async def pause_audio(self, ctx):
         if ctx.voice_state:
-            ctx.send("Pausing Audio", ephemeral=True)
+            await ctx.send("Pausing Audio", ephemeral=True)
             print("Pausing Audio")
             ctx.voice_state.pause()
         # Stop Any Tasks Running
@@ -102,7 +102,7 @@ class AudioPlayBack(Extension):
     async def resume_audio(self, ctx):
         if ctx.voice_state:
             if self.sessionID != "":
-                ctx.send("Resuming Audio", ephemeral=True)
+                await ctx.send("Resuming Audio", ephemeral=True)
                 print("Resuming Audio")
                 ctx.voice_state.resume()
 
@@ -138,3 +138,4 @@ class AudioPlayBack(Extension):
 
             if self.session_update.running:
                 self.session_update.stop()
+                c.bookshelf_close_session(self.sessionID)
