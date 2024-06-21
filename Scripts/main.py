@@ -2,6 +2,7 @@ import traceback
 import requests
 import os
 import settings
+import audio
 import logging
 from interactions import *
 from interactions.ext.paginators import Paginator
@@ -15,6 +16,10 @@ import bookshelfAPI as c
 
 # Pulls from bookshelf file, if DOCKER == True, then this won't load local env file
 load_dotenv()
+
+# Experimental Imports
+# enables experimental features and modules
+
 
 # Global Vars
 
@@ -505,10 +510,7 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 
 # Main Loop
 if __name__ == '__main__':
-
-    # enables experimental features and modules
-    if settings.EXPERIMENTAL:
-        pass
-
+    # Load Audio Extension
+    bot.load_extension("audio")
     # Start Bot
     bot.start(settings.DISCORD_API_SECRET)

@@ -188,7 +188,7 @@ def bookshelf_listening_stats():
         # Join the formatted sessions into a single string with each session separated by a newline
         formatted_sessions_string = "\n".join(formatted_sessions)
 
-        print(formatted_sessions_string)
+        # print(formatted_sessions_string)
 
         return formatted_sessions_string, data
     else:
@@ -218,7 +218,7 @@ def bookshelf_item_progress(item_id):
     r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
     if r.status_code == 200:
         data = r.json()
-        successMSG(endpoint, r.status_code)
+        # successMSG(endpoint, r.status_code)
 
         progress = round(data['progress'] * 100)
         isFinished = data['isFinished']
@@ -400,16 +400,6 @@ def bookshelf_all_library_items(library_id):
         return found_titles
 
 
-def bookshelf_monitor(itemID: str, sleep_counter: int = 1):
-    sleep_counter *= 60
-    count = 0
-    while keep_active:
-        count += 1
-        print(f"Loop Count: {count}")
-        bookshelf_item_progress(itemID)
-        time.sleep(sleep_counter)
-
-
 def bookshelf_list_backup():
     endpoint = "/backups"
     link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
@@ -431,7 +421,7 @@ def bookshelf_get_current_chapter(itemID: str):
     book_finished = eval(formatted_data['finished'])
 
     # Convert current location time back into seconds from hours
-    currentTimeSec = float(formatted_data['currentTime'])*3600
+    currentTimeSec = float(formatted_data['currentTime']) * 3600
     # print("\nCurrent Time: " + str(currentTimeSec) + "\n")
 
     try:
@@ -457,7 +447,79 @@ def bookshelf_get_current_chapter(itemID: str):
         print("Could not retrieve item", e)
 
 
+def bookshelf_audio_obj(itemID: str):
+    endpoint = f"/items/{itemID}/play"
+    audio_link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
+
+    # Send request to play
+    audio_obj = requests.post(audio_link)
+
+    data = audio_obj.json()
+
+    # Library Vars
+    ino = ""
+    audiofiles = data['libraryItem']['media']['audioFiles']
+    mediaType = data['libraryItem']['mediaType']
+    currentTime = data['currentTime']
+    session_id = data['id']
+
+    for file in audiofiles:
+        ino = file['ino']
+
+    print("Media Type: ", mediaType)
+    print("Current Time: ", currentTime, "Seconds")
+
+    onlineURL = f"{defaultAPIURL}/items/{itemID}/file/{ino}{tokenInsert}"
+    print("attempting to play: ", onlineURL)
+
+    return onlineURL, currentTime, session_id
+
+
+def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float):
+    get_session_endpoint = f"/session/{sessionID}"
+    sync_endpoint = f"/session/{sessionID}/sync"
+
+    if currentTime > 1:
+
+        try:
+
+            sessionOK = False
+
+            # Check if session is open
+            r_session_info = requests.get(f"{defaultAPIURL}{get_session_endpoint}{tokenInsert}")
+            if r_session_info.status_code == 200:
+                # Format to JSON
+                data = r_session_info.json()
+                # Pull Session Info
+                duration = float(data['duration'])
+                serverCurrentTime = float(data['currentTime'])
+                session_itemID = data['libraryItemId']
+                # Create Updated Time
+                updatedTime = round(serverCurrentTime + currentTime, 2)
+                print(f"Duration: {duration}, Current Time: {serverCurrentTime}, Updated Time: {updatedTime}, Item ID: {session_itemID}") # NOQA
+
+                # Check if session matches the current item playing
+                if itemID == session_itemID:
+                    sessionOK = True
+
+            if sessionOK:
+                session_update = {
+                    'currentTime': float(updatedTime),  # NOQA
+                    'timeListened': float(currentTime),
+                    'duration': float(duration)  # NOQA
+                }
+                r_session_update = requests.post(f"{defaultAPIURL}{sync_endpoint}{tokenInsert}", data=session_update)
+                if r_session_update.status_code == 200:
+                    print(f"Successfully synced session to updated time: {updatedTime}")
+            else:
+                print(f"Session sync failed, sync status: {sessionOK}")
+
+        except requests.RequestException as e:
+            print(e)
+
+
 if __name__ == '__main__':
     print("TESTING COMMENCES")
     test_id = os.environ.get("book_test_id")
-    bookshelf_listening_stats()
+
+    bookshelf_session_update("c5878fb3-781d-4a6b-9867-72c93151d096", "43efeb79-3bd4-4aed-882c-6952b36fa6a7", 10)
