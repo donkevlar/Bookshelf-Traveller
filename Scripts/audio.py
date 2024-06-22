@@ -23,12 +23,12 @@ class AudioPlayBack(Extension):
         c.bookshelf_session_update(itemID=book_title, sessionID=session_id, currentTime=current_time)
 
     @slash_command(name="play", description="Play audio from ABS server")
-    @slash_option(name="book_title", description="Enter a book title", required=True, opt_type=OptionType.STRING,
+    @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
-    async def play_audio(self, ctx, bookID: str):
+    async def play_audio(self, ctx, book: str):
 
         # Get Bookshelf Playback URI, Starts new session
-        audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(bookID)
+        audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(book)
 
         # Audio Object Arguments
         audio = AudioVolume(audio_obj)
@@ -38,7 +38,7 @@ class AudioPlayBack(Extension):
 
         # Class VARS
         self.sessionID = sessionID
-        self.bookItemID = bookID
+        self.bookItemID = book
         self.bookTitle = bookTitle
         self.audioObj = audio
 
@@ -53,7 +53,7 @@ class AudioPlayBack(Extension):
                 # Start Session Updates
                 self.session_update.start(self.bookItemID, self.sessionID)
 
-                await ctx.send(f"Playing Audio", ephemeral=True)
+                await ctx.send(f"Playing {self.bookTitle}", ephemeral=True)
 
                 # Start audio playback
                 await ctx.voice_state.play_no_wait(audio)
