@@ -117,7 +117,7 @@ class AudioPlayBack(Extension):
             else:
                 await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
 
-    @play_audio.autocomplete("book_title")
+    @play_audio.autocomplete("book")
     async def search_media_auto_complete(self, ctx: AutocompleteContext):
         user_input = ctx.input_text
         choices = []
