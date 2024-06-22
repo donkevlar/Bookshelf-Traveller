@@ -141,7 +141,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="disconnect", description="Will disconnect from the voice channel")
     async def disconnect_voice(self, ctx: SlashContext):
         if ctx.voice_state:
-            await ctx.send(content="Disconnected from audio Channel and stopping playback.", ephemeral=True)
+            await ctx.send(content="Disconnected from audio channel and stopping playback.", ephemeral=True)
             await ctx.author.voice.channel.disconnect()
 
             if self.session_update.running:
