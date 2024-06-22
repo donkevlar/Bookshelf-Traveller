@@ -1,7 +1,6 @@
 import os
 import time
 from collections import defaultdict
-import asyncio
 from datetime import datetime
 import traceback
 import csv
@@ -30,11 +29,6 @@ tokenInsert = "?token=" + bookshelfToken
 # Simple Success Message
 def successMSG(endpoint, status):
     print(f'Successfully Reached {endpoint} with Status {status}')
-
-
-# Keep alive, eventually want this to periodically keep the connection open, not really sure how this will work yet.
-def keepAlive():
-    pass
 
 
 # Test initial Connection to Bookshelf Server
@@ -70,13 +64,6 @@ def bookshelf_test_connection():
 
         except UnboundLocalError:
             print("No URL PROVIDED!\n")
-
-
-async def bookshelf_periodic_conn_test(time_period: int = 60):
-    while True:
-        print("Initializing Connection Test!")
-        bookshelf_test_connection()
-        await asyncio.sleep(time_period)
 
 
 # Authenticate the user with bookshelf server provided
@@ -533,5 +520,3 @@ def bookshelf_close_session(sessionID: str):
 if __name__ == '__main__':
     print("TESTING COMMENCES")
     test_id = os.environ.get("book_test_id")
-
-    bookshelf_session_update("c5878fb3-781d-4a6b-9867-72c93151d096", "43efeb79-3bd4-4aed-882c-6952b36fa6a7", 10)

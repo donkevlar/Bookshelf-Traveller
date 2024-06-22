@@ -1,5 +1,5 @@
 from interactions import Extension, slash_command, SlashContext, slash_option, OptionType, AutocompleteContext, Task, \
-    BaseTrigger, IntervalTrigger, listen
+    IntervalTrigger
 import interactions.api.events
 from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
