@@ -466,14 +466,17 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float):
     get_session_endpoint = f"/session/{sessionID}"
     sync_endpoint = f"/session/{sessionID}/sync"
 
+    # Session Checks
+    sessionOK = False
+    finished_book = False
+
     if currentTime > 1:
 
         try:
 
-            sessionOK = False
-
             # Check if session is open
             r_session_info = requests.get(f"{defaultAPIURL}{get_session_endpoint}{tokenInsert}")
+
             if r_session_info.status_code == 200:
                 # Format to JSON
                 data = r_session_info.json()
@@ -489,6 +492,12 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float):
                 if itemID == session_itemID and updatedTime <= duration:
                     sessionOK = True
 
+                # If Updated Time is greater, make updated time duration. (Finish book)
+                elif updatedTime > duration:
+                    sessionOK = True
+                    updatedTime = duration
+                    finished_book = True
+
             if sessionOK:
                 session_update = {
                     'currentTime': float(updatedTime),  # NOQA
@@ -503,6 +512,9 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float):
 
         except requests.RequestException as e:
             print(e)
+
+        finally:
+            return sessionOK, finished_book
 
 
 def bookshelf_close_session(sessionID: str):
