@@ -20,7 +20,7 @@ class AudioPlayBack(Extension):
         print("Initializing Session Sync")
         c.bookshelf_session_update(itemID=book_title, sessionID=session_id, currentTime=current_time)
 
-    @slash_command(name="play", description="Test Play Functionality")
+    @slash_command(name="play", description="Play audio from ABS server")
     @slash_option(name="book_title", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
     async def play_audio(self, ctx, book_title: str):
