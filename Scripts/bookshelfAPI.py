@@ -418,17 +418,24 @@ def bookshelf_get_current_chapter(itemID: str):
         if r.status_code == 200:
             # Place data in JSON Format
             data = r.json()
+            chapter_array = []
+            foundChapter = {}
 
             for chapters in data['media']['chapters']:
-                chapter_start = float(chapters.get('start'))
-                chapter_end = float(chapters.get('end'))
+                chapter_array.append(chapters)
+
+            for chapter in chapter_array:
+                chapter_start = float(chapter.get('start'))
+                chapter_end = float(chapter.get('end'))
 
                 # Verify if in current chapter
-                if currentTimeSec >= chapter_start and currentTimeSec < chapter_end and book_finished is False:
-                    chapters["currentTime"] = currentTimeSec
-                    print("Chapter Found: " + chapters['title'])
+                if currentTimeSec >= chapter_start and currentTimeSec < chapter_end:
+                    chapter["currentTime"] = currentTimeSec
+                    foundChapter = chapter
+                    print("\nChapter Found: " + chapter['title'] + "\n")
 
-                    return chapters
+            if chapter_array and foundChapter is not None:
+                return foundChapter, chapter_array, book_finished
 
     except requests.RequestException as e:
         print("Could not retrieve item", e)
@@ -486,7 +493,7 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float):
                 serverCurrentTime = float(data['currentTime'])
                 session_itemID = data['libraryItemId']
                 # Create Updated Time
-                updatedTime = round(serverCurrentTime + currentTime)
+                updatedTime = round(serverCurrentTime + currentTime, 1)
                 print(f"Duration: {duration}, Current Time: {serverCurrentTime}, Updated Time: {updatedTime}, Item ID: {session_itemID}") # NOQA
 
                 # Check if session matches the current item playing
@@ -508,6 +515,7 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float):
                 r_session_update = requests.post(f"{defaultAPIURL}{sync_endpoint}{tokenInsert}", data=session_update)
                 if r_session_update.status_code == 200:
                     print(f"Successfully synced session to updated time: {updatedTime}")
+                    return updatedTime
             else:
                 print(f"Session sync failed, sync status: {sessionOK}")
 
@@ -532,4 +540,10 @@ def bookshelf_close_session(sessionID: str):
 
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    test_id = os.environ.get("book_test_id")
+    test_id = os.environ.get("book_id_test")
+    if test_id is not None:
+        current_chapter, chapter_array, bookFinished = bookshelf_get_current_chapter('43efeb79-3bd4-4aed-882c-6952b36fa6a7')
+
+        print(current_chapter, chapter_array, bookFinished)
+    else:
+        print("Test ID is None")
