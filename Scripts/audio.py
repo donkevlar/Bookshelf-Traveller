@@ -1,6 +1,5 @@
 from interactions import Extension, slash_command, SlashContext, slash_option, OptionType, AutocompleteContext, Task, \
     IntervalTrigger
-import interactions.api.events
 from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
 import settings
@@ -16,6 +15,7 @@ class AudioPlayBack(Extension):
         self.bookItemID = ''
         self.bookTitle = ''
         self.audioObj = None
+        self.placeholder = None
 
     @Task.create(IntervalTrigger(seconds=updateFrequency))
     async def session_update(self, book_title: str, session_id: str, current_time=updateFrequency):
