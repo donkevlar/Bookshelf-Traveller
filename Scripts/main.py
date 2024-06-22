@@ -292,7 +292,21 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
     user_input = ctx.input_text
     choices = []
     print(user_input)
-    if user_input != "":
+    if user_input == "":
+        try:
+            formatted_sessions_string, data = c.bookshelf_listening_stats()
+
+            for sessions in data['recentSessions']:
+                title = sessions.get('displayTitle')
+                choices.append(title)
+
+            sorted_choices = list(set(sorted(choices)))
+            await ctx.send(choices=sorted_choices)
+        except Exception as e: # NOQA
+            await ctx.send(choices=choices)
+            print(e)
+
+    else:
         try:
             titles_ = c.bookshelf_title_search(user_input)
             for info in titles_:
@@ -306,8 +320,6 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
             await ctx.send(choices=choices)
             logger.error(e)
             traceback.print_exc()
-    else:
-        await ctx.send(choices=choices)
 
 
 # Searches for a specific user, uses autocomplete to retrieve the inputed name

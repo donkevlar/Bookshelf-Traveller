@@ -176,6 +176,7 @@ class AudioPlayBack(Extension):
                         self.sessionID = sessionID
                         self.currentTime = currentTime
                         audio = AudioVolume(audio_obj)
+
                         audio.ffmpeg_before_args = f"-ss {chapterStart}"
 
                         await ctx.send(content=f"Skipping to Chapter: {newChapterTitle}", ephemeral=True)
@@ -214,7 +215,22 @@ class AudioPlayBack(Extension):
         user_input = ctx.input_text
         choices = []
         print(user_input)
-        if user_input != "":
+        if user_input == "":
+            try:
+                formatted_sessions_string, data = c.bookshelf_listening_stats()
+
+                for sessions in data['recentSessions']:
+                    title = sessions.get('displayTitle')
+                    choices.append(title)
+
+                sorted_choices = list(set(sorted(choices)))
+                await ctx.send(choices=sorted_choices)
+
+            except Exception as e:
+                await ctx.send(choices=choices)
+                print(e)
+
+        else:
             try:
                 titles_ = c.bookshelf_title_search(user_input)
                 for info in titles_:
@@ -226,7 +242,5 @@ class AudioPlayBack(Extension):
 
             except Exception as e:  # NOQA
                 await ctx.send(choices=choices)
-
-        else:
-            await ctx.send(choices=choices)
+                print(e)
 
