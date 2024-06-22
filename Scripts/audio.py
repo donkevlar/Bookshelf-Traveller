@@ -139,3 +139,5 @@ class AudioPlayBack(Extension):
             if self.session_update.running:
                 self.session_update.stop()
                 c.bookshelf_close_session(self.sessionID)
+        else:
+            await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
