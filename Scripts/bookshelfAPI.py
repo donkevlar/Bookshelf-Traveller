@@ -449,6 +449,7 @@ def bookshelf_audio_obj(itemID: str):
     mediaType = data['libraryItem']['mediaType']
     currentTime = data['currentTime']
     session_id = data['id']
+    bookTitle = data['mediaMetadata']['title']
 
     for file in audiofiles:
         ino = file['ino']
@@ -459,7 +460,7 @@ def bookshelf_audio_obj(itemID: str):
     onlineURL = f"{defaultAPIURL}/items/{itemID}/file/{ino}{tokenInsert}"
     print("attempting to play: ", onlineURL)
 
-    return onlineURL, currentTime, session_id
+    return onlineURL, currentTime, session_id, bookTitle
 
 
 def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float):

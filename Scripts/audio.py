@@ -13,7 +13,9 @@ updateFrequency = settings.UPDATES
 class AudioPlayBack(Extension):
     def __init__(self, bot):
         self.sessionID = ''
-        self.bookID = ''
+        self.bookItemID = ''
+        self.bookTitle = ''
+        self.audioObj = None
 
     @Task.create(IntervalTrigger(seconds=updateFrequency))
     async def session_update(self, book_title: str, session_id: str, current_time=updateFrequency):
@@ -23,10 +25,10 @@ class AudioPlayBack(Extension):
     @slash_command(name="play", description="Play audio from ABS server")
     @slash_option(name="book_title", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
-    async def play_audio(self, ctx, book_title: str):
+    async def play_audio(self, ctx, bookID: str):
 
         # Get Bookshelf Playback URI, Starts new session
-        audio_obj, currentTime, sessionID = c.bookshelf_audio_obj(book_title)
+        audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(bookID)
 
         # Audio Object Arguments
         audio = AudioVolume(audio_obj)
@@ -36,7 +38,9 @@ class AudioPlayBack(Extension):
 
         # Class VARS
         self.sessionID = sessionID
-        self.bookID = book_title
+        self.bookItemID = bookID
+        self.bookTitle = bookTitle
+        self.audioObj = audio
 
         # check if bot currently connected to voice
         if not ctx.voice_state:
@@ -47,7 +51,7 @@ class AudioPlayBack(Extension):
                 await ctx.author.voice.channel.connect()
 
                 # Start Session Updates
-                self.session_update.start(self.bookID, self.sessionID)
+                self.session_update.start(self.bookItemID, self.sessionID)
 
                 await ctx.send(f"Playing Audio", ephemeral=True)
 
@@ -66,7 +70,7 @@ class AudioPlayBack(Extension):
 
                 print(e)
 
-        # Play Audio, skip connection
+        # Play Audio, skip channel connection
         else:
             try:
                 print("\nVoice already connected, playing new audio selection.")
@@ -94,9 +98,11 @@ class AudioPlayBack(Extension):
             await ctx.send("Pausing Audio", ephemeral=True)
             print("Pausing Audio")
             ctx.voice_state.pause()
-        # Stop Any Tasks Running
-        if self.session_update.running:
-            self.session_update.stop()
+            # Stop Any Tasks Running
+            if self.session_update.running:
+                self.session_update.stop()
+        else:
+            await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
 
     @slash_command(name="resume", description="resume audio")
     async def resume_audio(self, ctx):
@@ -107,7 +113,9 @@ class AudioPlayBack(Extension):
                 ctx.voice_state.resume()
 
                 # Start session
-                self.session_update.start(self.bookID, self.sessionID)
+                self.session_update.start(self.bookItemID, self.sessionID)
+            else:
+                await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
 
     @play_audio.autocomplete("book_title")
     async def search_media_auto_complete(self, ctx: AutocompleteContext):
@@ -133,7 +141,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="disconnect", description="Will disconnect from the voice channel")
     async def disconnect_voice(self, ctx: SlashContext):
         if ctx.voice_state:
-            await ctx.send(content="Disconnected from Audio Channel and stopping playback.", ephemeral=True)
+            await ctx.send(content="Disconnected from audio Channel and stopping playback.", ephemeral=True)
             await ctx.author.voice.channel.disconnect()
 
             if self.session_update.running:
