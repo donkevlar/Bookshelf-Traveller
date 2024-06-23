@@ -35,9 +35,9 @@ class AudioPlayBack(Extension):
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
         logger.info(f"Initializing Session Sync, current playback Set to: {self.playbackSpeed}, "
-                    f"Session Timer: {self.updateFreqMulti * self.playbackSpeed}")
+                    f"Session Timer: {self.playbackSpeed}")
         c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID,
-                                   currentTime=self.updateFreqMulti * self.playbackSpeed, nextTime=self.nextTime) # NOQA
+                                   currentTime=self.playbackSpeed, nextTime=self.nextTime) # NOQA
         current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(self.bookItemID)
         logger.info("Current Chapter Sync: " + current_chapter['title'])
         self.currentChapter = current_chapter
@@ -45,8 +45,6 @@ class AudioPlayBack(Extension):
     @slash_command(name="play", description="Play audio from ABS server")
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
-    @slash_option(name="speed", description="Option from slow, normal, fast and faster.", required=False,
-                  opt_type=OptionType.STRING)
     async def play_audio(self, ctx, book: str, speed=1.0):
         logger.info(f"executing command /play")
 
@@ -67,7 +65,7 @@ class AudioPlayBack(Extension):
         self.playbackSpeed = speed
         self.volume = audio.volume
         audio.ffmpeg_before_args = f"-ss {currentTime}"
-        audio.ffmpeg_args = f"-filter:a atempo={self.playbackSpeed}"
+        audio.ffmpeg_args = f"-filter:a 'atempo={str(self.playbackSpeed)}'"
 
         # Class VARS
 
@@ -293,12 +291,6 @@ class AudioPlayBack(Extension):
             except Exception as e:  # NOQA
                 await ctx.send(choices=choices)
                 print(e)
-
-    @play_audio.autocomplete("speed")
-    async def playback_speed(self, ctx: AutocompleteContext):
-        choices = [{"name": "slow", "value": "0.75"}, {"name": "normal", "value": "1.0"},
-                   {"name": "fast", "value": "1.1"}, {"name": "faster", "value": "1.4"}]
-        await ctx.send(choices=choices)
 
     @change_chapter.autocomplete("option")
     async def chapter_option_autocomplete(self, ctx: AutocompleteContext):
