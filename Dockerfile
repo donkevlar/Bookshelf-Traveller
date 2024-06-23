@@ -1,5 +1,5 @@
 # official Python runtime as a base image
-FROM ubuntu/python:latest
+FROM ubuntu/python:3.12-24.04_edge
 
 # Set the working directory
 WORKDIR /ABSBOT
