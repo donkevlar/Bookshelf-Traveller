@@ -217,7 +217,7 @@ class AudioPlayBack(Extension):
 
     @slash_command(name="volume", description="change the volume for the bot")
     @slash_option(name="volume", description="Must be between 1 and 100", required=False, opt_type=OptionType.INTEGER)
-    async def volume_adjuster(self, ctx, volume: int):
+    async def volume_adjuster(self, ctx, volume=None):
         audio = self.audioObj
         if volume >= 1 < 100:
             audio.volume = float(volume)
@@ -228,7 +228,7 @@ class AudioPlayBack(Extension):
             await ctx.send(content=f"Volume currently set to: {self.volume}", ephemaral=s.EPHEMERAL_OUTPUT)
 
         else:
-            await  ctx.send(content=f"Invalid Entry", ephemeral=s.EPHEMERAL_OUTPUT)
+            await ctx.send(content=f"Invalid Entry", ephemeral=s.EPHEMERAL_OUTPUT)
 
     @slash_command(name="stop", description="Will disconnect from the voice channel and stop audio.")
     async def stop_audio(self, ctx: SlashContext):
