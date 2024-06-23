@@ -438,7 +438,6 @@ def bookshelf_get_current_chapter(itemID: str):
                 if currentTimeSec >= chapter_start and currentTimeSec < chapter_end:
                     chapter["currentTime"] = currentTimeSec
                     foundChapter = chapter
-                    logger.info("Chapter Found: " + chapter['title'])
 
             if chapter_array and foundChapter is not None:
                 return foundChapter, chapter_array, book_finished
