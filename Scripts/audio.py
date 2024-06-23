@@ -35,7 +35,7 @@ class AudioPlayBack(Extension):
         logger.info("Initializing Session Sync")
         c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID, currentTime=updateFrequency-0.5, nextTime=self.nextTime) # NOQA
         current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(self.bookItemID)
-        logger.info("Current Chapter Sync: " + current_chapter['title'] + "\n")
+        logger.info("Current Chapter Sync: " + current_chapter['title'])
         self.currentChapter = current_chapter
 
     @slash_command(name="play", description="Play audio from ABS server")
@@ -216,10 +216,10 @@ class AudioPlayBack(Extension):
             await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=s.EPHEMERAL_OUTPUT)
 
     @slash_command(name="volume", description="change the volume for the bot")
-    @slash_option(name="volume", description="Must be between 0 and 100", required=False, opt_type=OptionType.INTEGER)
+    @slash_option(name="volume", description="Must be between 1 and 100", required=False, opt_type=OptionType.INTEGER)
     async def volume_adjuster(self, ctx, volume: int):
         audio = self.audioObj
-        if volume >= 0 < 100:
+        if volume >= 1 < 100:
             audio.volume = float(volume)
             self.volume = audio.volume
             await ctx.send(content=f"Set volume to: {volume}", ephemaral=s.EPHEMERAL_OUTPUT)

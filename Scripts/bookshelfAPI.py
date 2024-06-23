@@ -4,10 +4,13 @@ from collections import defaultdict
 from datetime import datetime
 import traceback
 import csv
-
+import logging
 from dotenv import load_dotenv
 
 import requests
+
+# Logger Config
+logger = logging.getLogger("bot")
 
 # DEV ENVIRON VARS
 load_dotenv()
@@ -505,7 +508,7 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, ne
                     except TypeError:
                         updatedTime = round(serverCurrentTime + currentTime, 1)
                         print("Error, nextTime was not valid")
-                print(f"Duration: {duration}, Current Time: {serverCurrentTime}, Updated Time: {updatedTime}, Item ID: {session_itemID}") # NOQA
+                logger.info(f"Duration: {duration}, Current Time: {serverCurrentTime}, Updated Time: {updatedTime}, Item ID: {session_itemID}") # NOQA
 
                 # Check if session matches the current item playing
                 if itemID == session_itemID and updatedTime <= duration:
