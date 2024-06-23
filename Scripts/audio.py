@@ -26,7 +26,7 @@ class AudioPlayBack(Extension):
         self.bookFinished = False
         self.nextTime = None
         # Audio VARS
-        self.audioObj = AudioVolume(src='')
+        self.audioObj = AudioVolume
         self.placeholder = None
 
     @Task.create(IntervalTrigger(seconds=updateFrequency))
