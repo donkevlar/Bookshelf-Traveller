@@ -58,6 +58,7 @@ class AudioPlayBack(Extension):
         audio.buffer_seconds = 10
         audio.locked_stream = True
         audio.ffmpeg_before_args = f"-ss {currentTime}"
+        self.volume = audio.volume
 
         # Class VARS
 
