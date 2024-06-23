@@ -85,7 +85,7 @@ class AudioPlayBack(Extension):
                 # Start Session Updates
                 self.session_update.start()
 
-                await ctx.send(f"Playing: {self.bookTitle}", ephemeral=s.EPHEMERAL_OUTPUT)
+                await ctx.send(f"Playing: {self.bookTitle}", ephemeral=True)
                 logger.info(f"Beginning audio stream")
 
                 # Start audio playback
@@ -130,7 +130,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="pause", description="pause audio")
     async def pause_audio(self, ctx):
         if ctx.voice_state:
-            await ctx.send("Pausing Audio", ephemeral=s.EPHEMERAL_OUTPUT)
+            await ctx.send("Pausing Audio", ephemeral=True)
             logger.info(f"executing command /pause")
             print("Pausing Audio")
             ctx.voice_state.pause()
@@ -144,7 +144,7 @@ class AudioPlayBack(Extension):
     async def resume_audio(self, ctx):
         if ctx.voice_state:
             if self.sessionID != "":
-                await ctx.send("Resuming Audio", ephemeral=s.EPHEMERAL_OUTPUT)
+                await ctx.send("Resuming Audio", ephemeral=True)
                 logger.info(f"executing command /resume")
                 print("Resuming Audio")
                 ctx.voice_state.resume()
@@ -202,7 +202,7 @@ class AudioPlayBack(Extension):
                         self.nextTime = None
                         self.session_update.start()
                         await ctx.send(content=f"Moving to chapter: {newChapterTitle}",
-                                       ephemeral=s.EPHEMERAL_OUTPUT)
+                                       ephemeral=True)
 
                         found_next_chapter = True
 
@@ -213,19 +213,19 @@ class AudioPlayBack(Extension):
                     await ctx.send(content=f"Book Finished or No New Chapter Found, aborting",
                                    ephemeral=s.EPHEMERAL_OUTPUT)
         else:
-            await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=s.EPHEMERAL_OUTPUT)
+            await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
 
     @slash_command(name="volume", description="change the volume for the bot")
     @slash_option(name="volume", description="Must be between 1 and 100", required=False, opt_type=OptionType.INTEGER)
     async def volume_adjuster(self, ctx, volume=0):
         audio = self.audioObj
         if volume is 0:
-            await ctx.send(content=f"Volume currently set to: {self.volume}", ephemaral=s.EPHEMERAL_OUTPUT)
+            await ctx.send(content=f"Volume currently set to: {self.volume}", ephemaral=True)
         elif volume >= 1 < 100:
             volume_float = float(volume / 100)
             audio.volume = volume_float
             self.volume = audio.volume
-            await ctx.send(content=f"Set volume to: {volume}%", ephemaral=s.EPHEMERAL_OUTPUT)
+            await ctx.send(content=f"Set volume to: {volume}%", ephemaral=True)
 
         else:
             await ctx.send(content=f"Invalid Entry", ephemeral=s.EPHEMERAL_OUTPUT)
