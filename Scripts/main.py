@@ -1,3 +1,4 @@
+import sys
 import traceback
 import requests
 import os
@@ -22,9 +23,6 @@ load_dotenv()
 
 # Global Vars
 
-# TO DOs Placed in here
-#
-##
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
@@ -55,7 +53,7 @@ if server_status_code != 200:
     logger.warning("\nIssue with connecting to Audiobookshelf server!")
     logger.warning("\nQuitting!")
     time.sleep(0.5)
-    exit()
+    sys.exit(1)
 
 elif server_status_code is None:
     pass
