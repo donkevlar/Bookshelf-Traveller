@@ -221,7 +221,7 @@ class AudioPlayBack(Extension):
     async def volume_adjuster(self, ctx, volume=0):
         audio = self.audioObj
         if volume is 0:
-            await ctx.send(content=f"Volume currently set to: {self.volume}", ephemaral=True)
+            await ctx.send(content=f"Volume currently set to: {self.volume*100}%", ephemaral=True)
         elif volume >= 1 < 100:
             volume_float = float(volume / 100)
             audio.volume = volume_float
