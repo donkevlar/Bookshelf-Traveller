@@ -64,7 +64,15 @@ else:
     logger.info(f'Current Server Status = {server_status_code}, Good to go!')
 
 # Will print username when successful
-auth_test = c.bookshelf_auth_test()
+auth_test, user_type = c.bookshelf_auth_test()
+
+# CHeck if ABS user is an admin
+ADMIN = False
+if user_type == "root" or "admin":
+    ADMIN = True
+    logger.info(f"ABS user logged in as ADMIN with type: {user_type}")
+else:
+    logger.info(f"ABS user logged in as NON-ADMIN with type: {user_type}")
 
 # Bot basic setup
 bot = Client(intents=Intents.DEFAULT, logger=logger)
@@ -527,5 +535,8 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 if __name__ == '__main__':
     # Load Audio Extension
     bot.load_extension("audio")
+    # Load Admin related extensions
+    if ADMIN:
+        pass
     # Start Bot
     bot.start(settings.DISCORD_API_SECRET)

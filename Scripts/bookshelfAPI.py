@@ -80,18 +80,19 @@ def bookshelf_auth_test():
             data = r.json()
 
             username = data.get("username", "")
+            user_type = data.get('type')
 
-            print(f'Successfully Authenticated as user {username}')
-            time.sleep(1)
-            return username
+            print(f'Successfully Authenticated as user {username}, type: {user_type}')
+            time.sleep(0.5)
+            return username, user_type
         else:
             print("Error: Could not connect to /me endpoint \n")
             print("Quitting!")
-            time.sleep(1)
+            time.sleep(0.5)
             exit()
 
     except requests.RequestException as e:
-        print("Could not establish connection using token: ", e)
+        print("Could not establish connection: ", e)
 
     finally:
         print("Cleaning up, authentication\n")
@@ -507,6 +508,7 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, ne
                     except TypeError:
                         updatedTime = serverCurrentTime + currentTime
                         print("Error, nextTime was not valid")
+                
                 logger.info(f"Duration: {duration}, Current Time: {serverCurrentTime}, Updated Time: {updatedTime}, Item ID: {session_itemID}") # NOQA
 
                 # Check if session matches the current item playing
