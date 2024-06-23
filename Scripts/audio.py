@@ -31,7 +31,6 @@ class AudioPlayBack(Extension):
         self.placeholder = None
         self.playbackSpeed = 1.0
 
-
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
         logger.info("Initializing Session Sync")
@@ -229,7 +228,7 @@ class AudioPlayBack(Extension):
     @slash_option(name="volume", description="Must be between 1 and 100", required=False, opt_type=OptionType.INTEGER)
     async def volume_adjuster(self, ctx, volume=0):
         audio = self.audioObj
-        if volume is 0:
+        if volume == 0:
             await ctx.send(content=f"Volume currently set to: {self.volume*100}%", ephemaral=True)
         elif volume >= 1 < 100:
             volume_float = float(volume / 100)
