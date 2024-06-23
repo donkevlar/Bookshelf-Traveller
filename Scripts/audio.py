@@ -219,13 +219,13 @@ class AudioPlayBack(Extension):
     @slash_option(name="volume", description="Must be between 1 and 100", required=False, opt_type=OptionType.INTEGER)
     async def volume_adjuster(self, ctx, volume=None):
         audio = self.audioObj
-        if volume >= 1 < 100:
-            audio.volume = float(volume)
-            self.volume = audio.volume
-            await ctx.send(content=f"Set volume to: {volume}", ephemaral=s.EPHEMERAL_OUTPUT)
-
-        elif volume is None:
+        if volume is None:
             await ctx.send(content=f"Volume currently set to: {self.volume}", ephemaral=s.EPHEMERAL_OUTPUT)
+        elif volume >= 1 < 100:
+            volume_float = float(volume / 100)
+            audio.volume = volume_float
+            self.volume = audio.volume
+            await ctx.send(content=f"Set volume to: {volume}%", ephemaral=s.EPHEMERAL_OUTPUT)
 
         else:
             await ctx.send(content=f"Invalid Entry", ephemeral=s.EPHEMERAL_OUTPUT)
