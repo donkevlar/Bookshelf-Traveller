@@ -31,10 +31,10 @@ class AudioPlayBack(Extension):
 
     @Task.create(IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
-        print("Initializing Session Sync")
+        logger.info("Initializing Session Sync")
         c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID, currentTime=updateFrequency-0.5, nextTime=self.nextTime) # NOQA
         current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(self.bookItemID)
-        print("Current Chapter Sync: " + current_chapter['title'] + "\n")
+        logger.info("Current Chapter Sync: " + current_chapter['title'] + "\n")
         self.currentChapter = current_chapter
 
     @slash_command(name="play", description="Play audio from ABS server")
@@ -85,6 +85,7 @@ class AudioPlayBack(Extension):
                 self.session_update.start()
 
                 await ctx.send(f"Playing: {self.bookTitle}", ephemeral=True)
+                logger.info(f"Beginning audio stream")
 
                 # Start audio playback
                 await ctx.voice_state.play_no_wait(audio)
@@ -113,6 +114,7 @@ class AudioPlayBack(Extension):
                 await ctx.voice_state.stop()
                 await ctx.author.voice.channel.disconnect()
                 await ctx.author.channel.send(f'Issue with playback: {e}')
+                logger.warning(f"Error occured during execution of /play : \n {e}")
                 print(e)
 
         # Check if bot is playing something
@@ -128,6 +130,7 @@ class AudioPlayBack(Extension):
     async def pause_audio(self, ctx):
         if ctx.voice_state:
             await ctx.send("Pausing Audio", ephemeral=True)
+            logger.info(f"executing command /pause")
             print("Pausing Audio")
             ctx.voice_state.pause()
             # Stop Any Tasks Running
@@ -141,6 +144,7 @@ class AudioPlayBack(Extension):
         if ctx.voice_state:
             if self.sessionID != "":
                 await ctx.send("Resuming Audio", ephemeral=True)
+                logger.info(f"executing command /resume")
                 print("Resuming Audio")
                 ctx.voice_state.resume()
 
@@ -152,6 +156,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="next-chapter", description="play next chapter, if available.")
     async def next_chapter(self, ctx):
         if ctx.voice_state:
+            logger.info(f"executing command /next-chapter")
             CurrentChapter = self.currentChapter
             ChapterArray = self.chapterArray
             bookFinished = self.bookFinished
@@ -203,6 +208,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="previous-chapter", description="play previous chapter, if available.")
     async def previous_chapter(self, ctx):
         if ctx.voice_state:
+            logger.info(f"executing command /previous-chapter")
             CurrentChapter = self.currentChapter
             ChapterArray = self.chapterArray
             bookFinished = self.bookFinished
@@ -250,6 +256,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="stop", description="Will disconnect from the voice channel and stop audio.")
     async def stop_audio(self, ctx: SlashContext):
         if ctx.voice_state:
+            logger.info(f"executing command /stop")
             await ctx.send(content="Disconnected from audio channel and stopping playback.", ephemeral=True)
             await ctx.author.voice.channel.disconnect()
 
@@ -265,7 +272,6 @@ class AudioPlayBack(Extension):
     async def search_media_auto_complete(self, ctx: AutocompleteContext):
         user_input = ctx.input_text
         choices = []
-        print(user_input)
         if user_input == "":
             try:
                 formatted_sessions_string, data = c.bookshelf_listening_stats()
@@ -279,6 +285,7 @@ class AudioPlayBack(Extension):
                         choices.append(formatted_item)
 
                 await ctx.send(choices=choices)
+                logger.info(choices)
 
             except Exception as e:
                 await ctx.send(choices=choices)
@@ -293,6 +300,7 @@ class AudioPlayBack(Extension):
                     choices.append({"name": f"{book_title}", "value": f"{book_id}"})
 
                 await ctx.send(choices=choices)
+                logger.info(choices)
 
             except Exception as e:  # NOQA
                 await ctx.send(choices=choices)
