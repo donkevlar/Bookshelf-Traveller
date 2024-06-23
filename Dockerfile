@@ -1,5 +1,5 @@
 # official Python runtime as a base image
-FROM python:slim-bookworm
+FROM ubuntu:22.04
 
 # Set the working directory
 WORKDIR /ABSBOT
