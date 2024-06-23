@@ -550,6 +550,8 @@ def bookshelf_close_session(sessionID: str):
         r = requests.post(f'{bookshelfURL}{endpoint}{tokenInsert}')
         if r.status_code == 200:
             print(f'Session {sessionID} closed successfully')
+        else:
+            print(r.status_code)
 
     except requests.RequestException as e:
         print(f"Failed to close session {sessionID}")
@@ -559,9 +561,4 @@ def bookshelf_close_session(sessionID: str):
 if __name__ == '__main__':
     print("TESTING COMMENCES")
     test_id = os.environ.get("book_id_test")
-    if test_id is not None:
-        current_chapter, chapter_array, bookFinished = bookshelf_get_current_chapter('43efeb79-3bd4-4aed-882c-6952b36fa6a7')
-
-        print(current_chapter, chapter_array, bookFinished)
-    else:
-        print("Test ID is None")
+    bookshelf_close_session('7ad88151-e569-44b4-8743-d75b5c77312f')
