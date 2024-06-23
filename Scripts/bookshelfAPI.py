@@ -438,7 +438,7 @@ def bookshelf_get_current_chapter(itemID: str):
                 if currentTimeSec >= chapter_start and currentTimeSec < chapter_end:
                     chapter["currentTime"] = currentTimeSec
                     foundChapter = chapter
-                    print("\nChapter Found: " + chapter['title'] + "\n")
+                    logger.info("Chapter Found: " + chapter['title'])
 
             if chapter_array and foundChapter is not None:
                 return foundChapter, chapter_array, book_finished
@@ -501,12 +501,12 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, ne
                 session_itemID = data['libraryItemId']
                 # Create Updated Time
                 if nextTime is None:
-                    updatedTime = round(serverCurrentTime + currentTime, 1)
+                    updatedTime = serverCurrentTime + currentTime
                 elif nextTime is not None:
                     try:
                         updatedTime = float(nextTime)
                     except TypeError:
-                        updatedTime = round(serverCurrentTime + currentTime, 1)
+                        updatedTime = serverCurrentTime + currentTime
                         print("Error, nextTime was not valid")
                 logger.info(f"Duration: {duration}, Current Time: {serverCurrentTime}, Updated Time: {updatedTime}, Item ID: {session_itemID}") # NOQA
 
@@ -528,7 +528,7 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, ne
                 }
                 r_session_update = requests.post(f"{defaultAPIURL}{sync_endpoint}{tokenInsert}", data=session_update)
                 if r_session_update.status_code == 200:
-                    print(f"Successfully synced session to updated time: {updatedTime}")
+                    logger.info(f"Successfully synced session to updated time: {updatedTime}")
                     return updatedTime
             else:
                 print(f"Session sync failed, sync status: {sessionOK}")

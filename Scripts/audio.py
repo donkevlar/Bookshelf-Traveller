@@ -30,12 +30,14 @@ class AudioPlayBack(Extension):
         self.volume = 0.0
         self.placeholder = None
         self.playbackSpeed = 1.0
+        self.updateFreqMulti = updateFrequency * self.playbackSpeed
 
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
-        logger.info("Initializing Session Sync")
+        logger.info(f"Initializing Session Sync, current playback Set to: {self.playbackSpeed}, "
+                    f"Session Timer: {self.updateFreqMulti * self.playbackSpeed}")
         c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID,
-                                   currentTime=updateFrequency*self.playback_speed, nextTime=self.nextTime) # NOQA
+                                   currentTime=self.updateFreqMulti * self.playbackSpeed, nextTime=self.nextTime) # NOQA
         current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(self.bookItemID)
         logger.info("Current Chapter Sync: " + current_chapter['title'])
         self.currentChapter = current_chapter
@@ -64,9 +66,8 @@ class AudioPlayBack(Extension):
         speed = float(speed)
         self.playbackSpeed = speed
         self.volume = audio.volume
-        audio.ffmpeg_before_args = f"-ss {currentTime} -filter:a atempo={self.playbackSpeed}"
-
-
+        audio.ffmpeg_before_args = f"-ss {currentTime}"
+        audio.ffmpeg_args = f"-filter:a atempo={self.playbackSpeed}"
 
         # Class VARS
 
@@ -295,8 +296,8 @@ class AudioPlayBack(Extension):
 
     @play_audio.autocomplete("speed")
     async def playback_speed(self, ctx: AutocompleteContext):
-        choices = [{"name":"slow", "value": "0.75"}, {"name":"normal", "value": "1.0"},
-                   {"name":"fast", "value": "1.1"}, {"name":"faster","value":"1.2"}]
+        choices = [{"name": "slow", "value": "0.75"}, {"name": "normal", "value": "1.0"},
+                   {"name": "fast", "value": "1.1"}, {"name": "faster", "value": "1.4"}]
         await ctx.send(choices=choices)
 
     @change_chapter.autocomplete("option")
