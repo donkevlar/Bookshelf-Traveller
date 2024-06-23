@@ -217,9 +217,9 @@ class AudioPlayBack(Extension):
 
     @slash_command(name="volume", description="change the volume for the bot")
     @slash_option(name="volume", description="Must be between 1 and 100", required=False, opt_type=OptionType.INTEGER)
-    async def volume_adjuster(self, ctx, volume=None):
+    async def volume_adjuster(self, ctx, volume=0):
         audio = self.audioObj
-        if volume is None:
+        if volume is 0:
             await ctx.send(content=f"Volume currently set to: {self.volume}", ephemaral=s.EPHEMERAL_OUTPUT)
         elif volume >= 1 < 100:
             volume_float = float(volume / 100)
