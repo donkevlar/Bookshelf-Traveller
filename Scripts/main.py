@@ -64,7 +64,12 @@ else:
     logger.info(f'Current Server Status = {server_status_code}, Good to go!')
 
 # Will print username when successful
-auth_test, user_type = c.bookshelf_auth_test()
+auth_test, user_type, user_locked = c.bookshelf_auth_test()
+logger.info(f"Logging user in and verifying role.")
+
+# Quit if user is locked
+if user_locked:
+    exit("User locked from logging in, please unlock via web gui.")
 
 # CHeck if ABS user is an admin
 ADMIN = False
@@ -121,7 +126,6 @@ async def on_startup(event: Startup):
 
 # Listening Stats, currently pulls the total time listened and converts it to hours
 @slash_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
-@check(ownership_check)
 async def totalTime(ctx: SlashContext):
     try:
         formatted_sessions_string, data = c.bookshelf_listening_stats()
@@ -143,7 +147,6 @@ async def totalTime(ctx: SlashContext):
 
 # Pings the server, can ping other servers, why? IDK, cause why not.
 @slash_command(name="ping", description="Latency of the discord bot server to the discord central shard.")
-@check(ownership_check)
 async def ping(ctx: SlashContext):
     latency = round(bot.latency * 1000)
     message = f'Discord BOT Server Latency: {latency} ms'
@@ -186,7 +189,6 @@ async def show_all_libraries(ctx: SlashContext):
 # List the recent sessions, limited to 10 with API. Will merge if books are the same.
 @slash_command(name="recent-sessions",
                description="Display up to 10 recent sessions")
-@check(ownership_check)
 async def show_recent_sessions(ctx: SlashContext):
     try:
         await ctx.defer(ephemeral=EPHEMERAL_OUTPUT)
@@ -245,7 +247,6 @@ async def show_recent_sessions(ctx: SlashContext):
 # Retrieves a specific media item and it's progress
 @slash_command(name="media-progress",
                description="Searches for the media item's progress")
-@check(ownership_check)
 @slash_option(name="book_title", description="Enter a book title", required=True, opt_type=OptionType.STRING,
               autocomplete=True)
 async def search_media_progress(ctx: SlashContext, book_title: str):
@@ -332,92 +333,6 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
             await ctx.send(choices=choices)
             logger.error(e)
             traceback.print_exc()
-
-
-# Searches for a specific user, uses autocomplete to retrieve the inputed name
-@slash_command(name="user-search",
-               description="Searches for a specific user, case sensitive")
-@check(ownership_check)
-@slash_option(name="name", description="enter a valid username", required=True, opt_type=OptionType.STRING)
-async def search_user(ctx: SlashContext, name: str):
-    try:
-        isFound, username, user_id, last_seen, isActive = c.bookshelf_get_users(name)
-
-        if isFound:
-            formatted_data = (
-                f'Last Seen: {last_seen}\n'
-                f'is Active: {isActive}\n'
-            )
-
-            # Create Embed Message
-            embed_message = Embed(
-                title=f"User Info | {username}",
-                description=f"User information for {username}",
-                color=ctx.author.accent_color
-            )
-            embed_message.add_field(name="Username", value=username, inline=False)
-            embed_message.add_field(name="User ID", value=user_id, inline=False)
-            embed_message.add_field(name="General Information", value=formatted_data, inline=False)
-
-            # Send message
-            await ctx.send(embed=embed_message, ephemeral=EPHEMERAL_OUTPUT)
-            logger.info(f' Successfully sent command: search_user')
-
-    except TypeError as e:
-        await ctx.send("Could not find that user, try a different name or make sure that it is spelt correctly.",
-                       ephemeral=EPHEMERAL_OUTPUT)
-        logger.warning(f' Error: {e}')
-
-    except Exception as e:
-        await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=EPHEMERAL_OUTPUT)
-        logger.warning(
-            f'User:{bot.user} (ID: {bot.user.id}) | Error occurred: {e} | Command Name: search_user')
-
-
-# Autocomplete searches the username within the abs api
-@search_user.autocomplete("name")
-async def user_search_autocomplete(ctx: AutocompleteContext):
-    user_input = ctx.input_text
-    isFound, username, user_id, last_seen, isActive = c.bookshelf_get_users(user_input)
-    choice = []
-    if user_input.lower() == username.lower():
-        choice = [{"name": f"{username}", "value": f"{username}"}]
-
-    await ctx.send(choices=choice)
-
-
-# Create user, kind of works
-@slash_command(name="add-user",
-               description="Will create a user, user types: 'admin', 'guest', 'user' | Default = user")
-@check(ownership_check)
-@slash_option(name="name", description="enter a valid username", required=True, opt_type=OptionType.STRING)
-@slash_option(name="password", description="enter a unique password, note: CHANGE THIS LATER", required=True,
-              opt_type=OptionType.STRING)
-@slash_option(name="user_type", description="select user type", required=True, opt_type=OptionType.STRING,
-              autocomplete=True)
-@slash_option(name="email", description="enter a valid email address", required=False, opt_type=OptionType.STRING)
-async def add_user(ctx: SlashContext, name: str, password: str, user_type="user", email=None):
-    try:
-        user_id, c_username = c.bookshelf_create_user(name, password, user_type, email=email)
-        await ctx.send(f"Successfully Created User: {c_username} with ID: {user_id}!")
-        logger.info(f' Successfully sent command: add-user')
-
-    except Exception as e:
-        await ctx.send("Could not complete this at the moment, please try again later.")
-        logger.warning(
-            f'User:{bot.user} (ID: {bot.user.id}) | Error occurred: {e} | Command Name: add-user')
-
-
-# Autocomplete for user types, static choices
-@add_user.autocomplete("user_type")
-async def autocomplete_user_search_type(ctx: AutocompleteContext):
-    choices = [
-        {"name": "Admin", "value": "admin"},
-        {"name": "User", "value": "user"},
-        {"name": "Guest", "value": "guest"}
-    ]
-
-    await ctx.send(choices=choices)
 
 
 # tests the connection to the server, option to use a different url if you want. WHY IDK, stop asking.
@@ -537,6 +452,6 @@ if __name__ == '__main__':
     bot.load_extension("audio")
     # Load Admin related extensions
     if ADMIN:
-        pass
+        bot.load_extension("administration")
     # Start Bot
     bot.start(settings.DISCORD_API_SECRET)

@@ -80,11 +80,12 @@ def bookshelf_auth_test():
             data = r.json()
 
             username = data.get("username", "")
-            user_type = data.get('type')
+            user_type = data.get('type', "user")
+            user_locked = data.get('isLocked', False)
 
             print(f'Successfully Authenticated as user {username}, type: {user_type}')
             time.sleep(0.5)
-            return username, user_type
+            return username, user_type, user_locked
         else:
             print("Error: Could not connect to /me endpoint \n")
             print("Quitting!")
