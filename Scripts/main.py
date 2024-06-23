@@ -55,9 +55,6 @@ if server_status_code != 200:
     time.sleep(0.5)
     sys.exit(1)
 
-elif server_status_code is None:
-    pass
-
 else:
     logger.info(f'Current Server Status = {server_status_code}, Good to go!')
 
