@@ -29,11 +29,14 @@ class AudioPlayBack(Extension):
         self.audioObj = AudioVolume
         self.volume = 0.0
         self.placeholder = None
+        self.playbackSpeed = 1.0
 
-    @Task.create(IntervalTrigger(seconds=updateFrequency))
+
+    @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
         logger.info("Initializing Session Sync")
-        c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID, currentTime=updateFrequency-0.5, nextTime=self.nextTime) # NOQA
+        c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID,
+                                   currentTime=updateFrequency*self.playback_speed, nextTime=self.nextTime) # NOQA
         current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(self.bookItemID)
         logger.info("Current Chapter Sync: " + current_chapter['title'])
         self.currentChapter = current_chapter
@@ -41,7 +44,9 @@ class AudioPlayBack(Extension):
     @slash_command(name="play", description="Play audio from ABS server")
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
-    async def play_audio(self, ctx, book: str):
+    @slash_option(name="speed", description="Option from slow, normal, fast and faster.", required=False,
+                  opt_type=OptionType.STRING)
+    async def play_audio(self, ctx, book: str, speed=1.0):
         logger.info(f"executing command /play")
 
         current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(book)
@@ -57,8 +62,12 @@ class AudioPlayBack(Extension):
         audio = AudioVolume(audio_obj)
         audio.buffer_seconds = 10
         audio.locked_stream = True
-        audio.ffmpeg_before_args = f"-ss {currentTime}"
+        speed = float(speed)
+        self.playbackSpeed = speed
         self.volume = audio.volume
+        audio.ffmpeg_before_args = f"-ss {currentTime} -filter:a atempo={self.playbackSpeed}"
+
+
 
         # Class VARS
 
@@ -285,6 +294,12 @@ class AudioPlayBack(Extension):
                 await ctx.send(choices=choices)
                 print(e)
 
+    @play_audio.autocomplete("speed")
+    async def playback_speed(self, ctx: AutocompleteContext):
+        choices = [{"name":"slow", "value": "0.75"}, {"name":"normal", "value": "1.0"},
+                   {"name":"fast", "value": "1.1"}, {"name":"faster","value":"1.2"}]
+        await ctx.send(choices=choices)
+
     @change_chapter.autocomplete("option")
     async def chapter_option_autocomplete(self, ctx: AutocompleteContext):
         choices = [
@@ -292,5 +307,9 @@ class AudioPlayBack(Extension):
         ]
         await ctx.send(choices=choices)
 
+    # ----------------------------
+    # Other non discord related functions
+    # ----------------------------
+    def
 
 
