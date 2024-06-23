@@ -532,7 +532,7 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, ne
                 r_session_update = requests.post(f"{defaultAPIURL}{sync_endpoint}{tokenInsert}", data=session_update)
                 if r_session_update.status_code == 200:
                     logger.info(f"Successfully synced session to updated time: {updatedTime}")
-                    return updatedTime
+                    return updatedTime, duration, serverCurrentTime
             else:
                 print(f"Session sync failed, sync status: {sessionOK}")
 

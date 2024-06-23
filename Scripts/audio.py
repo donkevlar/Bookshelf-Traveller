@@ -36,8 +36,12 @@ class AudioPlayBack(Extension):
     async def session_update(self):
         logger.info(f"Initializing Session Sync, current playback Set to: {self.playbackSpeed}, "
                     f"Session Timer: {self.updateFreqMulti}")
-        c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID,
-                                   currentTime=self.playbackSpeed, nextTime=self.nextTime) # NOQA
+
+        updatedTime, duration, serverCurrentTime = c.bookshelf_session_update(itemID=self.bookItemID,
+                sessionID=self.sessionID,currentTime=self.playbackSpeed, nextTime=self.nextTime) # NOQA
+
+        logger.info(f"Successfully synced session to updated time: {updatedTime}, session ID: {self.sessionID}")
+
         current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(self.bookItemID)
         logger.info("Current Chapter Sync: " + current_chapter['title'])
         self.currentChapter = current_chapter
