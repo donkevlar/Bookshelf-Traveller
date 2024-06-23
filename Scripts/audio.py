@@ -35,7 +35,7 @@ class AudioPlayBack(Extension):
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
         logger.info(f"Initializing Session Sync, current playback Set to: {self.playbackSpeed}, "
-                    f"Session Timer: {self.playbackSpeed}")
+                    f"Session Timer: {self.updateFreqMulti}")
         c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID,
                                    currentTime=self.playbackSpeed, nextTime=self.nextTime) # NOQA
         current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(self.bookItemID)
