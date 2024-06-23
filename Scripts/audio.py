@@ -22,8 +22,9 @@ class AudioPlayBack(Extension):
         # Chapter VARS
         self.currentChapter = None
         self.chapterArray = None
+        self.currentChapterTitle = ''
         self.bookFinished = False
-        self.moveToTime = 0.0
+        self.nextTime = None
         # Audio VARS
         self.audioObj = AudioVolume(src='')
         self.placeholder = None
@@ -31,8 +32,9 @@ class AudioPlayBack(Extension):
     @Task.create(IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
         print("Initializing Session Sync")
-        updatedTime = c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID, currentTime=updateFrequency-0.5)
-        self.currentTime = updatedTime
+        c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID, currentTime=updateFrequency-0.5, nextTime=self.nextTime) # NOQA
+        current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(self.bookItemID)
+        self.currentChapter = current_chapter
 
     @slash_command(name="play", description="Play audio from ABS server")
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
@@ -66,6 +68,7 @@ class AudioPlayBack(Extension):
 
         # Chapter Vars
         self.currentChapter = current_chapter
+        self.currentChapterTitle = current_chapter.get('title')
         self.chapterArray = chapter_array
         self.bookFinished = bookFinished
 
@@ -159,10 +162,6 @@ class AudioPlayBack(Extension):
                 found_next_chapter = False
                 print(nextChapterID)
 
-                self.session_update.stop()
-                c.bookshelf_close_session(self.sessionID)
-                await ctx.voice_state.stop()
-
                 for chapter in ChapterArray:
                     chapterID = int(chapter.get('id'))
 
@@ -175,12 +174,70 @@ class AudioPlayBack(Extension):
                         audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
                         self.sessionID = sessionID
                         self.currentTime = currentTime
-                        audio = AudioVolume(audio_obj)
 
+                        audio = AudioVolume(audio_obj)
                         audio.ffmpeg_before_args = f"-ss {chapterStart}"
 
-                        await ctx.send(content=f"Skipping to Chapter: {newChapterTitle}", ephemeral=True)
+                        # Set next time to new chapter time
+                        self.nextTime = chapterStart
+                        self.session_update.stop()
+                        # Send manual next chapter sync
+                        c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID,
+                                                   currentTime=updateFrequency - 0.5, nextTime=self.nextTime)
+                        # Reset Next Time to None before starting task again
+                        self.nextTime = None
                         self.session_update.start()
+                        await ctx.send(content=f"Skipping to Chapter: {newChapterTitle}", ephemeral=True)
+
+                        found_next_chapter = True
+
+                        await ctx.voice_state.play_no_wait(audio)
+                        break
+
+                if not found_next_chapter:
+                    await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
+        else:
+            await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
+
+    @slash_command(name="previous-chapter", description="play previous chapter, if available.")
+    async def previous_chapter(self, ctx):
+        if ctx.voice_state:
+            CurrentChapter = self.currentChapter
+            ChapterArray = self.chapterArray
+            bookFinished = self.bookFinished
+
+            if not bookFinished:
+
+                currentChapterID = int(CurrentChapter.get('id'))
+                currentChapterTitle = self.currentChapterTitle
+                previousChapterID = currentChapterID - 1
+                found_next_chapter = False
+                print("Chapter ID: ", previousChapterID, "Chapter Title:", currentChapterTitle)
+
+                for chapter in ChapterArray:
+                    chapterID = int(chapter.get('id'))
+
+                    if previousChapterID == chapterID:
+                        chapterStart = float(chapter.get('start'))
+                        newChapterTitle = chapter.get('title')
+                        print(f"Previous Chapter: {newChapterTitle}, Starting at: {chapterStart}")
+
+                        audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
+                        self.sessionID = sessionID
+                        self.currentTime = currentTime
+
+                        audio = AudioVolume(audio_obj)
+                        audio.ffmpeg_before_args = f"-ss {chapterStart}"
+
+                        # Set next time to new chapter time
+                        self.nextTime = chapterStart
+                        self.session_update.stop()
+                        c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID,
+                                                   currentTime=updateFrequency - 0.5, nextTime=self.nextTime)
+                        # Once Task is restarted set back to none
+                        self.nextTime = None
+                        self.session_update.start()
+                        await ctx.send(content=f"Skipping to Chapter: {newChapterTitle}", ephemeral=True)
 
                         found_next_chapter = True
                         await ctx.voice_state.play_no_wait(audio)
@@ -188,11 +245,6 @@ class AudioPlayBack(Extension):
 
                 if not found_next_chapter:
                     await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
-                    self.session_update.start()
-                    audio = self.audioObj
-                    audio.locked_stream = True
-                    audio.ffmpeg_before_args = f"-ss {self.currentTime}"
-                    await ctx.voice_state.play(self.audioObj)
         else:
             await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
 
@@ -221,10 +273,13 @@ class AudioPlayBack(Extension):
 
                 for sessions in data['recentSessions']:
                     title = sessions.get('displayTitle')
-                    choices.append(title)
+                    bookID = sessions.get('libraryItemId')
+                    formatted_item = {"name": title, "value": bookID}
 
-                sorted_choices = list(set(sorted(choices)))
-                await ctx.send(choices=sorted_choices)
+                    if formatted_item not in choices:
+                        choices.append(formatted_item)
+
+                await ctx.send(choices=choices)
 
             except Exception as e:
                 await ctx.send(choices=choices)

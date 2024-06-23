@@ -298,11 +298,15 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
 
             for sessions in data['recentSessions']:
                 title = sessions.get('displayTitle')
-                choices.append(title)
+                bookID = sessions.get('libraryItemId')
+                formatted_item = {"name": title, "value": bookID}
 
-            sorted_choices = list(set(sorted(choices)))
-            await ctx.send(choices=sorted_choices)
-        except Exception as e: # NOQA
+                if formatted_item not in choices:
+                    choices.append(formatted_item)
+
+            await ctx.send(choices=choices)
+
+        except Exception as e:
             await ctx.send(choices=choices)
             print(e)
 

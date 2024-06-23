@@ -404,8 +404,11 @@ def bookshelf_get_current_chapter(itemID: str):
     # Get the formatted data from item progress
     formatted_data = bookshelf_item_progress(itemID)
     # print("\n" + str(formatted_data))
+    try:
+        book_finished = eval(formatted_data['finished'])
 
-    book_finished = eval(formatted_data['finished'])
+    except TypeError:
+        book_finished = False
 
     # Convert current location time back into seconds from hours
     currentTimeSec = float(formatted_data['currentTime']) * 3600
@@ -470,13 +473,14 @@ def bookshelf_audio_obj(itemID: str):
     return onlineURL, currentTime, session_id, bookTitle
 
 
-def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float):
+def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, nextTime=None):
     get_session_endpoint = f"/session/{sessionID}"
     sync_endpoint = f"/session/{sessionID}/sync"
 
     # Session Checks
     sessionOK = False
     finished_book = False
+    updatedTime = 0.0
 
     if currentTime > 1:
 
@@ -493,7 +497,14 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float):
                 serverCurrentTime = float(data['currentTime'])
                 session_itemID = data['libraryItemId']
                 # Create Updated Time
-                updatedTime = round(serverCurrentTime + currentTime, 1)
+                if nextTime is None:
+                    updatedTime = round(serverCurrentTime + currentTime, 1)
+                elif nextTime is not None:
+                    try:
+                        updatedTime = float(nextTime)
+                    except TypeError:
+                        updatedTime = round(serverCurrentTime + currentTime, 1)
+                        print("Error, nextTime was not valid")
                 print(f"Duration: {duration}, Current Time: {serverCurrentTime}, Updated Time: {updatedTime}, Item ID: {session_itemID}") # NOQA
 
                 # Check if session matches the current item playing
