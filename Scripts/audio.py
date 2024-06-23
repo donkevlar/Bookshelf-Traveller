@@ -27,6 +27,7 @@ class AudioPlayBack(Extension):
         self.nextTime = None
         # Audio VARS
         self.audioObj = AudioVolume
+        self.volume = 0.0
         self.placeholder = None
 
     @Task.create(IntervalTrigger(seconds=updateFrequency))
@@ -214,6 +215,21 @@ class AudioPlayBack(Extension):
         else:
             await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=s.EPHEMERAL_OUTPUT)
 
+    @slash_command(name="volume", description="change the volume for the bot")
+    @slash_option(name="volume", description="Must be between 0 and 100", required=False, opt_type=OptionType.INTEGER)
+    async def volume_adjuster(self, ctx, volume: int):
+        audio = self.audioObj
+        if volume >= 0 < 100:
+            audio.volume = float(volume)
+            self.volume = audio.volume
+            await ctx.send(content=f"Set volume to: {volume}", ephemaral=s.EPHEMERAL_OUTPUT)
+
+        elif volume is None:
+            await ctx.send(content=f"Volume currently set to: {self.volume}", ephemaral=s.EPHEMERAL_OUTPUT)
+
+        else:
+            await  ctx.send(content=f"Invalid Entry", ephemeral=s.EPHEMERAL_OUTPUT)
+
     @slash_command(name="stop", description="Will disconnect from the voice channel and stop audio.")
     async def stop_audio(self, ctx: SlashContext):
         if ctx.voice_state:
@@ -227,8 +243,9 @@ class AudioPlayBack(Extension):
         else:
             await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
 
+    # -----------------------------
     # Auto complete options below
-    #
+    # -----------------------------
     @play_audio.autocomplete("book")
     async def search_media_auto_complete(self, ctx: AutocompleteContext):
         user_input = ctx.input_text
