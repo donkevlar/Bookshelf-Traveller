@@ -310,6 +310,5 @@ class AudioPlayBack(Extension):
     # ----------------------------
     # Other non discord related functions
     # ----------------------------
-    def
 
 
