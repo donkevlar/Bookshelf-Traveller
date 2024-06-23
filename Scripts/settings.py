@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Version Info
-versionNumber = 'Alpha_Audio_0.65'
+versionNumber = 'Beta_Audio_1.0'
 
 # Enables monitor to send alerts to the owner
 MONITOR_ALERTS = os.getenv("MONITOR_ALERTS", False)

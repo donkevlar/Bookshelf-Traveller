@@ -34,6 +34,7 @@ class AudioPlayBack(Extension):
         print("Initializing Session Sync")
         c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID, currentTime=updateFrequency-0.5, nextTime=self.nextTime) # NOQA
         current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(self.bookItemID)
+        print("Current Chapter Sync: " + current_chapter['title'] + "\n")
         self.currentChapter = current_chapter
 
     @slash_command(name="play", description="Play audio from ABS server")
@@ -209,10 +210,8 @@ class AudioPlayBack(Extension):
             if not bookFinished:
 
                 currentChapterID = int(CurrentChapter.get('id'))
-                currentChapterTitle = self.currentChapterTitle
                 previousChapterID = currentChapterID - 1
                 found_next_chapter = False
-                print("Chapter ID: ", previousChapterID, "Chapter Title:", currentChapterTitle)
 
                 for chapter in ChapterArray:
                     chapterID = int(chapter.get('id'))
