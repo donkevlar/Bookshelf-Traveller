@@ -2,14 +2,14 @@ from interactions import Extension, slash_command, SlashContext, slash_option, O
     IntervalTrigger
 from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
-import settings
+import settings as s
 import logging
 
 # Logger Config
 logger = logging.getLogger("bot")
 
 # Update Frequency for session sync
-updateFrequency = settings.UPDATES
+updateFrequency = s.UPDATES
 
 
 class AudioPlayBack(Extension):
@@ -84,7 +84,7 @@ class AudioPlayBack(Extension):
                 # Start Session Updates
                 self.session_update.start()
 
-                await ctx.send(f"Playing: {self.bookTitle}", ephemeral=True)
+                await ctx.send(f"Playing: {self.bookTitle}", ephemeral=s.EPHEMERAL_OUTPUT)
                 logger.info(f"Beginning audio stream")
 
                 # Start audio playback
@@ -129,7 +129,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="pause", description="pause audio")
     async def pause_audio(self, ctx):
         if ctx.voice_state:
-            await ctx.send("Pausing Audio", ephemeral=True)
+            await ctx.send("Pausing Audio", ephemeral=s.EPHEMERAL_OUTPUT)
             logger.info(f"executing command /pause")
             print("Pausing Audio")
             ctx.voice_state.pause()
@@ -143,7 +143,7 @@ class AudioPlayBack(Extension):
     async def resume_audio(self, ctx):
         if ctx.voice_state:
             if self.sessionID != "":
-                await ctx.send("Resuming Audio", ephemeral=True)
+                await ctx.send("Resuming Audio", ephemeral=s.EPHEMERAL_OUTPUT)
                 logger.info(f"executing command /resume")
                 print("Resuming Audio")
                 ctx.voice_state.resume()
@@ -151,10 +151,12 @@ class AudioPlayBack(Extension):
                 # Start session
                 self.session_update.start()
             else:
-                await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
+                await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=s.EPHEMERAL_OUTPUT)
 
-    @slash_command(name="next-chapter", description="play next chapter, if available.")
-    async def next_chapter(self, ctx):
+    @slash_command(name="change-chapter", description="play next chapter, if available.")
+    @slash_option(name="option", description="Select 'next or 'previous' as options", opt_type=OptionType.STRING,
+                  autocomplete=True, required=True)
+    async def change_chapter(self, ctx, option: str):
         if ctx.voice_state:
             logger.info(f"executing command /next-chapter")
             CurrentChapter = self.currentChapter
@@ -164,7 +166,10 @@ class AudioPlayBack(Extension):
             if not bookFinished:
 
                 currentChapterID = int(CurrentChapter.get('id'))
-                nextChapterID = currentChapterID + 1
+                if option == 'next':
+                    nextChapterID = currentChapterID + 1
+                else:
+                    nextChapterID = currentChapterID - 1
                 found_next_chapter = False
                 print(nextChapterID)
 
@@ -175,7 +180,8 @@ class AudioPlayBack(Extension):
 
                         chapterStart = float(chapter.get('start'))
                         newChapterTitle = chapter.get('title')
-                        logger.info(f"Next Chapter: {newChapterTitle}, Starting at: {chapterStart}")
+
+                        logger.info(f"Selected Chapter: {newChapterTitle}, Starting at: {chapterStart}")
 
                         audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
                         self.sessionID = sessionID
@@ -183,6 +189,7 @@ class AudioPlayBack(Extension):
 
                         audio = AudioVolume(audio_obj)
                         audio.ffmpeg_before_args = f"-ss {chapterStart}"
+                        self.audioObj = audio
 
                         # Set next time to new chapter time
                         self.nextTime = chapterStart
@@ -193,7 +200,8 @@ class AudioPlayBack(Extension):
                         # Reset Next Time to None before starting task again
                         self.nextTime = None
                         self.session_update.start()
-                        await ctx.send(content=f"Skipping to Chapter: {newChapterTitle}", ephemeral=True)
+                        await ctx.send(content=f"Moving to chapter: {newChapterTitle}",
+                                       ephemeral=s.EPHEMERAL_OUTPUT)
 
                         found_next_chapter = True
 
@@ -201,57 +209,10 @@ class AudioPlayBack(Extension):
                         break
 
                 if not found_next_chapter:
-                    await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
+                    await ctx.send(content=f"Book Finished or No New Chapter Found, aborting",
+                                   ephemeral=s.EPHEMERAL_OUTPUT)
         else:
-            await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
-
-    @slash_command(name="previous-chapter", description="play previous chapter, if available.")
-    async def previous_chapter(self, ctx):
-        if ctx.voice_state:
-            logger.info(f"executing command /previous-chapter")
-            CurrentChapter = self.currentChapter
-            ChapterArray = self.chapterArray
-            bookFinished = self.bookFinished
-
-            if not bookFinished:
-
-                currentChapterID = int(CurrentChapter.get('id'))
-                previousChapterID = currentChapterID - 1
-                found_next_chapter = False
-
-                for chapter in ChapterArray:
-                    chapterID = int(chapter.get('id'))
-
-                    if previousChapterID == chapterID:
-                        chapterStart = float(chapter.get('start'))
-                        newChapterTitle = chapter.get('title')
-                        logger.info(f"Previous Chapter: {newChapterTitle}, Starting at: {chapterStart}")
-
-                        audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
-                        self.sessionID = sessionID
-                        self.currentTime = currentTime
-
-                        audio = AudioVolume(audio_obj)
-                        audio.ffmpeg_before_args = f"-ss {chapterStart}"
-
-                        # Set next time to new chapter time
-                        self.nextTime = chapterStart
-                        self.session_update.stop()
-                        c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID,
-                                                   currentTime=updateFrequency - 0.5, nextTime=self.nextTime)
-                        # Once Task is restarted set back to none
-                        self.nextTime = None
-                        self.session_update.start()
-                        await ctx.send(content=f"Skipping to Chapter: {newChapterTitle}", ephemeral=True)
-
-                        found_next_chapter = True
-                        await ctx.voice_state.play_no_wait(audio)
-                        break
-
-                if not found_next_chapter:
-                    await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
-        else:
-            await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
+            await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=s.EPHEMERAL_OUTPUT)
 
     @slash_command(name="stop", description="Will disconnect from the voice channel and stop audio.")
     async def stop_audio(self, ctx: SlashContext):
@@ -305,4 +266,13 @@ class AudioPlayBack(Extension):
             except Exception as e:  # NOQA
                 await ctx.send(choices=choices)
                 print(e)
+
+    @change_chapter.autocomplete("option")
+    async def chapter_option_autocomplete(self, ctx: AutocompleteContext):
+        choices = [
+            {"name": "next", "value": "next"}, {"name": "previous", "value": "previous"}
+        ]
+        await ctx.send(choices=choices)
+
+
 
