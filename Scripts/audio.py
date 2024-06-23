@@ -175,7 +175,7 @@ class AudioPlayBack(Extension):
 
                         chapterStart = float(chapter.get('start'))
                         newChapterTitle = chapter.get('title')
-                        print(f"Next Chapter: {newChapterTitle}, Starting at: {chapterStart}")
+                        logger.info(f"Next Chapter: {newChapterTitle}, Starting at: {chapterStart}")
 
                         audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
                         self.sessionID = sessionID
@@ -225,7 +225,7 @@ class AudioPlayBack(Extension):
                     if previousChapterID == chapterID:
                         chapterStart = float(chapter.get('start'))
                         newChapterTitle = chapter.get('title')
-                        print(f"Previous Chapter: {newChapterTitle}, Starting at: {chapterStart}")
+                        logger.info(f"Previous Chapter: {newChapterTitle}, Starting at: {chapterStart}")
 
                         audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
                         self.sessionID = sessionID
