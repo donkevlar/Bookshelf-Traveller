@@ -25,13 +25,13 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 ### Environmental Variables
 
 
-| ENV Variables      | Description                                                                       | Type      | Required? |
-|--------------------|-----------------------------------------------------------------------------------|-----------|-----------|
-| `DISCORD_TOKEN`    | Discord API Token                                                                 | *String*  | **YES**   |
-| `bookshelfToken`   | Bookshelf User Token (All user types work, but some will limit your interaction options.)                                 | *String*  | **YES**   |
-| `bookshelfURL`     | Bookshelf url with protocol and port, ex: http://localhost:80                     | *String*  | **YES**   |
-| `OWNER_ONLY`       | By default set to `True`. Only allow bot owner to use bot.                        | *Boolean* | **NO**    |
-| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you) | *Boolean* | **NO**    |
+| ENV Variables      | Description                                                                               | Type      | Required? |
+|--------------------|-------------------------------------------------------------------------------------------|-----------|-----------|
+| `DISCORD_TOKEN`    | Discord API Token                                                                         | *String*  | **YES**   |
+| `bookshelfToken`   | Bookshelf User Token (All user types work, but some will limit your interaction options.) | *String*  | **YES**   |
+| `bookshelfURL`     | Bookshelf url with protocol and port, ex: http://localhost:80                             | *String*  | **YES**   |
+| `OWNER_ONLY`       | By default set to `True`. Only allow bot owner to use bot.                                | *Boolean* | **NO**    |
+| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you)         | *Boolean* | **NO**    |
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**
@@ -58,7 +58,7 @@ Requirements: Python 3.11 or above.
 
 you'll also need an '.env' file for loading the above [ENV Variables](https://github.com/donkevlar/Bookshelf-Traveller/blob/master/README.md#environmental-variables)
 ```
-pip install discord-py-interactions && pip install python-dotenv && pip install requests
+pip install discord-py-interactions && pip install discord.py-interactions[voice] && pip install python-dotenv && pip install requests
 ```
 
 ## Bot Commands
