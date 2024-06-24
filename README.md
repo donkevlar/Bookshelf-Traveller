@@ -17,7 +17,7 @@ You'll need to create your own discord application in order to do this, this is 
 Make sure that you select all intents when setting up your bot and that you have created a url to add it to your desired discord server.
 ### Known Limitations
 **1) Ownership by default will allow you to run all commands (NOT ADMIN), to disable this, use the env variable `OWNER_ONLY`. 
-No permissions have been setup yet, however, ill be working towards that.**
+**
 
 **2) When using commands that use images, i.e. `/media_progress` or `/recent_sessions`, 
 the server must use an `HTTPS` connection due to a requirement from discord's API. If not, no image will be generated.**
@@ -28,7 +28,7 @@ ENVIRONMENTAL VARS REQUIRED:
 | ENV Variables      | Description                                                                       | Type      | Required? |
 |--------------------|-----------------------------------------------------------------------------------|-----------|-----------|
 | `DISCORD_TOKEN`    | Discord API Token                                                                 | *String*  | **YES**   |
-| `bookshelfToken`   | Bookshelf User Token (being an admin is required)                                 | *String*  | **YES**   |
+| `bookshelfToken`   | Bookshelf User Token (All user types work, but some will limit your interaction options.)                                 | *String*  | **YES**   |
 | `bookshelfURL`     | Bookshelf url with protocol and port, ex: http://localhost:80                     | *String*  | **YES**   |
 | `OWNER_ONLY`       | By default set to `True`. Only allow bot owner to use bot.                        | *Boolean* | **NO**    |
 | `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you) | *Boolean* | **NO**    |
