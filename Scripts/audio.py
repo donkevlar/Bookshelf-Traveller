@@ -47,6 +47,7 @@ class AudioPlayBack(Extension):
         self.volume = 0.0
         self.placeholder = None
         self.playbackSpeed = 1.0
+        self.isPodcast = False
         self.updateFreqMulti = updateFrequency * self.playbackSpeed
 
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
@@ -60,16 +61,20 @@ class AudioPlayBack(Extension):
 
         logger.info(f"Successfully synced session to updated time: {updatedTime}, session ID: {self.sessionID}")
 
-        current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(self.bookItemID, updatedTime)
-        logger.info("Current Chapter Sync: " + current_chapter['title'])
-        self.currentChapter = current_chapter
+        current_chapter, chapter_array, bookFinished, isPodcast = c.bookshelf_get_current_chapter(self.bookItemID,
+                                                                                                  updatedTime)
+        if not isPodcast:
+            logger.info("Current Chapter Sync: " + current_chapter['title'])
+            self.currentChapter = current_chapter
 
     # Main play command, place class variables here since this is required to play audio
     @check(ownership_check)
     @slash_command(name="play", description="Play audio from ABS server")
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
-    async def play_audio(self, ctx, book: str):
+    @slash_option("podcast_search", description="allow podcasts to be searched, default=false",
+                  opt_type=OptionType.BOOLEAN)
+    async def play_audio(self, ctx, book: str, podcast_search=False):
         # Check bot is ready, if not exit command
         if not self.bot.is_ready or not ctx.author.voice:
             await ctx.send(content="Bot is not ready or author not in voice channel, please try again later.",
@@ -78,10 +83,14 @@ class AudioPlayBack(Extension):
 
         logger.info(f"executing command /play")
 
-        current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(book)
+        current_chapter, chapter_array, bookFinished, isPodcast = c.bookshelf_get_current_chapter(book)
 
         if bookFinished:
             await ctx.send(content="Book finished, please mark it as unfinished in UI. Aborting.", ephemeral=True)
+            return
+        if isPodcast:
+            await ctx.send(content="The content you attempted to play is currently not supported, aborting.",
+                           ephemeral=True)
             return
 
         # Get Bookshelf Playback URI, Starts new session
@@ -104,9 +113,11 @@ class AudioPlayBack(Extension):
         self.currentTime = currentTime
 
         # Chapter Vars
-        self.currentChapter = current_chapter
-        self.currentChapterTitle = current_chapter.get('title')
-        self.chapterArray = chapter_array
+        self.isPodcast = isPodcast
+        if not isPodcast:
+            self.currentChapter = current_chapter
+            self.currentChapterTitle = current_chapter.get('title')
+            self.chapterArray = chapter_array
         self.bookFinished = bookFinished
 
         # check if bot currently connected to voice
@@ -115,7 +126,7 @@ class AudioPlayBack(Extension):
             # if we haven't already joined a voice channel
             try:
                 # Connect to voice channel
-                voice = await ctx.author.voice.channel.connect()
+                await ctx.author.voice.channel.connect()
 
                 # Start Session Updates
                 self.session_update.start()
@@ -198,6 +209,9 @@ class AudioPlayBack(Extension):
                   autocomplete=True, required=True)
     async def change_chapter(self, ctx, option: str):
         if ctx.voice_state and ctx.author.voice:
+            if self.isPodcast:
+                await ctx.send(content="Item type is not book, chapter skip disabled", ephemeral=True)
+                return
 
             logger.info(f"executing command /next-chapter")
             CurrentChapter = self.currentChapter

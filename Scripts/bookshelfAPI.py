@@ -416,6 +416,15 @@ def bookshelf_get_current_chapter(item_id: str, current_time=0):
         if r.status_code == 200:
             # Place data in JSON Format
             data = r.json()
+            mediaType = data['mediaType']
+            if mediaType == 'podcast':
+                isPodcast = True
+                foundChapter = {}
+                chapter_array = []
+                book_finished = False
+                return foundChapter, chapter_array, book_finished, isPodcast
+            else:
+                isPodcast = False
 
             if "userMediaProgress" in data and data['userMediaProgress'] is not None and current_time == 0:
                 current_time = data['userMediaProgress'].get('currentTime', 0)
@@ -440,7 +449,7 @@ def bookshelf_get_current_chapter(item_id: str, current_time=0):
                     foundChapter = chapter
 
             if chapter_array and foundChapter is not None:
-                return foundChapter, chapter_array, book_finished
+                return foundChapter, chapter_array, book_finished, isPodcast
 
     except requests.RequestException as e:
         print("Could not retrieve item", e)
@@ -603,3 +612,7 @@ def bookshelf_close_all_sessions(items: int):
 # Test bookshelf api functions below
 if __name__ == '__main__':
     print("TESTING COMMENCES")
+    # book
+    bookshelf_get_current_chapter('c5f0bd4a-1eb8-4bd3-98d3-e8d1efb82b36')
+    # podcast
+    bookshelf_get_current_chapter('ceb38ac8-178a-42b4-969f-838e551f2802')
