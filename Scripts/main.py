@@ -266,7 +266,7 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
 
         cover_title = c.bookshelf_cover_image(book_title)
 
-        chapter_progress, chapter_array, bookFinished = c.bookshelf_get_current_chapter(book_title)
+        chapter_progress, chapter_array, bookFinished, isPodcast = c.bookshelf_get_current_chapter(book_title)
         if bookFinished:
             chapterTitle = "Book Finished"
         else:
