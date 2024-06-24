@@ -35,18 +35,12 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**
-### Python Script
-Requirements: Python 3.11 or above.
 
-you'll also need an '.env' file for loading the above ENV Variables
-```
-pip install discord-py-interactions && pip install python-dotenv && pip install requests
-```
 ### Docker Container
 Docker Container Available:
 
 ```
-docker pull donkevlar/bookshelf-traveller
+docker pull donkevlar/bookshelf-traveller:latest
 ```
 To run the container, paste the following command:
 ```
@@ -55,7 +49,14 @@ docker run -d \
 -e DISCORD_TOKEN="INSERT_TOKEN" \
 -e bookshelfToken="INSERT_TOKEN" \
 -e bookshelfURL="http://myurl.domain.com" \
-donkevlar/bookshelf-traveller
+donkevlar/bookshelf-traveller:latest
+```
+### Python Script
+Requirements: Python 3.11 or above.
+
+you'll also need an '.env' file for loading the above ENV Variables
+```
+pip install discord-py-interactions && pip install python-dotenv && pip install requests
 ```
 
 ## Bot Commands
