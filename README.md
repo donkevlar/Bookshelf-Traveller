@@ -23,7 +23,7 @@ Make sure that you select all intents when setting up your bot and that you have
 the server must use an `HTTPS` connection due to a requirement from discord's API. If not, no image will be generated.**
 
 ### Environmental Variables
-ENVIRONMENTAL VARS REQUIRED:
+
 
 | ENV Variables      | Description                                                                       | Type      | Required? |
 |--------------------|-----------------------------------------------------------------------------------|-----------|-----------|
