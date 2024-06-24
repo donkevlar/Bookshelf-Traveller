@@ -405,20 +405,7 @@ def bookshelf_list_backup():
         print(backup_IDs)
 
 
-def bookshelf_get_current_chapter(itemID: str):
-    # Get the formatted data from item progress
-    formatted_data = bookshelf_item_progress(itemID)
-    # print("\n" + str(formatted_data))
-    try:
-        book_finished = eval(formatted_data['finished'])
-
-    except TypeError:
-        book_finished = False
-
-    # Convert current location time back into seconds from hours
-    currentTimeSec = float(formatted_data['currentTime']) * 3600
-    # print("\nCurrent Time: " + str(currentTimeSec) + "\n")
-
+def bookshelf_get_current_chapter(itemID: str, currentTime=0):
     try:
         endpoint = f"/items/{itemID}"
         r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
@@ -426,6 +413,15 @@ def bookshelf_get_current_chapter(itemID: str):
         if r.status_code == 200:
             # Place data in JSON Format
             data = r.json()
+
+            if "userMediaProgress" in data and data['userMediaProgress'] is not None and currentTime == 0:
+                book_started = True
+                currentTime = data['userMediaProgress'].get('currentTime', 0)
+                book_finished = data['userMediaProgress'].get('isFinished', False)
+
+            else:
+                book_finished = False
+
             chapter_array = []
             foundChapter = {}
 
@@ -437,8 +433,8 @@ def bookshelf_get_current_chapter(itemID: str):
                 chapter_end = float(chapter.get('end'))
 
                 # Verify if in current chapter
-                if currentTimeSec >= chapter_start and currentTimeSec < chapter_end:
-                    chapter["currentTime"] = currentTimeSec
+                if currentTime >= chapter_start and currentTime < chapter_end:
+                    chapter["currentTime"] = currentTime
                     foundChapter = chapter
 
             if chapter_array and foundChapter is not None:
@@ -485,6 +481,7 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, ne
     sessionOK = False
     finished_book = False
     updatedTime = 0.0
+    serverCurrentTime = 0.0
 
     if currentTime > 1:
 
@@ -497,9 +494,9 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, ne
                 # Format to JSON
                 data = r_session_info.json()
                 # Pull Session Info
-                duration = float(data['duration'])
-                serverCurrentTime = float(data['currentTime'])
-                session_itemID = data['libraryItemId']
+                duration = float(data.get('duration'))
+                serverCurrentTime = float(data.get('currentTime'))
+                session_itemID = data.get('libraryItemId')
                 # Create Updated Time
                 if nextTime is None:
                     updatedTime = serverCurrentTime + currentTime
@@ -531,17 +528,17 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, ne
                 }
                 r_session_update = requests.post(f"{defaultAPIURL}{sync_endpoint}{tokenInsert}", data=session_update)
                 if r_session_update.status_code == 200:
-                    logger.info(f"Successfully synced session to updated time: {updatedTime}")
+                    print(f"Successfully synced session to updated time: {updatedTime}")
                     return updatedTime, duration, serverCurrentTime
             else:
                 print(f"Session sync failed, sync status: {sessionOK}")
 
         except requests.RequestException as e:
-            logger.warning(f"Issue with sync: \n{e}")
+            logger.warning(f"Issue with sync post request: \n{e}")
             print(e)
 
-        finally:
-            return sessionOK, finished_book
+        except Exception as e:
+            logger.warning(f"Issue with sync: \n{e}")
 
 
 def bookshelf_close_session(sessionID: str):
@@ -555,10 +552,50 @@ def bookshelf_close_session(sessionID: str):
 
     except requests.RequestException as e:
         print(f"Failed to close session {sessionID}")
+        logger.warning(f"Failed to close session: {sessionID}, {e}")
         print(f"{e}")
+
+    except Exception as e:
+        logger.warning(f"Failed to close session: {sessionID}, {e}")
+
+
+def bookshelf_close_all_sessions(items: int):
+    all_sessions_endpoint = f"/me/listening-sessions"
+
+    r = requests.get(f"{defaultAPIURL}{all_sessions_endpoint}{tokenInsert}&itemsPerPage={items}")
+    if r.status_code == 200:
+        data = r.json()
+
+        openSessionCount = 0
+        closedSessionCount = 0
+        failedSessionCount = 0
+
+        session_array = []
+
+        for session in data['sessions']:
+            openSessionCount += 1
+            sessionId = session.get('id')
+            session_array.append({'id': sessionId})
+
+        if openSessionCount > 0:
+
+            print(f"Attempting to close {openSessionCount} sessions")
+            for session in session_array:
+                sessionId = session.get('id')
+                close_session = f"/session/{sessionId}/close"
+                url = f"{defaultAPIURL}{close_session}{tokenInsert}"
+                r = requests.post(url)
+                if r.status_code == 200:
+                    closedSessionCount += 1
+                    print(f"Successfully Closed Session with ID: {sessionId}")
+                else:
+                    failedSessionCount += 1
+                    print(f"Failed to close session with id: {sessionId}")
+
+        logger.info(f"success: {closedSessionCount}, failed: {failedSessionCount}, total: {openSessionCount} ")
+        return openSessionCount, closedSessionCount, failedSessionCount
 
 
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    test_id = os.environ.get("book_id_test")
-    bookshelf_close_session('7ad88151-e569-44b4-8743-d75b5c77312f')
+    bookshelf_get_current_chapter('c5f0bd4a-1eb8-4bd3-98d3-e8d1efb82b36')

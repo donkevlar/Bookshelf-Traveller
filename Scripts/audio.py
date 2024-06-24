@@ -37,12 +37,11 @@ class AudioPlayBack(Extension):
         logger.info(f"Initializing Session Sync, current playback Set to: {self.playbackSpeed}, "
                     f"Session Timer: {self.updateFreqMulti}")
 
-        updatedTime, duration, serverCurrentTime = c.bookshelf_session_update(itemID=self.bookItemID,
-                sessionID=self.sessionID,currentTime=self.playbackSpeed, nextTime=self.nextTime) # NOQA
+        updatedTime, duration, serverCurrentTime = c.bookshelf_session_update(itemID=self.bookItemID,sessionID=self.sessionID,currentTime=updateFrequency, nextTime=self.nextTime) # NOQA
 
         logger.info(f"Successfully synced session to updated time: {updatedTime}, session ID: {self.sessionID}")
 
-        current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(self.bookItemID)
+        current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(self.bookItemID, updatedTime)
         logger.info("Current Chapter Sync: " + current_chapter['title'])
         self.currentChapter = current_chapter
 
@@ -183,8 +182,8 @@ class AudioPlayBack(Extension):
                     nextChapterID = currentChapterID + 1
                 else:
                     nextChapterID = currentChapterID - 1
+
                 found_next_chapter = False
-                print(nextChapterID)
 
                 for chapter in ChapterArray:
                     chapterID = int(chapter.get('id'))
@@ -252,8 +251,19 @@ class AudioPlayBack(Extension):
             if self.session_update.running:
                 self.session_update.stop()
                 c.bookshelf_close_session(self.sessionID)
+                c.bookshelf_close_all_sessions(10)
         else:
             await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
+            c.bookshelf_close_all_sessions(10)
+
+    @slash_command(name="close-all-sessions",
+                   description="DEBUGGING PURPOSES, close all active sessions. Takes up to 60 seconds.")
+    @slash_option(name="max_items", description="max number of items to attempt to close, default=100",
+                  opt_type=OptionType.INTEGER)
+    async def close_active_sessions(self, ctx, max_items=100):
+        openSessionCount, closedSessionCount, failedSessionCount = c.bookshelf_close_all_sessions(max_items)
+        await ctx.send(content=f"success: {closedSessionCount},failed: {failedSessionCount},total: {openSessionCount}",
+                       ephemeral=True)
 
     # -----------------------------
     # Auto complete options below

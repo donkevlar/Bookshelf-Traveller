@@ -124,3 +124,44 @@ class ABSAdmin(Extension):
         ]
 
         await ctx.send(choices=choices)
+
+    # Pulls the complete list of items in a library in csv
+    @slash_command(name="book-list-csv",
+                   description="Get complete list of items in a given library, outputs a csv")
+    @check(ownership_check)
+    @slash_option(name="library_name", description="enter a valid library name", required=True,
+                  opt_type=OptionType.STRING, autocomplete=True)
+    async def library_csv_booklist(self, ctx: SlashContext, library_name: str):
+        try:
+            await ctx.defer(ephemeral=True)
+            # Get Current Working Directory
+            current_directory = os.getcwd()
+
+            # Create CSV File
+            c.bookshelf_library_csv(library_name)
+
+            # Get Filepath
+            file_path = os.path.join(current_directory, 'books.csv')
+
+            await ctx.send(file=File(file_path), ephemeral=EPHEMERAL_OUTPUT)
+            logger.info(f' Successfully sent command: test-connection')
+
+        except Exception as e:
+
+            await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=EPHEMERAL_OUTPUT)
+
+            logger.warning(
+                f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occured: {e} | Command Name: add-user')
+
+    # Autocomplete, pulls all the libraries
+    @library_csv_booklist.autocomplete("library_name")
+    async def autocomplete_library_csv(self, ctx: AutocompleteContext):
+        library_data = c.bookshelf_libraries()
+        choices = []
+
+        for name, (library_id, audiobooks_only) in library_data.items():
+            choices.append({"name": name, "value": library_id})
+
+        print(choices)
+        await ctx.send(choices=choices)
+
