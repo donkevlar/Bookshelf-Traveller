@@ -115,6 +115,7 @@ async def ownership_check(ctx: BaseContext):
         return True
 
 
+# Eventually want to add alerts for different commands, this is a placeholder
 @Task.create(trigger=IntervalTrigger(minutes=ALERT_INT))
 async def ownership_alerts(ctx, monitored=False):
     if not monitored:
