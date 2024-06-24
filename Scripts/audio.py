@@ -131,7 +131,7 @@ class AudioPlayBack(Extension):
                 # Start Session Updates
                 self.session_update.start()
 
-                await ctx.send(f"Playing: {self.bookTitle}", ephemeral=True)
+                await ctx.send(f"Playing: {self.bookTitle}, Chapter: {self.currentChapterTitle}", ephemeral=True)
                 logger.info(f"Beginning audio stream")
 
                 # Start audio playback
