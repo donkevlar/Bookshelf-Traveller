@@ -56,7 +56,7 @@ Requirements: Python 3.11 or above.
 
 **FFMPEG Must be installed in the project directory and/or in PATH to run audio commands using the script installation method. If this is too difficult, please use the docker instructions above.**
 
-you'll also need an '.env' file for loading the above [ENV Variables][https://github.com/donkevlar/Bookshelf-Traveller/blob/master/README.md#environmental-variables]
+you'll also need an '.env' file for loading the above [ENV Variables](https://github.com/donkevlar/Bookshelf-Traveller/blob/master/README.md#environmental-variables)
 ```
 pip install discord-py-interactions && pip install python-dotenv && pip install requests
 ```
