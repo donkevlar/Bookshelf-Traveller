@@ -34,11 +34,10 @@ class AudioPlayBack(Extension):
 
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
-        logger.info(f"Initializing Session Sync, current playback Set to: {self.playbackSpeed}, "
-                    f"Session Timer: {self.updateFreqMulti}")
+        logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
 
         updatedTime, duration, serverCurrentTime = c.bookshelf_session_update(item_id=self.bookItemID,
-                                                                              session_id=self.sessionID, current_time=updateFrequency, next_time=self.nextTime) # NOQA
+                    session_id=self.sessionID, current_time=updateFrequency, next_time=self.nextTime) # NOQA
 
         logger.info(f"Successfully synced session to updated time: {updatedTime}, session ID: {self.sessionID}")
 
@@ -46,6 +45,7 @@ class AudioPlayBack(Extension):
         logger.info("Current Chapter Sync: " + current_chapter['title'])
         self.currentChapter = current_chapter
 
+    # Main play command, place class variables here since this is required to play audio
     @slash_command(name="play", description="Play audio from ABS server")
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
@@ -69,7 +69,6 @@ class AudioPlayBack(Extension):
         self.playbackSpeed = speed
         self.volume = audio.volume
         audio.ffmpeg_before_args = f"-ss {currentTime}"
-        audio.ffmpeg_args = f"-filter:a 'atempo={str(self.playbackSpeed)}'"
 
         # Class VARS
 
@@ -139,6 +138,7 @@ class AudioPlayBack(Extension):
             c.bookshelf_close_session(sessionID)
             return
 
+    # Pause audio, stops tasks, keeps session active.
     @slash_command(name="pause", description="pause audio")
     async def pause_audio(self, ctx):
         if ctx.voice_state:
@@ -152,6 +152,7 @@ class AudioPlayBack(Extension):
         else:
             await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
 
+    # Resume Audio, restarts tasks, session is kept open
     @slash_command(name="resume", description="resume audio")
     async def resume_audio(self, ctx):
         if ctx.voice_state:

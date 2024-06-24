@@ -406,18 +406,17 @@ def bookshelf_list_backup():
         print(backup_IDs)
 
 
-def bookshelf_get_current_chapter(itemID: str, currentTime=0):
+def bookshelf_get_current_chapter(item_id: str, current_time=0):
     try:
-        endpoint = f"/items/{itemID}"
+        endpoint = f"/items/{item_id}"
         r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
 
         if r.status_code == 200:
             # Place data in JSON Format
             data = r.json()
 
-            if "userMediaProgress" in data and data['userMediaProgress'] is not None and currentTime == 0:
-                book_started = True
-                currentTime = data['userMediaProgress'].get('currentTime', 0)
+            if "userMediaProgress" in data and data['userMediaProgress'] is not None and current_time == 0:
+                current_time = data['userMediaProgress'].get('currentTime', 0)
                 book_finished = data['userMediaProgress'].get('isFinished', False)
 
             else:
@@ -434,8 +433,8 @@ def bookshelf_get_current_chapter(itemID: str, currentTime=0):
                 chapter_end = float(chapter.get('end'))
 
                 # Verify if in current chapter
-                if currentTime >= chapter_start and currentTime < chapter_end:
-                    chapter["currentTime"] = currentTime
+                if current_time >= chapter_start and current_time < chapter_end:
+                    chapter["currentTime"] = current_time
                     foundChapter = chapter
 
             if chapter_array and foundChapter is not None:
@@ -445,8 +444,8 @@ def bookshelf_get_current_chapter(itemID: str, currentTime=0):
         print("Could not retrieve item", e)
 
 
-def bookshelf_audio_obj(itemID: str):
-    endpoint = f"/items/{itemID}/play"
+def bookshelf_audio_obj(item_id: str):
+    endpoint = f"/items/{item_id}/play"
     audio_link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
 
     # Send request to play
@@ -468,7 +467,7 @@ def bookshelf_audio_obj(itemID: str):
     print("Media Type: ", mediaType)
     print("Current Time: ", currentTime, "Seconds")
 
-    onlineURL = f"{defaultAPIURL}/items/{itemID}/file/{ino}{tokenInsert}"
+    onlineURL = f"{defaultAPIURL}/items/{item_id}/file/{ino}{tokenInsert}"
     print("attempting to play: ", onlineURL)
 
     return onlineURL, currentTime, session_id, bookTitle
@@ -542,6 +541,7 @@ def bookshelf_session_update(session_id: str, item_id: str, current_time: float,
             logger.warning(f"Issue with sync: \n{e}")
 
 
+# Need to  revisit this at some point
 def bookshelf_close_session(session_id: str):
     endpoint = f"/session/{session_id}/close"
     try:
@@ -560,6 +560,7 @@ def bookshelf_close_session(session_id: str):
         logger.warning(f"Failed to close session: {session_id}, {e}")
 
 
+# Closes all sessions that have been opened while bot was connected to voice
 def bookshelf_close_all_sessions(items: int):
     all_sessions_endpoint = f"/me/listening-sessions"
 
