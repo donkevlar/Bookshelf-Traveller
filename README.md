@@ -1,6 +1,4 @@
 
-![Banner](https://github.com/donkevlar/Bookshelf-Traveller/assets/21166416/42bf6014-0b91-44a5-a7b9-e676473c2461)
-
 # Bookshelf Traveller
 
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/m/donkevlar/bookshelf-traveller)
