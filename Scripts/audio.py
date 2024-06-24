@@ -250,7 +250,7 @@ class AudioPlayBack(Extension):
 
                 if not found_next_chapter:
                     await ctx.send(content=f"Book Finished or No New Chapter Found, aborting",
-                                   ephemeral=s.EPHEMERAL_OUTPUT)
+                                   ephemeral=True)
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
