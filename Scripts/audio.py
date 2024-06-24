@@ -1,9 +1,10 @@
-from interactions import Extension, slash_command, SlashContext, slash_option, OptionType, AutocompleteContext, Task, \
-    IntervalTrigger
+from interactions import *
 from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
 import settings as s
+from settings import os
 import logging
+
 
 # Logger Config
 logger = logging.getLogger("bot")
@@ -32,12 +33,30 @@ class AudioPlayBack(Extension):
         self.playbackSpeed = 1.0
         self.updateFreqMulti = updateFrequency * self.playbackSpeed
 
+    # Custom check for ownership
+    async def ownership_check(self, ctx: BaseContext): # NOQA
+        # Default only owner can use this bot
+        ownership = os.getenv('OWNER_ONLY', True)
+        if ownership:
+            # Check to see if user is the owner while ownership var is true
+            if ctx.bot.owner.username == ctx.user.username:
+                logger.info(f"{ctx.user.username}, you are the owner and ownership is enabled!")
+                return True
+
+            else:
+                logger.warning(f"{ctx.user.username}, is not the owner and ownership is enabled!")
+                return False
+        else:
+            return True
+
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
         logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
 
         updatedTime, duration, serverCurrentTime = c.bookshelf_session_update(item_id=self.bookItemID,
-                    session_id=self.sessionID, current_time=updateFrequency, next_time=self.nextTime) # NOQA
+                                                                              session_id=self.sessionID,
+                                                                              current_time=updateFrequency,
+                                                                              next_time=self.nextTime)  # NOQA
 
         logger.info(f"Successfully synced session to updated time: {updatedTime}, session ID: {self.sessionID}")
 
@@ -46,10 +65,17 @@ class AudioPlayBack(Extension):
         self.currentChapter = current_chapter
 
     # Main play command, place class variables here since this is required to play audio
+    @check(ownership_check)
     @slash_command(name="play", description="Play audio from ABS server")
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
-    async def play_audio(self, ctx, book: str, speed=1.0):
+    async def play_audio(self, ctx, book: str):
+        # Check bot is ready, if not exit command
+        if not self.bot.is_ready or not ctx.author.voice:
+            await ctx.send(content="Bot is not ready or author not in voice channel, please try again later.",
+                           ephemeral=True)
+            return
+
         logger.info(f"executing command /play")
 
         current_chapter, chapter_array, bookFinished = c.bookshelf_get_current_chapter(book)
@@ -65,8 +91,6 @@ class AudioPlayBack(Extension):
         audio = AudioVolume(audio_obj)
         audio.buffer_seconds = 10
         audio.locked_stream = True
-        speed = float(speed)
-        self.playbackSpeed = speed
         self.volume = audio.volume
         audio.ffmpeg_before_args = f"-ss {currentTime}"
 
@@ -91,7 +115,7 @@ class AudioPlayBack(Extension):
             # if we haven't already joined a voice channel
             try:
                 # Connect to voice channel
-                await ctx.author.voice.channel.connect()
+                voice = await ctx.author.voice.channel.connect()
 
                 # Start Session Updates
                 self.session_update.start()
@@ -106,11 +130,11 @@ class AudioPlayBack(Extension):
                 # Stop Session Update Tasks
                 self.session_update.stop()
                 # Close ABS session
-                c.bookshelf_close_session(sessionID) # NOQA
+                c.bookshelf_close_session(sessionID)  # NOQA
                 # Cleanup discord interactions
                 await ctx.author.voice.channel.disconnect()
                 await ctx.author.channel.send(f'Issue with playback: {e}')
-                audio.cleanup() # NOQA
+                audio.cleanup()  # NOQA
 
                 print(e)
 
@@ -141,7 +165,7 @@ class AudioPlayBack(Extension):
     # Pause audio, stops tasks, keeps session active.
     @slash_command(name="pause", description="pause audio")
     async def pause_audio(self, ctx):
-        if ctx.voice_state:
+        if ctx.voice_state and ctx.author.voice:
             await ctx.send("Pausing Audio", ephemeral=True)
             logger.info(f"executing command /pause")
             print("Pausing Audio")
@@ -150,12 +174,12 @@ class AudioPlayBack(Extension):
             if self.session_update.running:
                 self.session_update.stop()
         else:
-            await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
+            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
     # Resume Audio, restarts tasks, session is kept open
     @slash_command(name="resume", description="resume audio")
     async def resume_audio(self, ctx):
-        if ctx.voice_state:
+        if ctx.voice_state and ctx.author.voice:
             if self.sessionID != "":
                 await ctx.send("Resuming Audio", ephemeral=True)
                 logger.info(f"executing command /resume")
@@ -165,13 +189,16 @@ class AudioPlayBack(Extension):
                 # Start session
                 self.session_update.start()
             else:
-                await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=s.EPHEMERAL_OUTPUT)
+                await ctx.send(content="Bot or author isn't connected to channel, aborting.",
+                               ephemeral=True)
 
+    @check(ownership_check)
     @slash_command(name="change-chapter", description="play next chapter, if available.")
     @slash_option(name="option", description="Select 'next or 'previous' as options", opt_type=OptionType.STRING,
                   autocomplete=True, required=True)
     async def change_chapter(self, ctx, option: str):
-        if ctx.voice_state:
+        if ctx.voice_state and ctx.author.voice:
+
             logger.info(f"executing command /next-chapter")
             CurrentChapter = self.currentChapter
             ChapterArray = self.chapterArray
@@ -191,7 +218,6 @@ class AudioPlayBack(Extension):
                     chapterID = int(chapter.get('id'))
 
                     if nextChapterID == chapterID:
-
                         chapterStart = float(chapter.get('start'))
                         newChapterTitle = chapter.get('title')
 
@@ -226,26 +252,30 @@ class AudioPlayBack(Extension):
                     await ctx.send(content=f"Book Finished or No New Chapter Found, aborting",
                                    ephemeral=s.EPHEMERAL_OUTPUT)
         else:
-            await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
+            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
+    @check(ownership_check)
     @slash_command(name="volume", description="change the volume for the bot")
     @slash_option(name="volume", description="Must be between 1 and 100", required=False, opt_type=OptionType.INTEGER)
     async def volume_adjuster(self, ctx, volume=0):
-        audio = self.audioObj
-        if volume == 0:
-            await ctx.send(content=f"Volume currently set to: {self.volume*100}%", ephemaral=True)
-        elif volume >= 1 < 100:
-            volume_float = float(volume / 100)
-            audio.volume = volume_float
-            self.volume = audio.volume
-            await ctx.send(content=f"Set volume to: {volume}%", ephemaral=True)
+        if ctx.voice_state and ctx.author.voice:
+            audio = self.audioObj
+            if volume == 0:
+                await ctx.send(content=f"Volume currently set to: {self.volume * 100}%", ephemaral=True)
+            elif volume >= 1 < 100:
+                volume_float = float(volume / 100)
+                audio.volume = volume_float
+                self.volume = audio.volume
+                await ctx.send(content=f"Set volume to: {volume}%", ephemaral=True)
 
+            else:
+                await ctx.send(content=f"Invalid Entry", ephemeral=True)
         else:
-            await ctx.send(content=f"Invalid Entry", ephemeral=s.EPHEMERAL_OUTPUT)
+            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
     @slash_command(name="stop", description="Will disconnect from the voice channel and stop audio.")
     async def stop_audio(self, ctx: SlashContext):
-        if ctx.voice_state:
+        if ctx.voice_state and ctx.author.voice:
             logger.info(f"executing command /stop")
             await ctx.send(content="Disconnected from audio channel and stopping playback.", ephemeral=True)
             await ctx.author.voice.channel.disconnect()
@@ -255,9 +285,10 @@ class AudioPlayBack(Extension):
                 c.bookshelf_close_session(self.sessionID)
                 c.bookshelf_close_all_sessions(10)
         else:
-            await ctx.send(content="Bot isn't connected to channel, aborting.", ephemeral=True)
+            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
             c.bookshelf_close_all_sessions(10)
 
+    @check(ownership_check)
     @slash_command(name="close-all-sessions",
                    description="DEBUGGING PURPOSES, close all active sessions. Takes up to 60 seconds.")
     @slash_option(name="max_items", description="max number of items to attempt to close, default=100",
@@ -318,5 +349,3 @@ class AudioPlayBack(Extension):
     # ----------------------------
     # Other non discord related functions
     # ----------------------------
-
-

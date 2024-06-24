@@ -8,6 +8,7 @@ from interactions import *
 from interactions.ext.paginators import Paginator
 from interactions.api.events import *
 from datetime import datetime
+import pytz
 import time
 from dotenv import load_dotenv
 
@@ -30,14 +31,19 @@ EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
 # Logger Config
 logger = logging.getLogger("bot")
 
-# alert monitor
-monitor_enabled = False
+# alert monitor, can be changed with command: alerts
+monitor_enabled = os.getenv("MONITOR_ALERTS", False)
+
+# Alert interval for MONITOR_ALERTS Task, in minutes, default=60
+ALERT_INT = os.getenv("ALERT_INT", 60)
+
+# Timezone
+TIMEZONE = settings.TIMEZONE
+timeZone = pytz.timezone(TIMEZONE)
 
 # Print Startup Time
-current_time = datetime.now()
+current_time = datetime.now(timeZone)
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}\n')
-
-print("\nStartup time:", current_time)
 
 # Get Discord Token from ENV
 token = os.environ.get("DISCORD_TOKEN")
@@ -107,6 +113,15 @@ async def ownership_check(ctx: BaseContext):
             return False
     else:
         return True
+
+
+@Task.create(trigger=IntervalTrigger(minutes=ALERT_INT))
+async def ownership_alerts(ctx, monitored=False):
+    if not monitored:
+        return
+
+    else:
+        pass
 
 
 # Event listener

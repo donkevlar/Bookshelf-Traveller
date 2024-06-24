@@ -6,10 +6,15 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Version Info
-versionNumber = 'Beta_Audio_1.0'
+versionNumber = 'Beta_Audio_1.0.1'
+
+COMMAND_COUNT = 0
 
 # Enables monitor to send alerts to the owner
 MONITOR_ALERTS = os.getenv("MONITOR_ALERTS", False)
+
+# Time Zone
+TIMEZONE = os.getenv("TIMEZONE", "America/Toronto")
 
 # Discord token
 DISCORD_API_SECRET = os.getenv("DISCORD_TOKEN")

@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 from collections import defaultdict
 from datetime import datetime
@@ -31,13 +32,13 @@ tokenInsert = "?token=" + bookshelfToken
 
 # Simple Success Message
 def successMSG(endpoint, status):
-    print(f'Successfully Reached {endpoint} with Status {status}')
+    logger.info(f'Successfully Reached {endpoint} with Status {status}')
 
 
 # Test initial Connection to Bookshelf Server
 def bookshelf_test_connection():
-    print("Testing Server Connection")
-    print("Server URL ", bookshelfURL, "\n")
+    logger.info("Testing Server Connection")
+    logger.info(f"Server URL  {bookshelfURL}")
     connected = False
     count = 0
 
@@ -49,13 +50,13 @@ def bookshelf_test_connection():
             status = r.status_code
             if status == 200:
                 connected = True
-                print("\nConnection Established!\n")
+                logger.info("Connection Established!")
                 return status
 
             elif status != 200 and count >= 11:
-                print("Connection could not be established, Quitting!")
+                logger.error("Connection could not be established, Quitting!")
                 time.sleep(1)
-                exit()
+                sys.exit(1)
 
             else:
                 print("\nConnection Error, retrying in 5 seconds!")
@@ -63,15 +64,16 @@ def bookshelf_test_connection():
                 print(f"Retrying! Attempt: {count}")
 
         except requests.RequestException as e:
-            print("Error occured while testing server connection: ", e, "\n")
+            logger.warning("Error occured while testing server connection: ", e, "\n")
 
         except UnboundLocalError:
-            print("No URL PROVIDED!\n")
+            logger.error("No URL PROVIDED!\n")
+            sys.exit(1)
 
 
 # Authenticate the user with bookshelf server provided
 def bookshelf_auth_test():
-    print("\nProviding Auth Token to Server\n")
+    logger.info("\nProviding Auth Token to Server\n")
     try:
         endpoint = "/me"
         r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
@@ -93,10 +95,10 @@ def bookshelf_auth_test():
             exit()
 
     except requests.RequestException as e:
-        print("Could not establish connection: ", e)
+        logger.warning("Could not establish connection: ", e)
 
     finally:
-        print("Cleaning up, authentication\n")
+        logger.info("Cleaning up, authentication\n")
 
 
 def bookshelf_listening_stats():
@@ -598,6 +600,6 @@ def bookshelf_close_all_sessions(items: int):
         return openSessionCount, closedSessionCount, failedSessionCount
 
 
+# Test bookshelf api functions below
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    bookshelf_get_current_chapter('c5f0bd4a-1eb8-4bd3-98d3-e8d1efb82b36')
