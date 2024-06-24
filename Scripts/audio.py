@@ -12,6 +12,22 @@ logger = logging.getLogger("bot")
 # Update Frequency for session sync
 updateFrequency = s.UPDATES
 
+# Custom check for ownership
+async def ownership_check(ctx):  # NOQA
+    # Default only owner can use this bot
+    ownership = os.getenv('OWNER_ONLY', True)
+    if ownership:
+        # Check to see if user is the owner while ownership var is true
+        if ctx.bot.owner.username == ctx.user.username:
+            logger.info(f"{ctx.user.username}, you are the owner and ownership is enabled!")
+            return True
+
+        else:
+            logger.warning(f"{ctx.user.username}, is not the owner and ownership is enabled!")
+            return False
+    else:
+        return True
+
 
 class AudioPlayBack(Extension):
     def __init__(self, bot):
@@ -32,22 +48,6 @@ class AudioPlayBack(Extension):
         self.placeholder = None
         self.playbackSpeed = 1.0
         self.updateFreqMulti = updateFrequency * self.playbackSpeed
-
-    # Custom check for ownership
-    async def ownership_check(self, ctx: BaseContext): # NOQA
-        # Default only owner can use this bot
-        ownership = os.getenv('OWNER_ONLY', True)
-        if ownership:
-            # Check to see if user is the owner while ownership var is true
-            if ctx.bot.owner.username == ctx.user.username:
-                logger.info(f"{ctx.user.username}, you are the owner and ownership is enabled!")
-                return True
-
-            else:
-                logger.warning(f"{ctx.user.username}, is not the owner and ownership is enabled!")
-                return False
-        else:
-            return True
 
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
