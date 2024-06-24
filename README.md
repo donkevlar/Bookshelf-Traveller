@@ -1,4 +1,5 @@
-![Banner](https://github.com/donkevlar/Bookshelf-Traveller/assets/21166416/95320d29-8722-4b17-9274-4d539bbc2004)
+
+![Screenshot 2024-06-24 005737](https://github.com/donkevlar/Bookshelf-Traveller/assets/21166416/42bf6014-0b91-44a5-a7b9-e676473c2461)
 
 # Bookshelf Traveller
 
