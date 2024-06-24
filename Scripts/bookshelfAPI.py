@@ -392,6 +392,7 @@ def bookshelf_all_library_items(library_id):
         return found_titles
 
 
+# NOT CURRENTLY IN USE
 def bookshelf_list_backup():
     endpoint = "/backups"
     link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
@@ -473,9 +474,9 @@ def bookshelf_audio_obj(itemID: str):
     return onlineURL, currentTime, session_id, bookTitle
 
 
-def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, nextTime=None):
-    get_session_endpoint = f"/session/{sessionID}"
-    sync_endpoint = f"/session/{sessionID}/sync"
+def bookshelf_session_update(session_id: str, item_id: str, current_time: float, next_time=None):
+    get_session_endpoint = f"/session/{session_id}"
+    sync_endpoint = f"/session/{session_id}/sync"
 
     # Session Checks
     sessionOK = False
@@ -483,7 +484,7 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, ne
     updatedTime = 0.0
     serverCurrentTime = 0.0
 
-    if currentTime > 1:
+    if current_time > 1:
 
         try:
 
@@ -498,20 +499,20 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, ne
                 serverCurrentTime = float(data.get('currentTime'))
                 session_itemID = data.get('libraryItemId')
                 # Create Updated Time
-                if nextTime is None:
-                    updatedTime = serverCurrentTime + currentTime
-                elif nextTime is not None:
+                if next_time is None:
+                    updatedTime = serverCurrentTime + current_time
+                elif next_time is not None:
                     try:
-                        updatedTime = float(nextTime)
+                        updatedTime = float(next_time)
                     except TypeError:
-                        updatedTime = serverCurrentTime + currentTime
+                        updatedTime = serverCurrentTime + current_time
                         print("Error, nextTime was not valid")
 
                 logger.info(
                     f"Duration: {duration}, Current Time: {serverCurrentTime}, Updated Time: {updatedTime}, Item ID: {session_itemID}")  # NOQA
 
                 # Check if session matches the current item playing
-                if itemID == session_itemID and updatedTime <= duration:
+                if item_id == session_itemID and updatedTime <= duration:
                     sessionOK = True
 
                 # If Updated Time is greater, make updated time duration. (Finish book)
@@ -523,7 +524,7 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, ne
             if sessionOK:
                 session_update = {
                     'currentTime': float(updatedTime),  # NOQA
-                    'timeListened': float(currentTime),
+                    'timeListened': float(current_time),
                     'duration': float(duration)  # NOQA
                 }
                 r_session_update = requests.post(f"{defaultAPIURL}{sync_endpoint}{tokenInsert}", data=session_update)
@@ -541,22 +542,22 @@ def bookshelf_session_update(sessionID: str, itemID: str, currentTime: float, ne
             logger.warning(f"Issue with sync: \n{e}")
 
 
-def bookshelf_close_session(sessionID: str):
-    endpoint = f"/session/{sessionID}/close"
+def bookshelf_close_session(session_id: str):
+    endpoint = f"/session/{session_id}/close"
     try:
         r = requests.post(f'{bookshelfURL}{endpoint}{tokenInsert}')
         if r.status_code == 200:
-            print(f'Session {sessionID} closed successfully')
+            print(f'Session {session_id} closed successfully')
         else:
             print(r.status_code)
 
     except requests.RequestException as e:
-        print(f"Failed to close session {sessionID}")
-        logger.warning(f"Failed to close session: {sessionID}, {e}")
+        print(f"Failed to close session {session_id}")
+        logger.warning(f"Failed to close session: {session_id}, {e}")
         print(f"{e}")
 
     except Exception as e:
-        logger.warning(f"Failed to close session: {sessionID}, {e}")
+        logger.warning(f"Failed to close session: {session_id}, {e}")
 
 
 def bookshelf_close_all_sessions(items: int):

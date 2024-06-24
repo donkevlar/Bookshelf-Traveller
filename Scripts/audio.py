@@ -37,7 +37,8 @@ class AudioPlayBack(Extension):
         logger.info(f"Initializing Session Sync, current playback Set to: {self.playbackSpeed}, "
                     f"Session Timer: {self.updateFreqMulti}")
 
-        updatedTime, duration, serverCurrentTime = c.bookshelf_session_update(itemID=self.bookItemID,sessionID=self.sessionID,currentTime=updateFrequency, nextTime=self.nextTime) # NOQA
+        updatedTime, duration, serverCurrentTime = c.bookshelf_session_update(item_id=self.bookItemID,
+                                                                              session_id=self.sessionID, current_time=updateFrequency, next_time=self.nextTime) # NOQA
 
         logger.info(f"Successfully synced session to updated time: {updatedTime}, session ID: {self.sessionID}")
 
@@ -207,8 +208,8 @@ class AudioPlayBack(Extension):
                         self.nextTime = chapterStart
                         self.session_update.stop()
                         # Send manual next chapter sync
-                        c.bookshelf_session_update(itemID=self.bookItemID, sessionID=self.sessionID,
-                                                   currentTime=updateFrequency - 0.5, nextTime=self.nextTime)
+                        c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
+                                                   current_time=updateFrequency - 0.5, next_time=self.nextTime)
                         # Reset Next Time to None before starting task again
                         self.nextTime = None
                         self.session_update.start()
