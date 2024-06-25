@@ -411,6 +411,18 @@ def bookshelf_list_backup():
 def bookshelf_get_current_chapter(item_id: str, current_time=0):
     try:
         endpoint = f"/items/{item_id}"
+        progress_endpoint = f"/me/progress/{item_id}"
+
+        progress_r = requests.get(f'{defaultAPIURL}{progress_endpoint}{tokenInsert}')
+
+        if progress_r.status_code == 200:
+            progress_data = progress_r.json()
+            if "currentTime" in progress_data:
+                current_time = progress_data.get('currentTime', 0)
+                book_finished = progress_data.get('isFinished', False)
+            else:
+                book_finished = False
+
         r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
 
         if r.status_code == 200:
@@ -425,13 +437,6 @@ def bookshelf_get_current_chapter(item_id: str, current_time=0):
                 return foundChapter, chapter_array, book_finished, isPodcast
             else:
                 isPodcast = False
-
-            if "userMediaProgress" in data and data['userMediaProgress'] is not None and current_time == 0:
-                current_time = data['userMediaProgress'].get('currentTime', 0)
-                book_finished = data['userMediaProgress'].get('isFinished', False)
-
-            else:
-                book_finished = False
 
             chapter_array = []
             foundChapter = {}
@@ -613,6 +618,9 @@ def bookshelf_close_all_sessions(items: int):
 if __name__ == '__main__':
     print("TESTING COMMENCES")
     # book
-    bookshelf_get_current_chapter('c5f0bd4a-1eb8-4bd3-98d3-e8d1efb82b36')
+    audio_obj, currentTime, sessionID, bookTitle = bookshelf_get_current_chapter('c5f0bd4a-1eb8-4bd3-98d3-e8d1efb82b36')
+
+    print(audio_obj)
     # podcast
-    bookshelf_get_current_chapter('ceb38ac8-178a-42b4-969f-838e551f2802')
+    audio_obj, currentTime, sessionID, bookTitle =bookshelf_get_current_chapter('ceb38ac8-178a-42b4-969f-838e551f2802')
+    print(audio_obj)
