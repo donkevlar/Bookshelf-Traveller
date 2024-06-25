@@ -444,7 +444,7 @@ def bookshelf_get_current_chapter(item_id: str, current_time=0):
                 chapter_end = float(chapter.get('end'))
 
                 # Verify if in current chapter
-                if current_time >= chapter_start and current_time < chapter_end:
+                if current_time >= chapter_start and current_time < chapter_end: # NOQA
                     chapter["currentTime"] = current_time
                     foundChapter = chapter
 

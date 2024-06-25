@@ -112,10 +112,9 @@ class AudioPlayBack(Extension):
 
         # Chapter Vars
         self.isPodcast = isPodcast
-        if not isPodcast:
-            self.currentChapter = current_chapter
-            self.currentChapterTitle = current_chapter.get('title')
-            self.chapterArray = chapter_array
+        self.currentChapter = current_chapter
+        self.currentChapterTitle = current_chapter.get('title')
+        self.chapterArray = chapter_array
         self.bookFinished = bookFinished
 
         # check if bot currently connected to voice
