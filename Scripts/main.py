@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 # File Imports
 import bookshelfAPI as c
 
-# Pulls from bookshelf file, if DOCKER == True, then this won't load local env file
+# Pulls from bookshelf file
 load_dotenv()
 
 # Experimental Imports
@@ -25,7 +25,7 @@ load_dotenv()
 # Global Vars
 
 # Multi-user functionality, will remove token from admin and all admin functions
-MULTI_USER = True
+MULTI_USER = os.getenv("MULTI_USER", False)
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT

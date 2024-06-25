@@ -4,12 +4,18 @@ import bookshelfAPI as c
 import settings as s
 from settings import os
 import logging
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Logger Config
 logger = logging.getLogger("bot")
 
 # Update Frequency for session sync
 updateFrequency = s.UPDATES
+
+# Check Multi User
+MULTI_USER = os.getenv('MULTI_USER', False)
 
 
 # Custom check for ownership
@@ -294,6 +300,7 @@ class AudioPlayBack(Extension):
 
             if self.session_update.running:
                 self.session_update.stop()
+                await ctx.defer()
                 c.bookshelf_close_session(self.sessionID)
                 c.bookshelf_close_all_sessions(10)
         else:
