@@ -24,6 +24,8 @@ load_dotenv()
 
 # Global Vars
 
+# Multi-user functionality, will remove token from admin and all admin functions
+MULTI_USER = True
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
@@ -420,7 +422,10 @@ if __name__ == '__main__':
     # Load Audio Extension
     bot.load_extension("audio")
     # Load Admin related extensions
-    if ADMIN:
+    if ADMIN and not MULTI_USER:
         bot.load_extension("administration")
+    # Load multi user extension
+    elif MULTI_USER:
+        bot.load_extension("multi_user")
     # Start Bot
     bot.start(settings.DISCORD_API_SECRET)

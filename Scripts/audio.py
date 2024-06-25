@@ -5,12 +5,12 @@ import settings as s
 from settings import os
 import logging
 
-
 # Logger Config
 logger = logging.getLogger("bot")
 
 # Update Frequency for session sync
 updateFrequency = s.UPDATES
+
 
 # Custom check for ownership
 async def ownership_check(ctx):  # NOQA
@@ -69,7 +69,7 @@ class AudioPlayBack(Extension):
 
     # Main play command, place class variables here since this is required to play audio
     @check(ownership_check)
-    @slash_command(name="play", description="Play audio from ABS server")
+    @slash_command(name="play", description="Play audio from ABS server", dm_permission=False)
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
     async def play_audio(self, ctx, book: str):
@@ -171,7 +171,7 @@ class AudioPlayBack(Extension):
             return
 
     # Pause audio, stops tasks, keeps session active.
-    @slash_command(name="pause", description="pause audio")
+    @slash_command(name="pause", description="pause audio", dm_permission=False)
     async def pause_audio(self, ctx):
         if ctx.voice_state and ctx.author.voice:
             await ctx.send("Pausing Audio", ephemeral=True)
@@ -185,7 +185,7 @@ class AudioPlayBack(Extension):
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
     # Resume Audio, restarts tasks, session is kept open
-    @slash_command(name="resume", description="resume audio")
+    @slash_command(name="resume", description="resume audio", dm_permission=False)
     async def resume_audio(self, ctx):
         if ctx.voice_state and ctx.author.voice:
             if self.sessionID != "":
@@ -201,7 +201,7 @@ class AudioPlayBack(Extension):
                                ephemeral=True)
 
     @check(ownership_check)
-    @slash_command(name="change-chapter", description="play next chapter, if available.")
+    @slash_command(name="change-chapter", description="play next chapter, if available.", dm_permission=False)
     @slash_option(name="option", description="Select 'next or 'previous' as options", opt_type=OptionType.STRING,
                   autocomplete=True, required=True)
     async def change_chapter(self, ctx, option: str):
@@ -266,7 +266,7 @@ class AudioPlayBack(Extension):
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
     @check(ownership_check)
-    @slash_command(name="volume", description="change the volume for the bot")
+    @slash_command(name="volume", description="change the volume for the bot", dm_permission=False)
     @slash_option(name="volume", description="Must be between 1 and 100", required=False, opt_type=OptionType.INTEGER)
     async def volume_adjuster(self, ctx, volume=0):
         if ctx.voice_state and ctx.author.voice:
@@ -284,7 +284,8 @@ class AudioPlayBack(Extension):
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
-    @slash_command(name="stop", description="Will disconnect from the voice channel and stop audio.")
+    @slash_command(name="stop", description="Will disconnect from the voice channel and stop audio.",
+                   dm_permission=False)
     async def stop_audio(self, ctx: SlashContext):
         if ctx.voice_state and ctx.author.voice:
             logger.info(f"executing command /stop")
@@ -301,7 +302,8 @@ class AudioPlayBack(Extension):
 
     @check(ownership_check)
     @slash_command(name="close-all-sessions",
-                   description="DEBUGGING PURPOSES, close all active sessions. Takes up to 60 seconds.")
+                   description="DEBUGGING PURPOSES, close all active sessions. Takes up to 60 seconds.",
+                   dm_permission=False)
     @slash_option(name="max_items", description="max number of items to attempt to close, default=100",
                   opt_type=OptionType.INTEGER)
     async def close_active_sessions(self, ctx, max_items=100):

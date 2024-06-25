@@ -71,6 +71,37 @@ def bookshelf_test_connection():
             sys.exit(1)
 
 
+# Used to retrieve the token for the user logging in
+def bookshelf_user_login(username: str, password: str):
+    endpoint = "/login"
+    url = f"{bookshelfURL}{endpoint}"
+    headers = {'Content-Type': 'application/json'}
+    d = {"username": username, "password": password}
+    print(url)
+    user_info = {}
+
+    r = requests.post(url=f"{url}", json=d, headers=headers)
+
+    if r.status_code == 200:
+        data = r.json()
+
+        abs_token = data['user']['token']
+        abs_username = data['user']['username']
+        user_type = data['user']['type']
+
+    else:
+
+        abs_token = ""
+        abs_username = ""
+        user_type = None
+
+    user_info["username"] = abs_username
+    user_info["type"] = user_type
+    user_info["token"] = abs_token
+
+    return user_info
+
+
 # Authenticate the user with bookshelf server provided
 def bookshelf_auth_test():
     logger.info("\nProviding Auth Token to Server\n")
@@ -322,7 +353,7 @@ def bookshelf_get_users(name):
 
 def bookshelf_create_user(username: str, password, user_type: str, email=None):
     user_type = user_type.lower()
-    if user_type in ["guest", "user", "admin"]:
+    if user_type in ["guest", "user"]:
         endpoint = "/users"
         link = f'{defaultAPIURL}{endpoint}{tokenInsert}'
         headers = {'Content-Type': 'application/json'}
@@ -449,7 +480,7 @@ def bookshelf_get_current_chapter(item_id: str, current_time=0):
                 chapter_end = float(chapter.get('end'))
 
                 # Verify if in current chapter
-                if current_time >= chapter_start and current_time < chapter_end: # NOQA
+                if current_time >= chapter_start and current_time < chapter_end:  # NOQA
                     chapter["currentTime"] = current_time
                     foundChapter = chapter
 
@@ -462,7 +493,8 @@ def bookshelf_get_current_chapter(item_id: str, current_time=0):
 
 def bookshelf_audio_obj(item_id: str):
     endpoint = f"/items/{item_id}/play"
-    audio_link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
+    params = "&forceDirectPlay=true&mediaPlayer=discord"
+    audio_link = f"{defaultAPIURL}{endpoint}{tokenInsert}{params}"
 
     # Send request to play
     audio_obj = requests.post(audio_link)
@@ -617,10 +649,4 @@ def bookshelf_close_all_sessions(items: int):
 # Test bookshelf api functions below
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    # book
-    audio_obj, currentTime, sessionID, bookTitle = bookshelf_get_current_chapter('c5f0bd4a-1eb8-4bd3-98d3-e8d1efb82b36')
-
-    print(audio_obj)
-    # podcast
-    audio_obj, currentTime, sessionID, bookTitle =bookshelf_get_current_chapter('ceb38ac8-178a-42b4-969f-838e551f2802')
-    print(audio_obj)
+    bookshelf_user_login('streamer', 'Changeme123')
