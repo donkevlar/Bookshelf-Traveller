@@ -72,9 +72,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="play", description="Play audio from ABS server")
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
-    @slash_option("podcast_search", description="allow podcasts to be searched, default=false",
-                  opt_type=OptionType.BOOLEAN)
-    async def play_audio(self, ctx, book: str, podcast_search=False):
+    async def play_audio(self, ctx, book: str):
         # Check bot is ready, if not exit command
         if not self.bot.is_ready or not ctx.author.voice:
             await ctx.send(content="Bot is not ready or author not in voice channel, please try again later.",
