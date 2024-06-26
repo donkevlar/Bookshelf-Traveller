@@ -88,7 +88,6 @@ def search_user_db(discord_id=0, user='', token=''):
 
 class MultiUser(Extension):
     def __init__(self, bot):
-        self.userLogin = False
         self.user_discord_id = ''
 
     @check(ownership_check)
@@ -149,7 +148,6 @@ class MultiUser(Extension):
                 logger.info("Option 2 executed")
                 await ctx.send(content=f"login already registered, registration tied to abs user: {abs_username}",
                                ephemeral=True)
-                self.userLogin = True
 
             elif retrieved_token != abs_stored_token:
                 logger.info("Option 3 executed")
