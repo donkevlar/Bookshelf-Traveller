@@ -40,23 +40,6 @@ def insert_data(user: str, token: str, discord_id: int):
         return False
 
 
-# Custom check for ownership
-async def ownership_check(ctx: BaseContext):
-    # Default only owner can use this bot
-    ownership = os.getenv('OWNER_ONLY', True)
-    if ownership:
-        # Check to see if user is the owner while ownership var is true
-        if ctx.bot.owner.username == ctx.user.username:
-            logger.info(f"{ctx.user.username}, you are the owner and ownership is enabled!")
-            return True
-
-        else:
-            logger.warning(f"{ctx.user.username}, is not the owner and ownership is enabled!")
-            return False
-    else:
-        return True
-
-
 # Function to search for a specific user and token
 def search_user_db(discord_id=0, user='', token=''):
     if discord_id != 0:
@@ -84,6 +67,23 @@ def search_user_db(discord_id=0, user='', token=''):
         rows = cursor.fetchall()
 
     return rows
+
+
+# Custom check for ownership
+async def ownership_check(ctx: BaseContext):
+    # Default only owner can use this bot
+    ownership = os.getenv('OWNER_ONLY', True)
+    if ownership:
+        # Check to see if user is the owner while ownership var is true
+        if ctx.bot.owner.username == ctx.user.username:
+            logger.info(f"{ctx.user.username}, you are the owner and ownership is enabled!")
+            return True
+
+        else:
+            logger.warning(f"{ctx.user.username}, is not the owner and ownership is enabled!")
+            return False
+    else:
+        return True
 
 
 class MultiUser(Extension):
