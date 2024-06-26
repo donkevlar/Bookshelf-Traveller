@@ -45,12 +45,12 @@ timeZone = pytz.timezone(TIMEZONE)
 
 # Print Startup Time
 current_time = datetime.now(timeZone)
-logger.info(f'Bot is Starting Up! | Startup Time: {current_time}\n')
+logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
 
 # Get Discord Token from ENV
 token = os.environ.get("DISCORD_TOKEN")
 
-logger.info(f'\nStarting up bookshelf traveller v.{settings.versionNumber}\n')
+logger.info(f'Starting up bookshelf traveller v.{settings.versionNumber}')
 
 # Start Server Connection Prior to Running Bot
 server_status_code = c.bookshelf_test_connection()
@@ -136,7 +136,7 @@ async def on_startup(event: Startup):
     await owner.send(f'Bot is ready. Logged in as {bot.user}')
     if settings.EXPERIMENTAL:
         logger.warning(f'EXPERIMENTAL FEATURES ENABLED!')
-    if os.getenv('MULTI_USER', True):
+    if MULTI_USER:
         import multi_user as mu
         user_token = os.getenv('bookshelfToken')
         user_info = c.bookshelf_user_login(token=user_token)
