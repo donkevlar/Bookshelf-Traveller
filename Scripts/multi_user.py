@@ -1,6 +1,6 @@
 import os
-
 from interactions import *
+from interactions.api.events import *
 import bookshelfAPI as c
 import logging
 import sqlite3
@@ -88,7 +88,7 @@ async def ownership_check(ctx: BaseContext):
 
 class MultiUser(Extension):
     def __init__(self, bot):
-        self.user_discord_id = ''
+        pass
 
     @check(ownership_check)
     @slash_command(name="user-login", description="Login into ABS", dm_permission=False)
@@ -118,14 +118,12 @@ class MultiUser(Extension):
                 if insert_result:
                     await ctx.send(content=f"Successfully logged in as {abs_username}, type: {abs_user_type}",
                                    ephemeral=True)
-                    self.userLogin = True
                     logger.warning(
                         f'user {ctx.author} logged in to ABS, changing token to assigned user: {abs_username}')
                     os.environ['bookshelfToken'] = abs_token
 
             else:
                 await ctx.send(content="Invalid username or password", ephemeral=True)
-                self.user_discord_id = ''
 
         else:
             logger.info("SQLite found associated token, proceeding to update ENV VARS...")
@@ -199,13 +197,14 @@ class MultiUser(Extension):
             await ctx.send(content=f"user {username} is currently logged in.", ephemeral=True)
         else:
             user_call = c.bookshelf_user_login(token=abs_stored_token)
-            if user_call == 200:
-                username = user_call['username']
+            username = user_call['username']
+            if username != '':
                 user_insert = insert_data(discord_id=discord_id, token=abs_stored_token, user=username)
                 if user_insert:
                     await ctx.send(content=f"user {username} is currently logged in.", ephemeral=True)
             else:
-                await ctx.send(content=f"Error occured, please visit logs for details and try again later.", ephemeral=True)
+                await ctx.send(content=f"Error occured, please visit logs for details and try again later.",
+                               ephemeral=True)
 
     @user_select_db.autocomplete(option_name="user")
     async def user_search_autocomplete(self, ctx: AutocompleteContext):
