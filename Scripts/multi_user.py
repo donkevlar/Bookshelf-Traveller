@@ -42,29 +42,47 @@ def insert_data(user: str, token: str, discord_id: int):
 
 # Function to search for a specific user and token
 def search_user_db(discord_id=0, user='', token=''):
-    if discord_id != 0:
+    logger.info('Initializing sqlite db search')
+    if discord_id != 0 and user == '':
+        logger.info('Searching db using discord ID')
         cursor.execute('''
         SELECT token, user FROM users WHERE discord_id = ?
         ''', (discord_id,))
         rows = cursor.fetchall()
+        option = 1
+
     elif token != '':
+        logger.info('Searching db using ABS token')
         cursor.execute('''
                 SELECT user FROM users WHERE token = ?
                 ''', (token,))
         rows = cursor.fetchone()
+        option = 2
+
     elif discord_id != 0 and user != '':
+        logger.info('Searching db using discord ID and user')
         cursor.execute('''
                 SELECT token FROM users WHERE discord_id = ? AND user = ?
                 ''', (discord_id, user))
         rows = cursor.fetchone()
+        option = 3
     elif user != '':
+        logger.info('Searching db using user')
         cursor.execute('''SELECT token FROM users WHERE user = ?''', (user,))
         rows = cursor.fetchone()
+        option = 4
 
     else:
+        logger.info('Searching db for user and token using no arguments')
         cursor.execute('''SELECT user, token FROM users''')
 
         rows = cursor.fetchall()
+        option = 5
+
+    if rows:
+        logger.info(f'Successfully found query using option: {option}')
+    else:
+        logger.warning('Query returned null, an error may follow.')
 
     return rows
 
@@ -131,23 +149,13 @@ class MultiUser(Extension):
 
             abs_stored_token = os.environ.get('bookshelfToken')
 
-            if retrieved_token == "":
-                insert_result = insert_data(abs_username, abs_token, author_discord_id)
-                if insert_result:
-                    logger.info("Option 1 executed")
-                    logger.warning(
-                        f'user {ctx.author} logged in to ABS, changing token to assigned user: {abs_username}')
-                    os.environ['bookshelfToken'] = abs_token
-                    await ctx.send(content=f"Successfully logged in as {abs_username}, type: {abs_user_type}.",
-                                   ephemeral=True)
-
-            elif retrieved_token == abs_stored_token:
-                logger.info("Option 2 executed")
+            if retrieved_token == abs_stored_token:
+                logger.info("Option 1 executed")
                 await ctx.send(content=f"login already registered, registration tied to abs user: {abs_username}",
                                ephemeral=True)
 
             elif retrieved_token != abs_stored_token:
-                logger.info("Option 3 executed")
+                logger.info("Option 2 executed")
                 os.environ['bookshelfToken'] = retrieved_token
                 logger.warning(f'user {ctx.author} logged in to ABS, changing token to assigned user: {abs_username}')
                 await ctx.send(content=f"Successfully logged in as {abs_username}.",
