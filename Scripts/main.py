@@ -133,7 +133,6 @@ async def on_startup(event: Startup):
     print(f'Bot is ready. Logged in as {bot.user}')
     owner = event.client.owner
     owner_id = owner.id
-    await owner.send(f'Bot is ready. Logged in as {bot.user}')
     if settings.EXPERIMENTAL:
         logger.warning(f'EXPERIMENTAL FEATURES ENABLED!')
     if MULTI_USER:
@@ -144,9 +143,12 @@ async def on_startup(event: Startup):
         if username != '':
             mu.insert_data(discord_id=owner_id, user=username, token=user_token)
             logger.info(f'Registered initial user {username} successfully')
+            await owner.send(f'Bot is ready. Logged in as {bot.user}. ABS user: {username} signed in.')
         else:
             logger.warning("No initial user registered, please use '/login' to register a user.")
             await owner.send("No initial user registered, please use '/login' to register a user.")
+    else:
+        await owner.send(f'Bot is ready. Logged in as {bot.user}.')
 
 
 # Listening Stats, currently pulls the total time listened and converts it to hours
