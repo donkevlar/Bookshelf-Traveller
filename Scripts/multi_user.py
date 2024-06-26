@@ -91,7 +91,7 @@ class MultiUser(Extension):
         pass
 
     @check(ownership_check)
-    @slash_command(name="user-login", description="Login into ABS", dm_permission=False)
+    @slash_command(name="login", description="Login into ABS", dm_permission=False)
     @slash_option(name="username", description="ABS username", opt_type=OptionType.STRING, required=True)
     @slash_option(name="password", description="ABS password", opt_type=OptionType.STRING, required=True)
     async def user_login(self, ctx, username: str, password: str):
