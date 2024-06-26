@@ -132,9 +132,21 @@ async def ownership_alerts(ctx, monitored=False):
 async def on_startup(event: Startup):
     print(f'Bot is ready. Logged in as {bot.user}')
     owner = event.client.owner
+    owner_id = owner.id
     await owner.send(f'Bot is ready. Logged in as {bot.user}')
     if settings.EXPERIMENTAL:
         logger.warning(f'EXPERIMENTAL FEATURES ENABLED!')
+    if os.getenv('MULTI_USER', True):
+        import multi_user as mu
+        user_token = os.getenv('bookshelfToken')
+        user_info = c.bookshelf_user_login(token=user_token)
+        username = user_info['username']
+        if username != '':
+            mu.insert_data(discord_id=owner_id, user=username, token=user_token)
+            logger.info(f'Registered initial user {username} successfully')
+        else:
+            logger.warning("No initial user registered, please use '/login' to register a user.")
+            await owner.send("No initial user registered, please use '/login' to register a user.")
 
 
 # Listening Stats, currently pulls the total time listened and converts it to hours

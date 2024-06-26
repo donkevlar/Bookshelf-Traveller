@@ -96,7 +96,6 @@ class MultiUser(Extension):
     @slash_option(name="password", description="ABS password", opt_type=OptionType.STRING, required=True)
     async def user_login(self, ctx, username: str, password: str):
         author_discord_id = ctx.author.id
-        self.user_discord_id = author_discord_id
 
         user_info = c.bookshelf_user_login(username, password)
 
