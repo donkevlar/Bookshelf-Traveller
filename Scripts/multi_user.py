@@ -168,7 +168,7 @@ class MultiUser(Extension):
                                ephemeral=True)
 
     @check(ownership_check)
-    @slash_command(name="user-select",
+    @slash_command(name="select",
                    description="log a user in via db pull")
     @slash_option(name="user", description="Select from previously logged in users.", opt_type=OptionType.STRING,
                   required=True, autocomplete=True)
@@ -191,17 +191,16 @@ class MultiUser(Extension):
         else:
             await ctx.send(content="Error occured, please try again later.", ephemeral=True)
 
-    @slash_command(name="user", description="Will display currently logged in user")
+    @slash_command(name='user', description="display the currently logged in ABS user", dm_permission=False)
     async def user_check(self, ctx):
         abs_stored_token = os.getenv('bookshelfToken')
         result = search_user_db(token=abs_stored_token)
         if result:
             username = result[0]
-            await ctx.send(content=f"user: {username} currently logged in.", ephemeral=True)
+            await ctx.send(content=f"user {username} is currently logged in.", ephemeral=True)
         else:
             await ctx.send(content=f"Error occured, please visit logs for details and try again later.", ephemeral=True)
 
-    @check(ownership_check)
     @user_select_db.autocomplete(option_name="user")
     async def user_search_autocomplete(self, ctx: AutocompleteContext):
         choices = []
