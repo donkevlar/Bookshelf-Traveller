@@ -14,10 +14,6 @@ logger = logging.getLogger("bot")
 # Update Frequency for session sync
 updateFrequency = s.UPDATES
 
-# Check Multi User
-MULTI_USER = os.getenv('MULTI_USER', False)
-
-
 # Custom check for ownership
 async def ownership_check(ctx):  # NOQA
     # Default only owner can use this bot

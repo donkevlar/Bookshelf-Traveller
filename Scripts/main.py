@@ -25,7 +25,7 @@ load_dotenv()
 # Global Vars
 
 # Multi-user functionality, will remove token from admin and all admin functions
-MULTI_USER = os.getenv("MULTI_USER", False)
+MULTI_USER = os.getenv("MULTI_USER", True)
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
