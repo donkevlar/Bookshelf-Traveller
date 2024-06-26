@@ -192,12 +192,20 @@ class MultiUser(Extension):
     @slash_command(name='user', description="display the currently logged in ABS user", dm_permission=False)
     async def user_check(self, ctx):
         abs_stored_token = os.getenv('bookshelfToken')
+        discord_id = ctx.author.id
         result = search_user_db(token=abs_stored_token)
         if result:
             username = result[0]
             await ctx.send(content=f"user {username} is currently logged in.", ephemeral=True)
         else:
-            await ctx.send(content=f"Error occured, please visit logs for details and try again later.", ephemeral=True)
+            user_call = c.bookshelf_user_login(token=abs_stored_token)
+            if user_call == 200:
+                username = user_call['username']
+                user_insert = insert_data(discord_id=discord_id, token=abs_stored_token, user=username)
+                if user_insert:
+                    await ctx.send(content=f"user {username} is currently logged in.", ephemeral=True)
+            else:
+                await ctx.send(content=f"Error occured, please visit logs for details and try again later.", ephemeral=True)
 
     @user_select_db.autocomplete(option_name="user")
     async def user_search_autocomplete(self, ctx: AutocompleteContext):
