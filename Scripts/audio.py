@@ -300,7 +300,6 @@ class AudioPlayBack(Extension):
 
             if self.session_update.running:
                 self.session_update.stop()
-                await ctx.defer()
                 c.bookshelf_close_session(self.sessionID)
                 c.bookshelf_close_all_sessions(10)
         else:

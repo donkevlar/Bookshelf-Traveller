@@ -7,6 +7,7 @@ import sqlite3
 
 logger = logging.getLogger("bot")
 
+# Initialize sqlite3 connection
 conn = sqlite3.connect('user_info.db')
 cursor = conn.cursor()
 
@@ -15,9 +16,9 @@ def table_create():
     cursor.execute('''
 CREATE TABLE IF NOT EXISTS users (
 id INTEGER PRIMARY KEY,
-user TEXT UNIQUE,
-token TEXT UNIQUE,
-discord_id INTEGER)
+user TEXT NOT NULL,
+token TEXT NOT NULL UNIQUE,
+discord_id INTEGER NOT NULL)
                         ''')
 
 
@@ -57,12 +58,30 @@ async def ownership_check(ctx: BaseContext):
 
 
 # Function to search for a specific user and token
-def search_user_token(discord_id):
-    cursor.execute('''
-    SELECT user, token FROM users WHERE discord_id = ?
-    ''', (discord_id,))
+def search_user_db(discord_id=0, user='', token=''):
+    if discord_id != 0:
+        cursor.execute('''
+        SELECT token, user FROM users WHERE discord_id = ?
+        ''', (discord_id,))
+        rows = cursor.fetchall()
+    elif token != '':
+        cursor.execute('''
+                SELECT user FROM users WHERE token = ?
+                ''', (token,))
+        rows = cursor.fetchone()
+    elif discord_id != 0 and user != '':
+        cursor.execute('''
+                SELECT token FROM users WHERE discord_id = ? AND user = ?
+                ''', (discord_id, user))
+        rows = cursor.fetchone()
+    elif user != '':
+        cursor.execute('''SELECT token FROM users WHERE user = ?''', (user,))
+        rows = cursor.fetchone()
 
-    rows = cursor.fetchall()
+    else:
+        cursor.execute('''SELECT user, token FROM users''')
+
+        rows = cursor.fetchall()
 
     return rows
 
@@ -80,16 +99,22 @@ class MultiUser(Extension):
         author_discord_id = ctx.author.id
         self.user_discord_id = author_discord_id
 
-        user_result = search_user_token(int(author_discord_id))
         user_info = c.bookshelf_user_login(username, password)
 
         abs_token = user_info["token"]
         abs_username = user_info["username"]
         abs_user_type = user_info["type"]
 
+        logger.info("Attempting to find logged in user...")
+        user_result = search_user_db(int(author_discord_id), abs_username)
+        print(user_result)
+
         if not user_result:
+            logger.info("SQLite DB search returned nothing, attempting to insert new record.")
 
             if abs_token != "":
+                logger.info(f"Registering user into sqlite db with username: {abs_username}, "
+                            f"discord_id: {author_discord_id}")
                 insert_result = insert_data(abs_username, abs_token, author_discord_id)
                 if insert_result:
                     await ctx.send(content=f"Successfully logged in as {abs_username}, type: {abs_user_type}",
@@ -104,27 +129,85 @@ class MultiUser(Extension):
                 self.user_discord_id = ''
 
         else:
+            logger.info("SQLite found associated token, proceeding to update ENV VARS...")
+            retrieved_token = [0][0]
+            retrieved_token = str(retrieved_token)
 
-            retrieved_user = user_result[0][0]
-            retrieved_token = user_result[0][1]
             abs_stored_token = os.environ.get('bookshelfToken')
 
-            if retrieved_token == 0:
+            if retrieved_token == "":
                 insert_result = insert_data(abs_username, abs_token, author_discord_id)
                 if insert_result:
+                    logger.info("Option 1 executed")
                     logger.warning(
                         f'user {ctx.author} logged in to ABS, changing token to assigned user: {abs_username}')
                     os.environ['bookshelfToken'] = abs_token
                     await ctx.send(content=f"Successfully logged in as {abs_username}, type: {abs_user_type}.",
                                    ephemeral=True)
 
-            if retrieved_token == abs_stored_token:
-                await ctx.send(content=f"login already registered, registration tied to abs user: {retrieved_user}",
+            elif retrieved_token == abs_stored_token:
+                logger.info("Option 2 executed")
+                await ctx.send(content=f"login already registered, registration tied to abs user: {abs_username}",
                                ephemeral=True)
                 self.userLogin = True
 
-            else:
-                logger.warning(f'user {ctx.author} logged in to ABS, changing token to assigned user: {abs_username}')
+            elif retrieved_token != abs_stored_token:
+                logger.info("Option 3 executed")
                 os.environ['bookshelfToken'] = retrieved_token
-                await ctx.send(content=f"Successfully logged in as {abs_username}, type: {abs_user_type}.",
+                logger.warning(f'user {ctx.author} logged in to ABS, changing token to assigned user: {abs_username}')
+                await ctx.send(content=f"Successfully logged in as {abs_username}.",
                                ephemeral=True)
+
+            else:
+                logger.info('Option 4 executed')
+                os.environ['bookshelfToken'] = retrieved_token
+                info = search_user_db(int(author_discord_id))
+                retrieved_user = info[0][1]
+                logger.warning(f'user {ctx.author} logged in to ABS, changing token to assigned user: {retrieved_user}')
+                await ctx.send(content=f"Successfully logged in as {retrieved_user}.",
+                               ephemeral=True)
+
+    @check(ownership_check)
+    @slash_command(name="user-select",
+                   description="log a user in via db pull")
+    @slash_option(name="user", description="Select from previously logged in users.", opt_type=OptionType.STRING,
+                  required=True, autocomplete=True)
+    async def user_select_db(self, ctx, user):
+        abs_stored_token = os.getenv('bookshelfToken')
+        user_result = search_user_db(user=user)
+
+        if user_result:
+            token = user_result[0]
+            user_info = c.bookshelf_user_login(token=token)
+            username = user_info['username']
+            if token == abs_stored_token:
+                await ctx.send(content=f"user: {username} already logged in.", ephemeral=True)
+                return
+            elif username == user:
+                os.environ['bookshelfToken'] = token
+                await ctx.send(content=f'Successfully logged in as user {username}', ephemeral=True)
+            else:
+                await ctx.send(content="Error occured, please try again later.", ephemeral=True)
+        else:
+            await ctx.send(content="Error occured, please try again later.", ephemeral=True)
+
+    @slash_command(name="user", description="Will display currently logged in user")
+    async def user_check(self, ctx):
+        abs_stored_token = os.getenv('bookshelfToken')
+        result = search_user_db(token=abs_stored_token)
+        if result:
+            username = result[0]
+            await ctx.send(content=f"user: {username} currently logged in.", ephemeral=True)
+        else:
+            await ctx.send(content=f"Error occured, please visit logs for details and try again later.", ephemeral=True)
+
+    @check(ownership_check)
+    @user_select_db.autocomplete(option_name="user")
+    async def user_search_autocomplete(self, ctx: AutocompleteContext):
+        choices = []
+        user_result = search_user_db()
+        if user_result:
+            for users in user_result:
+                username = users[0]
+                choices.append({'name': username, "value": username})
+        await ctx.send(choices=choices)

@@ -72,15 +72,19 @@ def bookshelf_test_connection():
 
 
 # Used to retrieve the token for the user logging in
-def bookshelf_user_login(username: str, password: str):
+def bookshelf_user_login(username='', password='', token=''):
     endpoint = "/login"
+    token_endpoint = f"/api/authorize?token={token}"
     url = f"{bookshelfURL}{endpoint}"
     headers = {'Content-Type': 'application/json'}
-    d = {"username": username, "password": password}
-    print(url)
+    d = {"username": username, "password": str(password)}
     user_info = {}
-
-    r = requests.post(url=f"{url}", json=d, headers=headers)
+    if token != '':
+        r = requests.post(f"{bookshelfURL}{token_endpoint}")
+    elif username != '' and password != '':
+        r = requests.post(url=f"{url}", json=d, headers=headers)
+    else:
+        return print("invalid user arguments")
 
     if r.status_code == 200:
         data = r.json()
