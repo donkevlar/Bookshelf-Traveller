@@ -110,16 +110,28 @@ class MultiUser(Extension):
 
     @check(ownership_check)
     @slash_command(name="login", description="Login into ABS", dm_permission=False)
-    @slash_option(name="username", description="ABS username", opt_type=OptionType.STRING, required=True)
-    @slash_option(name="password", description="ABS password", opt_type=OptionType.STRING, required=True)
-    async def user_login(self, ctx, username: str, password: str):
+    async def user_login(self, ctx):
         if ctx.voice_state:
             return await ctx.send("Cannot perform login during playback, please use the /stop command and try again.",
                                   ephemeral=True)
 
         author_discord_id = ctx.author.id
 
-        user_info = c.bookshelf_user_login(username, password)
+        user_login_modal = Modal(
+            ShortText(label="Username", custom_id="modal_username", placeholder="username"),
+            ShortText(label="Password", custom_id="modal_password", placeholder="password"),
+            title="User Login",
+            custom_id="user_login",
+        )
+        await ctx.send_modal(modal=user_login_modal)
+
+        modal_ctx: ModalContext = await ctx.bot.wait_for_modal(user_login_modal)
+
+        # extract the answers from the responses dictionary
+        username_response = modal_ctx.responses["modal_username"]
+        password_response = modal_ctx.responses["modal_password"]
+
+        user_info = c.bookshelf_user_login(username_response, password_response)
 
         abs_token = user_info["token"]
         abs_username = user_info["username"]
@@ -137,14 +149,14 @@ class MultiUser(Extension):
                             f"discord_id: {author_discord_id}")
                 insert_result = insert_data(abs_username, abs_token, author_discord_id)
                 if insert_result:
-                    await ctx.send(content=f"Successfully logged in as {abs_username}, type: {abs_user_type}",
-                                   ephemeral=True)
+                    await modal_ctx.send(f"Successfully logged in as {abs_username}, type: {abs_user_type}",
+                                         ephemeral=True)
                     logger.warning(
                         f'user {ctx.author} logged in to ABS, changing token to assigned user: {abs_username}')
                     os.environ['bookshelfToken'] = abs_token
 
             else:
-                await ctx.send(content="Invalid username or password", ephemeral=True)
+                await modal_ctx.send("Invalid username or password", ephemeral=True)
 
         else:
             logger.info("SQLite found associated token, proceeding to update ENV VARS...")
@@ -155,15 +167,15 @@ class MultiUser(Extension):
 
             if retrieved_token == abs_stored_token:
                 logger.info("Option 1 executed")
-                await ctx.send(content=f"login already registered, registration tied to abs user: {abs_username}",
-                               ephemeral=True)
+                await modal_ctx.send(content=f"login already registered, registration tied to abs user: {abs_username}",
+                                     ephemeral=True)
 
             elif retrieved_token != abs_stored_token:
                 logger.info("Option 2 executed")
                 os.environ['bookshelfToken'] = retrieved_token
                 logger.warning(f'user {ctx.author} logged in to ABS, changing token to assigned user: {abs_username}')
-                await ctx.send(content=f"Successfully logged in as {abs_username}.",
-                               ephemeral=True)
+                await modal_ctx.send(content=f"Successfully logged in as {abs_username}.",
+                                     ephemeral=True)
 
             else:
                 logger.info('Option 4 executed')
@@ -171,8 +183,8 @@ class MultiUser(Extension):
                 info = search_user_db(int(author_discord_id))
                 retrieved_user = info[0][1]
                 logger.warning(f'user {ctx.author} logged in to ABS, changing token to assigned user: {retrieved_user}')
-                await ctx.send(content=f"Successfully logged in as {retrieved_user}.",
-                               ephemeral=True)
+                await modal_ctx.send(content=f"Successfully logged in as {retrieved_user}.",
+                                     ephemeral=True)
 
     @check(ownership_check)
     @slash_command(name="select",
