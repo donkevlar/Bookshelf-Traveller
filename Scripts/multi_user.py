@@ -113,6 +113,10 @@ class MultiUser(Extension):
     @slash_option(name="username", description="ABS username", opt_type=OptionType.STRING, required=True)
     @slash_option(name="password", description="ABS password", opt_type=OptionType.STRING, required=True)
     async def user_login(self, ctx, username: str, password: str):
+        if ctx.voice_state:
+            return await ctx.send("Cannot perform login during playback, please use the /stop command and try again.",
+                                  ephemeral=True)
+
         author_discord_id = ctx.author.id
 
         user_info = c.bookshelf_user_login(username, password)
@@ -176,6 +180,10 @@ class MultiUser(Extension):
     @slash_option(name="user", description="Select from previously logged in users.", opt_type=OptionType.STRING,
                   required=True, autocomplete=True)
     async def user_select_db(self, ctx, user):
+        if ctx.voice_state:
+            return await ctx.send("Cannot perform login during playback, please use the /stop command and try again.",
+                                  ephemeral=True)
+
         abs_stored_token = os.getenv('bookshelfToken')
         user_result = search_user_db(user=user)
 

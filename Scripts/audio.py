@@ -310,7 +310,8 @@ class AudioPlayBack(Extension):
                   opt_type=OptionType.INTEGER)
     async def close_active_sessions(self, ctx, max_items=100):
         openSessionCount, closedSessionCount, failedSessionCount = c.bookshelf_close_all_sessions(max_items)
-        await ctx.send(content=f"success: {closedSessionCount},failed: {failedSessionCount},total: {openSessionCount}",
+        await ctx.send(content=f"Result of attempting to close sessions. success: {closedSessionCount},"
+                               f"failed: {failedSessionCount},total: {openSessionCount}",
                        ephemeral=True)
 
     # -----------------------------
