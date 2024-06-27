@@ -447,6 +447,7 @@ def bookshelf_get_current_chapter(item_id: str, current_time=0):
     try:
         endpoint = f"/items/{item_id}"
         progress_endpoint = f"/me/progress/{item_id}"
+        book_finished = False
 
         progress_r = requests.get(f'{defaultAPIURL}{progress_endpoint}{tokenInsert}')
 
