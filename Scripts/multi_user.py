@@ -208,6 +208,7 @@ class MultiUser(Extension):
                 return
             elif username == user:
                 os.environ['bookshelfToken'] = token
+                logger.warning(f'user {ctx.author} logged in to ABS, changing token to assigned user: {username}')
                 await ctx.send(content=f'Successfully logged in as user {username}', ephemeral=True)
             else:
                 await ctx.send(content="Error occured, please try again later.", ephemeral=True)

@@ -378,7 +378,7 @@ async def test_server_connection(ctx: SlashContext, opt_url=None):
             await ctx.send(f"Successfully connected to {opt_url} with status: {status}", ephemeral=EPHEMERAL_OUTPUT)
         else:
             status = c.bookshelf_test_connection()
-            await ctx.send(f"Successfully connected to {c.bookshelfURL} with status: {status}",
+            await ctx.send(f"Successfully connected to {os.getenv('bookshelfURL')} with status: {status}",
                            ephemeral=EPHEMERAL_OUTPUT)
 
         logger.info(f' Successfully sent command: test-connection')
