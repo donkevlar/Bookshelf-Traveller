@@ -178,8 +178,8 @@ class AudioPlayBack(Extension):
         if ctx.voice_state and ctx.author.voice:
             await ctx.send("Pausing Audio", ephemeral=True)
             logger.info(f"executing command /pause")
-            print("Pausing Audio")
             ctx.voice_state.pause()
+            logger.info("Pausing Audio")
             # Stop Any Tasks Running
             if self.session_update.running:
                 self.session_update.stop()
@@ -193,9 +193,9 @@ class AudioPlayBack(Extension):
             if self.sessionID != "":
                 await ctx.send("Resuming Audio", ephemeral=True)
                 logger.info(f"executing command /resume")
-                print("Resuming Audio")
+                # Resume Audio Stream
                 ctx.voice_state.resume()
-
+                logger.info("Resuming Audio")
                 # Start session
                 self.session_update.start()
             else:
