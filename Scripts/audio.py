@@ -83,7 +83,7 @@ class AudioPlayBack(Extension):
 
         logger.info(f"executing command /play")
 
-        current_chapter, chapter_array, bookFinished, isPodcast = c.bookshelf_get_current_chapter(book)
+        current_chapter, chapter_array, bookFinished, isPodcast = c.bookshelf_get_current_chapter(item_id=book)
 
         if bookFinished:
             await ctx.send(content="Book finished, please mark it as unfinished in UI. Aborting.", ephemeral=True)
@@ -212,7 +212,8 @@ class AudioPlayBack(Extension):
                 await ctx.send(content="Item type is not book, chapter skip disabled", ephemeral=True)
                 return
 
-            logger.info(f"executing command /next-chapter")
+            logger.info(f"executing command /next-c"
+                        f"hapter")
             CurrentChapter = self.currentChapter
             ChapterArray = self.chapterArray
             bookFinished = self.bookFinished

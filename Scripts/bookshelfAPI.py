@@ -7,7 +7,6 @@ import traceback
 import csv
 import logging
 from dotenv import load_dotenv
-
 import requests
 
 # Logger Config
@@ -16,18 +15,7 @@ logger = logging.getLogger("bot")
 # DEV ENVIRON VARS
 load_dotenv()
 
-# Global Vars
 keep_active = False
-
-# Bookshelf Server IP
-bookshelfURL = os.environ.get("bookshelfURL")
-defaultAPIURL = bookshelfURL + "/api"
-
-# Bookshelf Token
-# Use Token at the end of the url with query i.e. URL/api/PLACE?token=TOKEN
-
-bookshelfToken = os.environ.get("bookshelfToken")
-tokenInsert = "?token=" + bookshelfToken
 
 
 # Simple Success Message
@@ -35,8 +23,40 @@ def successMSG(endpoint, status):
     logger.info(f'Successfully Reached {endpoint} with Status {status}')
 
 
+def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET=False,
+                   POST=False, PATCH=False, params=None):
+    bookshelfURL = os.environ.get("bookshelfURL")
+    API_URL = bookshelfURL + "/api"
+    bookshelfToken = os.environ.get("bookshelfToken")
+    tokenInsert = "?token=" + bookshelfToken
+    if params is not None:
+        additional_params = params
+    else:
+        additional_params = ''
+
+    if Token:
+        link = f'{API_URL}{endpoint}{tokenInsert}{additional_params}'
+    else:
+        link = f'{API_URL}{endpoint}'
+
+    if GET:
+        r = requests.get(link)
+        return r
+    elif POST:
+        if Data is not None and Headers is not None:
+            r = requests.post(link, headers=Headers, json=Data)
+            return r
+        else:
+            r = requests.post(link)
+            return r
+    else:
+        logger.warning('Must include GET, POST or PATCH in arguments')
+        raise Exception
+
+
 # Test initial Connection to Bookshelf Server
 def bookshelf_test_connection():
+    bookshelfURL = os.environ.get("bookshelfURL")
     logger.info("Testing Server Connection")
     logger.info(f"Server URL  {bookshelfURL}")
     connected = False
@@ -75,6 +95,7 @@ def bookshelf_test_connection():
 def bookshelf_user_login(username='', password='', token=''):
     endpoint = "/login"
     token_endpoint = f"/api/authorize?token={token}"
+    bookshelfURL = os.environ.get("bookshelfURL")
     url = f"{bookshelfURL}{endpoint}"
     headers = {'Content-Type': 'application/json'}
     d = {"username": username, "password": str(password)}
@@ -111,7 +132,8 @@ def bookshelf_auth_test():
     logger.info("\nProviding Auth Token to Server\n")
     try:
         endpoint = "/me"
-        r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
+        r = bookshelf_conn(GET=True, endpoint=endpoint)
+        print(r)
         if r.status_code == 200:
             # Place data in JSON Format
             data = r.json()
@@ -127,7 +149,7 @@ def bookshelf_auth_test():
             print("Error: Could not connect to /me endpoint \n")
             print("Quitting!")
             time.sleep(0.5)
-            exit()
+            sys.exit(1)
 
     except requests.RequestException as e:
         logger.warning("Could not establish connection: ", e)
@@ -137,9 +159,11 @@ def bookshelf_auth_test():
 
 
 def bookshelf_listening_stats():
+    bookshelfToken = os.environ.get("bookshelfToken")
     endpoint = "/me/listening-stats"
     formatted_sessions = []
-    r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
+
+    r = bookshelf_conn(GET=True, endpoint=endpoint)
 
     if r.status_code == 200:
         data = r.json()
@@ -228,7 +252,7 @@ def bookshelf_listening_stats():
 def bookshelf_libraries():
     endpoint = "/libraries"
     library_data = {}
-    r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
+    r = bookshelf_conn(GET=True, endpoint=endpoint)
     if r.status_code == 200:
         data = r.json()
         successMSG(endpoint, r.status_code)
@@ -244,7 +268,7 @@ def bookshelf_libraries():
 
 def bookshelf_item_progress(item_id):
     endpoint = f"/me/progress/{item_id}"
-    r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
+    r = bookshelf_conn(GET=True, endpoint=endpoint)
     if r.status_code == 200:
         data = r.json()
         # successMSG(endpoint, r.status_code)
@@ -262,7 +286,7 @@ def bookshelf_item_progress(item_id):
 
         # Get Media Title
         secondary_url = f"/items/{item_id}"
-        r = requests.get(f'{defaultAPIURL}{secondary_url}{tokenInsert}')
+        r = bookshelf_conn(GET=True, endpoint=secondary_url)
         data = r.json()
         title = data['media']['metadata']['title']
 
@@ -308,7 +332,7 @@ def bookshelf_title_search(display_title: str, only_audio=True):
             try:
                 limit = 6
                 endpoint = f"/libraries/{library_iD}/search?q={display_title}&limit={limit}"
-                r = requests.get(f'{defaultAPIURL}{endpoint}&token={bookshelfToken}')
+                r = bookshelf_conn(GET=True, endpoint=endpoint)
                 print(f"\nstatus code: {r.status_code}")
                 if r.status_code == 200:
                     data = r.json()
@@ -335,7 +359,7 @@ def bookshelf_title_search(display_title: str, only_audio=True):
 def bookshelf_get_users(name):
     endpoint = "/users"
 
-    r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
+    r = bookshelf_conn(GET=True, endpoint=endpoint)
     if r.status_code == 200:
         data = r.json()
 
@@ -359,12 +383,11 @@ def bookshelf_create_user(username: str, password, user_type: str, email=None):
     user_type = user_type.lower()
     if user_type in ["guest", "user"]:
         endpoint = "/users"
-        link = f'{defaultAPIURL}{endpoint}{tokenInsert}'
         headers = {'Content-Type': 'application/json'}
         user_params = {'username': username, 'password': str(password), 'type': user_type, 'email': email}
 
         # Send Post request to generate user
-        r = requests.post(url=link, json=user_params, headers=headers)
+        r = bookshelf_conn(POST=True, endpoint=endpoint, Headers=headers, Data=user_params)
         if r.status_code == 200:
             data = r.json()
             print(data)
@@ -378,11 +401,12 @@ def bookshelf_create_user(username: str, password, user_type: str, email=None):
 
 
 def bookshelf_library_csv(library_id: str, file_name='books.csv'):
+    bookshelfToken = os.getenv('bookshelfToken')
+    endpoint = f'/libraries/{library_id}'
     headers = {'Authorization': f'Bearer {bookshelfToken}'}
+    params = '?sort=media.metadata.authorName'
 
-    library_items_api_url = defaultAPIURL + '/libraries/' + library_id + '/items?sort=media.metadata.authorName'
-
-    response = requests.get(library_items_api_url, headers=headers)
+    response = bookshelf_conn(GET=True, endpoint=endpoint, Headers=headers, params=params)
     if response.status_code == 200:
 
         data = response.json()['results']
@@ -404,16 +428,23 @@ def bookshelf_library_csv(library_id: str, file_name='books.csv'):
 
 
 def bookshelf_cover_image(item_id: str):
+    bookshelfURL = os.environ.get("bookshelfURL")
+    defaultAPIURL = bookshelfURL + '/api'
+    bookshelfToken = os.environ.get("bookshelfToken")
+    tokenInsert = "?token=" + bookshelfToken
+
     # Generates Cover Link
     endpoint = f"/items/{item_id}/cover"
     link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
+
     return link
 
 
 def bookshelf_all_library_items(library_id):
     found_titles = []
     endpoint = f"/libraries/{library_id}/items"
-    r = requests.get(f"{defaultAPIURL}{endpoint}{tokenInsert}&sort=media.metadata.title")
+    params = '&sort=media.metadata.title'
+    r = bookshelf_conn(GET=True, endpoint=endpoint, params=params)
     if r.status_code == 200:
         data = r.json()
 
@@ -432,9 +463,8 @@ def bookshelf_all_library_items(library_id):
 # NOT CURRENTLY IN USE
 def bookshelf_list_backup():
     endpoint = "/backups"
-    link = f"{defaultAPIURL}{endpoint}{tokenInsert}"
     backup_IDs = []
-    r = requests.post(link)
+    r = bookshelf_conn(POST=True, endpoint=endpoint)
     if r.status_code == 200:
         data = r.json()
         for item in data['backups']:
@@ -445,11 +475,11 @@ def bookshelf_list_backup():
 
 def bookshelf_get_current_chapter(item_id: str, current_time=0):
     try:
-        endpoint = f"/items/{item_id}"
         progress_endpoint = f"/me/progress/{item_id}"
+        endpoint = f"/items/{item_id}"
         book_finished = False
 
-        progress_r = requests.get(f'{defaultAPIURL}{progress_endpoint}{tokenInsert}')
+        progress_r = bookshelf_conn(GET=True, endpoint=progress_endpoint)
 
         if progress_r.status_code == 200:
             progress_data = progress_r.json()
@@ -459,7 +489,7 @@ def bookshelf_get_current_chapter(item_id: str, current_time=0):
             else:
                 book_finished = False
 
-        r = requests.get(f'{defaultAPIURL}{endpoint}{tokenInsert}')
+        r = bookshelf_conn(GET=True, endpoint=endpoint)
 
         if r.status_code == 200:
             # Place data in JSON Format
@@ -499,10 +529,14 @@ def bookshelf_get_current_chapter(item_id: str, current_time=0):
 def bookshelf_audio_obj(item_id: str):
     endpoint = f"/items/{item_id}/play"
     params = "&forceDirectPlay=true&mediaPlayer=discord"
-    audio_link = f"{defaultAPIURL}{endpoint}{tokenInsert}{params}"
+
+    bookshelfURL = os.environ.get("bookshelfURL")
+    defaultAPIURL = bookshelfURL + "/api"
+    bookshelfToken = os.environ.get("bookshelfToken")
+    tokenInsert = "?token=" + bookshelfToken
 
     # Send request to play
-    audio_obj = requests.post(audio_link)
+    audio_obj = bookshelf_conn(POST=True, params=params, endpoint=endpoint)
 
     data = audio_obj.json()
 
@@ -541,7 +575,7 @@ def bookshelf_session_update(session_id: str, item_id: str, current_time: float,
         try:
 
             # Check if session is open
-            r_session_info = requests.get(f"{defaultAPIURL}{get_session_endpoint}{tokenInsert}")
+            r_session_info = bookshelf_conn(GET=True, endpoint=get_session_endpoint)
 
             if r_session_info.status_code == 200:
                 # Format to JSON
@@ -574,14 +608,16 @@ def bookshelf_session_update(session_id: str, item_id: str, current_time: float,
                     finished_book = True
 
             if sessionOK:
+                headers = {'Content-Type': 'application/json'}
                 session_update = {
                     'currentTime': float(updatedTime),  # NOQA
                     'timeListened': float(current_time),
                     'duration': float(duration)  # NOQA
                 }
-                r_session_update = requests.post(f"{defaultAPIURL}{sync_endpoint}{tokenInsert}", data=session_update)
+                r_session_update = bookshelf_conn(POST=True, endpoint=sync_endpoint,
+                                                  Data=session_update, Headers=headers)
                 if r_session_update.status_code == 200:
-                    print(f"Successfully synced session to updated time: {updatedTime}")
+                    logger.info(f'session sync successful. {updatedTime}')
                     return updatedTime, duration, serverCurrentTime
             else:
                 print(f"Session sync failed, sync status: {sessionOK}")
@@ -598,7 +634,7 @@ def bookshelf_session_update(session_id: str, item_id: str, current_time: float,
 def bookshelf_close_session(session_id: str):
     endpoint = f"/session/{session_id}/close"
     try:
-        r = requests.post(f'{bookshelfURL}{endpoint}{tokenInsert}')
+        r = bookshelf_conn(endpoint=endpoint, POST=True)
         if r.status_code == 200:
             print(f'Session {session_id} closed successfully')
         else:
@@ -617,7 +653,9 @@ def bookshelf_close_session(session_id: str):
 def bookshelf_close_all_sessions(items: int):
     all_sessions_endpoint = f"/me/listening-sessions"
 
-    r = requests.get(f"{defaultAPIURL}{all_sessions_endpoint}{tokenInsert}&itemsPerPage={items}")
+    params = f"&itemsPerPage={items}"
+
+    r = bookshelf_conn(POST=True, endpoint=all_sessions_endpoint, params=params)
     if r.status_code == 200:
         data = r.json()
 
@@ -638,8 +676,8 @@ def bookshelf_close_all_sessions(items: int):
             for session in session_array:
                 sessionId = session.get('id')
                 close_session = f"/session/{sessionId}/close"
-                url = f"{defaultAPIURL}{close_session}{tokenInsert}"
-                r = requests.post(url)
+
+                r = bookshelf_conn(endpoint=close_session, POST=True)
                 if r.status_code == 200:
                     closedSessionCount += 1
                     print(f"Successfully Closed Session with ID: {sessionId}")
@@ -654,4 +692,3 @@ def bookshelf_close_all_sessions(items: int):
 # Test bookshelf api functions below
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    bookshelf_user_login('streamer', 'Changeme123')
