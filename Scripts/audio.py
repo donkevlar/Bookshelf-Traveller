@@ -1,4 +1,5 @@
 from interactions import *
+from interactions.api.events import BaseVoiceEvent, VoiceUserLeave
 from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
 import settings as s
@@ -13,6 +14,9 @@ logger = logging.getLogger("bot")
 
 # Update Frequency for session sync
 updateFrequency = s.UPDATES
+
+
+# Voice Status Check
 
 # Custom check for ownership
 async def ownership_check(ctx):  # NOQA
@@ -130,20 +134,23 @@ class AudioPlayBack(Extension):
                 # Start Session Updates
                 self.session_update.start()
 
+                # Start Voice Check
+
                 await ctx.send(f"Playing: {self.bookTitle}, Chapter: {self.currentChapterTitle}", ephemeral=True)
                 logger.info(f"Beginning audio stream")
+                await self.client.change_presence(activity=Activity.create(name=f"{self.bookTitle}",
+                                                                           type=ActivityType.LISTENING))
 
                 # Start audio playback
                 await ctx.voice_state.play_no_wait(audio)
 
             except Exception as e:
-                # Stop Session Update Tasks
+                # Stop Any Associated Tasks
                 self.session_update.stop()
                 # Close ABS session
                 c.bookshelf_close_session(sessionID)  # NOQA
                 # Cleanup discord interactions
                 await ctx.author.voice.channel.disconnect()
-                await ctx.author.channel.send(f'Issue with playback: {e}')
                 audio.cleanup()  # NOQA
 
                 print(e)
@@ -159,6 +166,7 @@ class AudioPlayBack(Extension):
 
                 await ctx.voice_state.stop()
                 await ctx.author.voice.channel.disconnect()
+                await self.client.change_presence(activity=None)
                 await ctx.author.channel.send(f'Issue with playback: {e}')
                 logger.warning(f"Error occured during execution of /play : \n {e}")
                 print(e)
@@ -294,11 +302,13 @@ class AudioPlayBack(Extension):
             logger.info(f"executing command /stop")
             await ctx.send(content="Disconnected from audio channel and stopping playback.", ephemeral=True)
             await ctx.author.voice.channel.disconnect()
+            await self.client.change_presence(activity=None)
 
             if self.session_update.running:
                 self.session_update.stop()
                 c.bookshelf_close_session(self.sessionID)
                 c.bookshelf_close_all_sessions(10)
+
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
             c.bookshelf_close_all_sessions(10)
