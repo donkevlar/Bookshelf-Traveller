@@ -54,6 +54,24 @@ docker run -d \
 -e bookshelfURL="http://myurl.domain.com" \
 donkevlar/bookshelf-traveller:latest
 ```
+
+or using docker compose:
+
+```
+version: '3.8'  # Specify the version of the Compose file format
+
+services:
+  bookshelf-traveller:
+    image: donkevlar/bookshelf-traveller:latest
+    container_name: bookshelf-traveller
+    environment:
+      - DISCORD_TOKEN=INSERT_TOKEN
+      - bookshelfToken=INSERT_TOKEN
+      - bookshelfURL=http://myurl.domain.com
+    restart: always  # Optional: ensures the container restarts on failure or system reboot
+    detach: true    # Optional: runs the container in detached mode
+```
+
 ### Python Script
 Requirements: Python 3.11 or above.
 
