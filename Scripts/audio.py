@@ -57,7 +57,6 @@ class AudioPlayBack(Extension):
         self.isPodcast = False
         self.updateFreqMulti = updateFrequency * self.playbackSpeed
 
-    # TODO Create Book end functionality in task to verify and stop playback.
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self, ctx):
         logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
@@ -74,7 +73,6 @@ class AudioPlayBack(Extension):
 
         if finished_book:
             await ctx.voice_state.stop()
-            self.context_voice_channel.stop()
             logger.info("Book finished, stopping audio!")
 
         if not isPodcast:
