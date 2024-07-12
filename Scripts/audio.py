@@ -50,17 +50,19 @@ class AudioPlayBack(Extension):
         self.nextTime = None
         # Audio VARS
         self.audioObj = AudioVolume
+        self.context_voice_channel = None
         self.volume = 0.0
         self.placeholder = None
         self.playbackSpeed = 1.0
         self.isPodcast = False
         self.updateFreqMulti = updateFrequency * self.playbackSpeed
 
+    # TODO Create Book end functionality in task to verify and stop playback.
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
-    async def session_update(self):
+    async def session_update(self, ctx):
         logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
 
-        updatedTime, duration, serverCurrentTime = c.bookshelf_session_update(item_id=self.bookItemID,
+        updatedTime, duration, serverCurrentTime, finished_book = c.bookshelf_session_update(item_id=self.bookItemID,
                                                                               session_id=self.sessionID,
                                                                               current_time=updateFrequency,
                                                                               next_time=self.nextTime)  # NOQA
@@ -69,6 +71,12 @@ class AudioPlayBack(Extension):
 
         current_chapter, chapter_array, bookFinished, isPodcast = c.bookshelf_get_current_chapter(self.bookItemID,
                                                                                                   updatedTime)
+
+        if finished_book:
+            await ctx.voice_state.stop()
+            self.context_voice_channel.stop()
+            logger.info("Book finished, stopping audio!")
+
         if not isPodcast:
             logger.info("Current Chapter Sync: " + current_chapter['title'])
             self.currentChapter = current_chapter
@@ -122,6 +130,7 @@ class AudioPlayBack(Extension):
         self.currentChapterTitle = current_chapter.get('title')
         self.chapterArray = chapter_array
         self.bookFinished = bookFinished
+        self.context_voice_channel = ctx.voice_state
 
         # check if bot currently connected to voice
         if not ctx.voice_state:
