@@ -1,6 +1,5 @@
 import os
 from interactions import *
-from interactions.api.events import *
 import bookshelfAPI as c
 import logging
 import sqlite3
