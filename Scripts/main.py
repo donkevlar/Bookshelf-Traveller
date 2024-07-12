@@ -436,13 +436,13 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 # Main Loop
 if __name__ == '__main__':
     # Load Audio Extension
-    logger.info("Audio module loaded!")
-    bot.load_extension("audio")
+    # logger.info("Audio module loaded!")
+    # bot.load_extension("audio")
     # Load Admin related extensions
     if ADMIN and not MULTI_USER:
         logger.info("Admin module loaded!")
         bot.load_extension("administration")
-    # Load multi user extension
+    # Load multi-user extension
     if MULTI_USER:
         logger.info("MULTI_USER module loaded!")
         bot.load_extension("multi_user")
