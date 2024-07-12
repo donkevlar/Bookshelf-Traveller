@@ -129,7 +129,7 @@ def bookshelf_user_login(username='', password='', token=''):
 
 # Authenticate the user with bookshelf server provided
 def bookshelf_auth_test():
-    logger.info("\nProviding Auth Token to Server\n")
+    logger.info("Providing Auth Token to Server")
     try:
         endpoint = "/me"
         r = bookshelf_conn(GET=True, endpoint=endpoint)
