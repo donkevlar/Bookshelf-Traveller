@@ -1,4 +1,3 @@
-import sys
 import traceback
 import requests
 import os
@@ -8,6 +7,7 @@ from interactions import *
 from interactions.ext.paginators import Paginator
 from interactions.api.events import *
 from datetime import datetime
+import sys
 import pytz
 import time
 from dotenv import load_dotenv
@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 import bookshelfAPI as c
 
 # Pulls from bookshelf file
-load_dotenv()
+load_dotenv(override=True)
 
 # Experimental Imports
 # enables experimental features and modules
@@ -25,7 +25,8 @@ load_dotenv()
 # Global Vars
 
 # Multi-user functionality, will remove token from admin and all admin functions
-MULTI_USER = os.getenv("MULTI_USER", True)
+MULTI_USER = os.environ.get('MULTI_USER', True)
+MULTI_USER = eval(MULTI_USER)
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
@@ -72,7 +73,8 @@ logger.info(f"Logging user in and verifying role.")
 
 # Quit if user is locked
 if user_locked:
-    exit("User locked from logging in, please unlock via web gui.")
+    logger.warning("User locked from logging in, please unlock via web gui.")
+    sys.exit("User locked from logging in, please unlock via web gui.")
 
 # CHeck if ABS user is an admin
 ADMIN = False
@@ -434,12 +436,17 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 # Main Loop
 if __name__ == '__main__':
     # Load Audio Extension
+    logger.info("Audio module loaded!")
     bot.load_extension("audio")
     # Load Admin related extensions
     if ADMIN and not MULTI_USER:
+        logger.info("Admin module loaded!")
         bot.load_extension("administration")
     # Load multi user extension
-    elif MULTI_USER:
+    if MULTI_USER:
+        logger.info("MULTI_USER module loaded!")
         bot.load_extension("multi_user")
+    else:
+        logger.warning("MULTI_USER module disabled!")
     # Start Bot
     bot.start(settings.DISCORD_API_SECRET)

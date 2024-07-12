@@ -7,8 +7,13 @@ import sqlite3
 
 logger = logging.getLogger("bot")
 
+# Create new relative path
+db_path = 'db/user_info.db'
+os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
 # Initialize sqlite3 connection
-conn = sqlite3.connect('user_info.db')
+
+conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 
 
