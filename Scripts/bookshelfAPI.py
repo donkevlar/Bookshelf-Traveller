@@ -24,7 +24,7 @@ def successMSG(endpoint, status):
 
 
 def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET=False,
-                   POST=False, PATCH=False, params=None):
+                   POST=False, params=None):
     bookshelfURL = os.environ.get("bookshelfURL")
     API_URL = bookshelfURL + "/api"
     bookshelfToken = os.environ.get("bookshelfToken")
@@ -315,7 +315,7 @@ def bookshelf_title_search(display_title: str, only_audio=True):
         if only_audio and audiobooks_only:
             valid_libraries.append({"id": library_id, "name": name})
             valid_library_count += 1
-            print(f"\nValid Libraries Found: {valid_library_count}\n")
+            print(f"\nValid Libraries Found: {valid_library_count} | Name: {name}\n")
         # Parse for the library that is anything
         elif only_audio is False and audiobooks_only is False:
             valid_libraries.append({"id": library_id, "name": name})
@@ -330,9 +330,10 @@ def bookshelf_title_search(display_title: str, only_audio=True):
             print(f"Beginning to search libraries: {lib_id.get('name')} | {library_iD}\n")
             # Search for the title name using endpoint
             try:
-                limit = 6
-                endpoint = f"/libraries/{library_iD}/search?q={display_title}&limit={limit}"
-                r = bookshelf_conn(GET=True, endpoint=endpoint)
+                limit = 10
+                endpoint = f"/libraries/{library_iD}/search"
+                params = f"&q={display_title}&limit={limit}"
+                r = bookshelf_conn(endpoint=endpoint, GET=True, params=params)
                 print(f"\nstatus code: {r.status_code}")
                 if r.status_code == 200:
                     data = r.json()
@@ -618,7 +619,7 @@ def bookshelf_session_update(session_id: str, item_id: str, current_time: float,
                                                   Data=session_update, Headers=headers)
                 if r_session_update.status_code == 200:
                     logger.info(f'session sync successful. {updatedTime}')
-                    return updatedTime, duration, serverCurrentTime
+                    return updatedTime, duration, serverCurrentTime, finished_book
             else:
                 print(f"Session sync failed, sync status: {sessionOK}")
 
@@ -692,3 +693,4 @@ def bookshelf_close_all_sessions(items: int):
 # Test bookshelf api functions below
 if __name__ == '__main__':
     print("TESTING COMMENCES")
+    bookshelf_title_search("dreadgod")
