@@ -34,9 +34,6 @@ EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
 # Logger Config
 logger = logging.getLogger("bot")
 
-# alert monitor, can be changed with command: alerts
-monitor_enabled = os.getenv("MONITOR_ALERTS", False)
-
 # Alert interval for MONITOR_ALERTS Task, in minutes, default=60
 ALERT_INT = os.getenv("ALERT_INT", 60)
 
