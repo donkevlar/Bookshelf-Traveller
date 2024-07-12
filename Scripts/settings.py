@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Version Info
-versionNumber = 'Beta_Audio_1.0.5'
+versionNumber = 'Beta_No_Audio_1.0.6'
 
 COMMAND_COUNT = 0
 
