@@ -114,7 +114,7 @@ class MultiUser(Extension):
         pass
 
     @check(ownership_check)
-    @slash_command(name="login", description="Login into ABS", dm_permission=False)
+    @slash_command(name="login", description="Login into ABS", dm_permission=True)
     async def user_login(self, ctx):
         if ctx.voice_state:
             return await ctx.send("Cannot perform login during playback, please use the /stop command and try again.",
