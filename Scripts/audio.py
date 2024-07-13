@@ -58,7 +58,7 @@ class AudioPlayBack(Extension):
         self.updateFreqMulti = updateFrequency * self.playbackSpeed
 
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
-    async def session_update(self, ctx):
+    async def session_update(self):
         logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
 
         updatedTime, duration, serverCurrentTime, finished_book = c.bookshelf_session_update(item_id=self.bookItemID,
@@ -70,10 +70,6 @@ class AudioPlayBack(Extension):
 
         current_chapter, chapter_array, bookFinished, isPodcast = c.bookshelf_get_current_chapter(self.bookItemID,
                                                                                                   updatedTime)
-
-        if finished_book:
-            await ctx.voice_state.stop()
-            logger.info("Book finished, stopping audio!")
 
         if not isPodcast:
             logger.info("Current Chapter Sync: " + current_chapter['title'])
@@ -106,6 +102,9 @@ class AudioPlayBack(Extension):
         # Get Bookshelf Playback URI, Starts new session
         audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(book)
 
+        # Get Book Cover URL
+        cover_image = c.bookshelf_cover_image(book)
+
         # Audio Object Arguments
         audio = AudioVolume(audio_obj)
         audio.buffer_seconds = 10
@@ -130,6 +129,21 @@ class AudioPlayBack(Extension):
         self.bookFinished = bookFinished
         self.context_voice_channel = ctx.voice_state
 
+        pause_button = Button(
+            style=ButtonStyle.SECONDARY,
+            label="Pause",
+            custom_id='pause_audio_button'
+        )
+
+        # Create embedded message
+        embed_message = Embed(
+            title=f"{self.bookTitle}",
+            description=f"Currently playing {self.bookTitle}",
+            color=ctx.author.accent_color,
+        )
+        embed_message.add_field(name='Chapter', value=self.currentChapterTitle)
+        embed_message.add_image(cover_image)
+
         # check if bot currently connected to voice
         if not ctx.voice_state:
 
@@ -143,7 +157,7 @@ class AudioPlayBack(Extension):
 
                 # Start Voice Check
 
-                await ctx.send(f"Playing: {self.bookTitle}, Chapter: {self.currentChapterTitle}", ephemeral=True)
+                await ctx.send(embed=embed_message, ephemeral=True, components=pause_button)
                 logger.info(f"Beginning audio stream")
                 await self.client.change_presence(activity=Activity.create(name=f"{self.bookTitle}",
                                                                            type=ActivityType.LISTENING))
@@ -379,6 +393,33 @@ class AudioPlayBack(Extension):
             {"name": "next", "value": "next"}, {"name": "previous", "value": "previous"}
         ]
         await ctx.send(choices=choices)
+
+    # Component Callbacks
+    @component_callback('pause_audio_button')
+    async def callback_pause_button(self, ctx: ComponentContext):
+        logger.info('Pausing Playback!')
+        ctx.voice_state.channel.voice_state.pause()
+        self.session_update.stop()
+        play_button = Button(
+            style=ButtonStyle.PRIMARY,
+            label="Play",
+            custom_id='play_audio_button'
+        )
+        await ctx.edit_origin(content="Play", components=play_button)
+
+    @component_callback('play_audio_button')
+    async def callback_play_button(self, ctx: ComponentContext):
+        logger.info('Resuming Playback!')
+        ctx.voice_state.channel.voice_state.resume()
+        self.session_update.start()
+
+        pause_button = Button(
+            style=ButtonStyle.SECONDARY,
+            label="Pause",
+            custom_id='pause_audio_button'
+        )
+
+        await ctx.edit_origin(components=pause_button)
 
     # ----------------------------
     # Other non discord related functions
