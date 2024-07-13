@@ -155,7 +155,7 @@ def bookshelf_auth_test():
         logger.warning("Could not establish connection: ", e)
 
     finally:
-        logger.info("Cleaning up, authentication\n")
+        logger.info("Cleaning up, authentication")
 
 
 def bookshelf_listening_stats():

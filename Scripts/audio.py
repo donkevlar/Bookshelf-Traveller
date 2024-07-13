@@ -56,6 +56,9 @@ class AudioPlayBack(Extension):
         self.playbackSpeed = 1.0
         self.isPodcast = False
         self.updateFreqMulti = updateFrequency * self.playbackSpeed
+        # User Vars
+        self.username = ''
+        self.user_type = ''
 
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
@@ -105,6 +108,9 @@ class AudioPlayBack(Extension):
         # Get Book Cover URL
         cover_image = c.bookshelf_cover_image(book)
 
+        # Retrieve current user information
+        username, user_type, user_locked = c.bookshelf_auth_test()
+
         # Audio Object Arguments
         audio = AudioVolume(audio_obj)
         audio.buffer_seconds = 10
@@ -113,6 +119,10 @@ class AudioPlayBack(Extension):
         audio.ffmpeg_before_args = f"-ss {currentTime}"
 
         # Class VARS
+
+        # ABS User Vars
+        self.username = username
+        self.user_type = user_type
 
         # Session Vars
         self.sessionID = sessionID
@@ -141,7 +151,14 @@ class AudioPlayBack(Extension):
             description=f"Currently playing {self.bookTitle}",
             color=ctx.author.accent_color,
         )
+        # Chapter Info
         embed_message.add_field(name='Chapter', value=self.currentChapterTitle)
+
+        # Add ABS user info
+        user_info = f"Username: {self.username}\nUser Type: {self.user_type}"
+        embed_message.add_field(name='ABS Information', value=user_info)
+
+        # Add media image (If using HTTPS)
         embed_message.add_image(cover_image)
 
         # check if bot currently connected to voice
@@ -204,7 +221,7 @@ class AudioPlayBack(Extension):
     # Pause audio, stops tasks, keeps session active.
     @slash_command(name="pause", description="pause audio", dm_permission=False)
     async def pause_audio(self, ctx):
-        if ctx.voice_state and ctx.author.voice:
+        if ctx.voice_state:
             await ctx.send("Pausing Audio", ephemeral=True)
             logger.info(f"executing command /pause")
             ctx.voice_state.pause()
@@ -218,7 +235,7 @@ class AudioPlayBack(Extension):
     # Resume Audio, restarts tasks, session is kept open
     @slash_command(name="resume", description="resume audio", dm_permission=False)
     async def resume_audio(self, ctx):
-        if ctx.voice_state and ctx.author.voice:
+        if ctx.voice_state:
             if self.sessionID != "":
                 await ctx.send("Resuming Audio", ephemeral=True)
                 logger.info(f"executing command /resume")
