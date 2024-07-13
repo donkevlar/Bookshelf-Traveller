@@ -173,6 +173,7 @@ class AudioPlayBack(Extension):
                 self.session_update.start()
 
                 # Start Voice Check
+                await ctx.defer(ephemeral=True)
 
                 await ctx.send(embed=embed_message, ephemeral=True, components=pause_button)
                 logger.info(f"Beginning audio stream")
