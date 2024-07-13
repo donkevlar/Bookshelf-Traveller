@@ -15,6 +15,48 @@ logger = logging.getLogger("bot")
 # Update Frequency for session sync
 updateFrequency = s.UPDATES
 
+# Button Vars
+component_rows_initial: list[ActionRow] = spread_to_rows(
+            Button(
+                style=ButtonStyle.SECONDARY,
+                label="Pause",
+                custom_id='pause_audio_button'
+            ),
+            Button(
+                style=ButtonStyle.RED,
+                label="Stop",
+                custom_id='stop_audio_button'
+            )
+        )
+
+component_rows_paused: list[ActionRow] = spread_to_rows(
+            Button(
+                style=ButtonStyle.PRIMARY,
+                label='Play',
+                custom_id='play_audio_button'
+            ),
+            Button(
+                style=ButtonStyle.RED,
+                label='Stop',
+                custom_id='stop_audio_button'
+            )
+)
+
+component_rows_stopped: list[ActionRow] = spread_to_rows(
+            Button(
+                style=ButtonStyle.PRIMARY,
+                label='Play',
+                custom_id='play_audio_button',
+                disabled=True
+            ),
+            Button(
+                style=ButtonStyle.RED,
+                label='Stop',
+                custom_id='stop_audio_button',
+                disabled=True
+            )
+)
+
 
 # Voice Status Check
 
@@ -56,6 +98,7 @@ class AudioPlayBack(Extension):
         self.playbackSpeed = 1.0
         self.isPodcast = False
         self.updateFreqMulti = updateFrequency * self.playbackSpeed
+        self.play_state = 'stopped'
         # User Vars
         self.username = ''
         self.user_type = ''
@@ -139,12 +182,6 @@ class AudioPlayBack(Extension):
         self.bookFinished = bookFinished
         self.context_voice_channel = ctx.voice_state
 
-        pause_button = Button(
-            style=ButtonStyle.SECONDARY,
-            label="Pause",
-            custom_id='pause_audio_button'
-        )
-
         # Create embedded message
         embed_message = Embed(
             title=f"{self.bookTitle}",
@@ -175,10 +212,11 @@ class AudioPlayBack(Extension):
                 # Start Voice Check
                 await ctx.defer(ephemeral=True)
 
-                await ctx.send(embed=embed_message, ephemeral=True, components=pause_button)
+                await ctx.send(embed=embed_message, ephemeral=True, components=component_rows_initial)
                 logger.info(f"Beginning audio stream")
                 await self.client.change_presence(activity=Activity.create(name=f"{self.bookTitle}",
                                                                            type=ActivityType.LISTENING))
+                self.play_state = 'playing'
 
                 # Start audio playback
                 await ctx.voice_state.play_no_wait(audio)
@@ -227,6 +265,7 @@ class AudioPlayBack(Extension):
             logger.info(f"executing command /pause")
             ctx.voice_state.pause()
             logger.info("Pausing Audio")
+            self.play_state = 'paused'
             # Stop Any Tasks Running
             if self.session_update.running:
                 self.session_update.stop()
@@ -244,6 +283,7 @@ class AudioPlayBack(Extension):
                 ctx.voice_state.resume()
                 logger.info("Resuming Audio")
                 # Start session
+                self.play_state = 'playing'
                 self.session_update.start()
             else:
                 await ctx.send(content="Bot or author isn't connected to channel, aborting.",
@@ -345,6 +385,7 @@ class AudioPlayBack(Extension):
 
             if self.session_update.running:
                 self.session_update.stop()
+                self.play_state = 'stopped'
                 c.bookshelf_close_session(self.sessionID)
                 c.bookshelf_close_all_sessions(10)
 
@@ -419,12 +460,7 @@ class AudioPlayBack(Extension):
             logger.info('Pausing Playback!')
             ctx.voice_state.channel.voice_state.pause()
             self.session_update.stop()
-            play_button = Button(
-                style=ButtonStyle.PRIMARY,
-                label="Play",
-                custom_id='play_audio_button'
-            )
-            await ctx.edit_origin(content="Play", components=play_button)
+            await ctx.edit_origin(content="Play", components=component_rows_paused)
 
     @component_callback('play_audio_button')
     async def callback_play_button(self, ctx: ComponentContext):
@@ -433,13 +469,17 @@ class AudioPlayBack(Extension):
             ctx.voice_state.channel.voice_state.resume()
             self.session_update.start()
 
-            pause_button = Button(
-                style=ButtonStyle.SECONDARY,
-                label="Pause",
-                custom_id='pause_audio_button'
-            )
+            await ctx.edit_origin(components=component_rows_initial)
 
-            await ctx.edit_origin(components=pause_button)
+    @component_callback('stop_audio_button')
+    async def callback_stop_button(self, ctx: ComponentContext):
+        if ctx.voice_state:
+            logger.info('Stopping Playback!')
+            await ctx.voice_state.channel.voice_state.stop()
+            self.session_update.stop()
+            await ctx.edit_origin()
+            await ctx.delete()
+            await ctx.voice_state.channel.disconnect()
 
     # ----------------------------
     # Other non discord related functions
