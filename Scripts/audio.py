@@ -414,29 +414,31 @@ class AudioPlayBack(Extension):
     # Component Callbacks
     @component_callback('pause_audio_button')
     async def callback_pause_button(self, ctx: ComponentContext):
-        logger.info('Pausing Playback!')
-        ctx.voice_state.channel.voice_state.pause()
-        self.session_update.stop()
-        play_button = Button(
-            style=ButtonStyle.PRIMARY,
-            label="Play",
-            custom_id='play_audio_button'
-        )
-        await ctx.edit_origin(content="Play", components=play_button)
+        if ctx.voice_state:
+            logger.info('Pausing Playback!')
+            ctx.voice_state.channel.voice_state.pause()
+            self.session_update.stop()
+            play_button = Button(
+                style=ButtonStyle.PRIMARY,
+                label="Play",
+                custom_id='play_audio_button'
+            )
+            await ctx.edit_origin(content="Play", components=play_button)
 
     @component_callback('play_audio_button')
     async def callback_play_button(self, ctx: ComponentContext):
-        logger.info('Resuming Playback!')
-        ctx.voice_state.channel.voice_state.resume()
-        self.session_update.start()
+        if ctx.voice_state:
+            logger.info('Resuming Playback!')
+            ctx.voice_state.channel.voice_state.resume()
+            self.session_update.start()
 
-        pause_button = Button(
-            style=ButtonStyle.SECONDARY,
-            label="Pause",
-            custom_id='pause_audio_button'
-        )
+            pause_button = Button(
+                style=ButtonStyle.SECONDARY,
+                label="Pause",
+                custom_id='pause_audio_button'
+            )
 
-        await ctx.edit_origin(components=pause_button)
+            await ctx.edit_origin(components=pause_button)
 
     # ----------------------------
     # Other non discord related functions
