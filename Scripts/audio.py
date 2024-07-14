@@ -16,6 +16,7 @@ logger = logging.getLogger("bot")
 updateFrequency = s.UPDATES
 
 # Button Vars
+# Initial components loaded when play is first initialized
 component_rows_initial: list[ActionRow] = spread_to_rows(
             Button(
                 style=ButtonStyle.SECONDARY,
@@ -23,37 +24,42 @@ component_rows_initial: list[ActionRow] = spread_to_rows(
                 custom_id='pause_audio_button'
             ),
             Button(
+                style=ButtonStyle.PRIMARY,
+                label="Previous Chapter",
+                custom_id='previous_chapter_button'
+            ),
+            Button(
+                style=ButtonStyle.PRIMARY,
+                label="Next Chapter",
+                custom_id='next_chapter_button'
+            ),
+            Button(
                 style=ButtonStyle.RED,
                 label="Stop",
                 custom_id='stop_audio_button'
             )
         )
-
+# Components when the audio is paused
 component_rows_paused: list[ActionRow] = spread_to_rows(
             Button(
-                style=ButtonStyle.PRIMARY,
+                style=ButtonStyle.PRIMARY.SUCCESS,
                 label='Play',
                 custom_id='play_audio_button'
+            ),
+            Button(
+                style=ButtonStyle.PRIMARY,
+                label="Previous Chapter",
+                custom_id='previous_chapter_button'
+            ),
+            Button(
+                style=ButtonStyle.PRIMARY,
+                label="Next Chapter",
+                custom_id='next_chapter_button'
             ),
             Button(
                 style=ButtonStyle.RED,
                 label='Stop',
                 custom_id='stop_audio_button'
-            )
-)
-
-component_rows_stopped: list[ActionRow] = spread_to_rows(
-            Button(
-                style=ButtonStyle.PRIMARY,
-                label='Play',
-                custom_id='play_audio_button',
-                disabled=True
-            ),
-            Button(
-                style=ButtonStyle.RED,
-                label='Stop',
-                custom_id='stop_audio_button',
-                disabled=True
             )
 )
 
@@ -79,6 +85,8 @@ async def ownership_check(ctx):  # NOQA
 
 class AudioPlayBack(Extension):
     def __init__(self, bot):
+        # ABS Vars
+        self.cover_image = ''
         # Session VARS
         self.sessionID = ''
         self.bookItemID = ''
@@ -88,6 +96,8 @@ class AudioPlayBack(Extension):
         self.currentChapter = None
         self.chapterArray = None
         self.currentChapterTitle = ''
+        self.newChapterTitle = ''
+        self.found_next_chapter = False
         self.bookFinished = False
         self.nextTime = None
         # Audio VARS
@@ -103,6 +113,8 @@ class AudioPlayBack(Extension):
         self.username = ''
         self.user_type = ''
 
+    # Tasks
+    #
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
         logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
@@ -120,6 +132,50 @@ class AudioPlayBack(Extension):
         if not isPodcast:
             logger.info("Current Chapter Sync: " + current_chapter['title'])
             self.currentChapter = current_chapter
+
+    # Random Functions
+    # Change Chapter Function
+    def move_chapter(self, option: str):
+        logger.info(f"executing command /next-chapter")
+        CurrentChapter = self.currentChapter
+        ChapterArray = self.chapterArray
+        bookFinished = self.bookFinished
+
+        if not bookFinished:
+
+            currentChapterID = int(CurrentChapter.get('id'))
+            if option == 'next':
+                nextChapterID = currentChapterID + 1
+            else:
+                nextChapterID = currentChapterID - 1
+
+            for chapter in ChapterArray:
+                chapterID = int(chapter.get('id'))
+
+                if nextChapterID == chapterID:
+                    chapterStart = float(chapter.get('start'))
+                    self.newChapterTitle = chapter.get('title')
+
+                    logger.info(f"Selected Chapter: {self.newChapterTitle}, Starting at: {chapterStart}")
+
+                    audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
+                    self.sessionID = sessionID
+                    self.currentTime = currentTime
+
+                    audio = AudioVolume(audio_obj)
+                    audio.ffmpeg_before_args = f"-ss {chapterStart}"
+                    self.audioObj = audio
+
+                    # Set next time to new chapter time
+                    self.nextTime = chapterStart
+                    self.session_update.stop()
+                    # Send manual next chapter sync
+                    c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
+                                               current_time=updateFrequency - 0.5, next_time=self.nextTime)
+                    # Reset Next Time to None before starting task again
+                    self.nextTime = None
+                    self.session_update.start()
+                    self.found_next_chapter = True
 
     # Main play command, place class variables here since this is required to play audio
     @check(ownership_check)
@@ -140,6 +196,7 @@ class AudioPlayBack(Extension):
         if bookFinished:
             await ctx.send(content="Book finished, please mark it as unfinished in UI. Aborting.", ephemeral=True)
             return
+
         if isPodcast:
             await ctx.send(content="The content you attempted to play is currently not supported, aborting.",
                            ephemeral=True)
@@ -166,6 +223,7 @@ class AudioPlayBack(Extension):
         # ABS User Vars
         self.username = username
         self.user_type = user_type
+        self.cover_image = cover_image
 
         # Session Vars
         self.sessionID = sessionID
@@ -188,15 +246,16 @@ class AudioPlayBack(Extension):
             description=f"Currently playing {self.bookTitle}",
             color=ctx.author.accent_color,
         )
-        # Chapter Info
-        embed_message.add_field(name='Chapter', value=self.currentChapterTitle)
 
         # Add ABS user info
         user_info = f"Username: {self.username}\nUser Type: {self.user_type}"
         embed_message.add_field(name='ABS Information', value=user_info)
 
+        # Current Chapter
+        embed_message.add_field(name='Current Chapter', value=self.currentChapterTitle)
+
         # Add media image (If using HTTPS)
-        embed_message.add_image(cover_image)
+        embed_message.add_image(self.cover_image)
 
         # check if bot currently connected to voice
         if not ctx.voice_state:
@@ -213,7 +272,9 @@ class AudioPlayBack(Extension):
                 await ctx.defer(ephemeral=True)
 
                 await ctx.send(embed=embed_message, ephemeral=True, components=component_rows_initial)
+
                 logger.info(f"Beginning audio stream")
+
                 await self.client.change_presence(activity=Activity.create(name=f"{self.bookTitle}",
                                                                            type=ActivityType.LISTENING))
                 self.play_state = 'playing'
@@ -294,64 +355,22 @@ class AudioPlayBack(Extension):
     @slash_option(name="option", description="Select 'next or 'previous' as options", opt_type=OptionType.STRING,
                   autocomplete=True, required=True)
     async def change_chapter(self, ctx, option: str):
-        if ctx.voice_state and ctx.author.voice:
+        if ctx.voice_state:
             if self.isPodcast:
                 await ctx.send(content="Item type is not book, chapter skip disabled", ephemeral=True)
                 return
 
-            logger.info(f"executing command /next-c"
-                        f"hapter")
-            CurrentChapter = self.currentChapter
-            ChapterArray = self.chapterArray
-            bookFinished = self.bookFinished
+            self.move_chapter(option)
 
-            if not bookFinished:
+            await ctx.send(content=f"Moving to chapter: {self.newChapterTitle}", ephemeral=True)
 
-                currentChapterID = int(CurrentChapter.get('id'))
-                if option == 'next':
-                    nextChapterID = currentChapterID + 1
-                else:
-                    nextChapterID = currentChapterID - 1
+            await ctx.voice_state.play_no_wait(self.audioObj)
 
-                found_next_chapter = False
-
-                for chapter in ChapterArray:
-                    chapterID = int(chapter.get('id'))
-
-                    if nextChapterID == chapterID:
-                        chapterStart = float(chapter.get('start'))
-                        newChapterTitle = chapter.get('title')
-
-                        logger.info(f"Selected Chapter: {newChapterTitle}, Starting at: {chapterStart}")
-
-                        audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
-                        self.sessionID = sessionID
-                        self.currentTime = currentTime
-
-                        audio = AudioVolume(audio_obj)
-                        audio.ffmpeg_before_args = f"-ss {chapterStart}"
-                        self.audioObj = audio
-
-                        # Set next time to new chapter time
-                        self.nextTime = chapterStart
-                        self.session_update.stop()
-                        # Send manual next chapter sync
-                        c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
-                                                   current_time=updateFrequency - 0.5, next_time=self.nextTime)
-                        # Reset Next Time to None before starting task again
-                        self.nextTime = None
-                        self.session_update.start()
-                        await ctx.send(content=f"Moving to chapter: {newChapterTitle}",
-                                       ephemeral=True)
-
-                        found_next_chapter = True
-
-                        await ctx.voice_state.play_no_wait(audio)
-                        break
-
-                if not found_next_chapter:
-                    await ctx.send(content=f"Book Finished or No New Chapter Found, aborting",
-                                   ephemeral=True)
+            if not self.found_next_chapter:
+                await ctx.send(content=f"Book Finished or No New Chapter Found, aborting",
+                               ephemeral=True)
+            # Resetting Variable
+            self.found_next_chapter = False
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
@@ -377,7 +396,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="stop", description="Will disconnect from the voice channel and stop audio.",
                    dm_permission=False)
     async def stop_audio(self, ctx: SlashContext):
-        if ctx.voice_state and ctx.author.voice:
+        if ctx.voice_state:
             logger.info(f"executing command /stop")
             await ctx.send(content="Disconnected from audio channel and stopping playback.", ephemeral=True)
             await ctx.author.voice.channel.disconnect()
@@ -470,6 +489,82 @@ class AudioPlayBack(Extension):
             self.session_update.start()
 
             await ctx.edit_origin(components=component_rows_initial)
+
+    @component_callback('next_chapter_button')
+    async def callback_next_chapter_button(self, ctx: ComponentContext):
+        if ctx.voice_state:
+            logger.info('Moving to next chapter!')
+
+            if self.play_state == 'playing':
+                await ctx.edit_origin(components=component_rows_initial)
+            elif self.play_state == 'paused':
+                await ctx.edit_origin(components=component_rows_paused)
+
+            # Find next chapter
+            self.move_chapter(option='next')
+
+            # Create embedded message
+            embed_message = Embed(
+                title=f"{self.bookTitle}",
+                description=f"Currently playing {self.bookTitle}",
+                color=ctx.author.accent_color,
+            )
+
+            # Add ABS user info
+            user_info = f"Username: {self.username}\nUser Type: {self.user_type}"
+            embed_message.add_field(name='ABS Information', value=user_info)
+
+            embed_message.add_field(name='Current Chapter', value=self.newChapterTitle)
+
+            # Add media image (If using HTTPS)
+            embed_message.add_image(self.cover_image)
+
+            if self.found_next_chapter:
+                await ctx.edit(embed=embed_message)
+                await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj) # NOQA
+            else:
+                await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
+
+            # Resetting Variable
+            self.found_next_chapter = False
+
+    @component_callback('previous_chapter_button')
+    async def callback_previous_chapter_button(self, ctx: ComponentContext):
+        if ctx.voice_state:
+            logger.info('Moving to previous chapter!')
+
+            if self.play_state == 'playing':
+                await ctx.edit_origin(components=component_rows_initial)
+            elif self.play_state == 'paused':
+                await ctx.edit_origin(components=component_rows_paused)
+
+            # Find previous chapter
+            self.move_chapter(option='previous')
+
+            # Create embedded message
+            embed_message = Embed(
+                title=f"{self.bookTitle}",
+                description=f"Currently playing {self.bookTitle}",
+                color=ctx.author.accent_color,
+            )
+
+            # Add ABS user info
+            user_info = f"Username: {self.username}\nUser Type: {self.user_type}"
+            embed_message.add_field(name='ABS Information', value=user_info)
+
+            embed_message.add_field(name='Current Chapter', value=self.newChapterTitle)
+
+            # Add media image (If using HTTPS)
+            embed_message.add_image(self.cover_image)
+
+            if self.found_next_chapter:
+                await ctx.edit(embed=embed_message)
+                # Resetting Variable
+                self.found_next_chapter = False
+                await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
+
+            else:
+                await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
 
     @component_callback('stop_audio_button')
     async def callback_stop_button(self, ctx: ComponentContext):
