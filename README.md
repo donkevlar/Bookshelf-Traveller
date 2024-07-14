@@ -42,9 +42,17 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 ### Docker Container
 Docker Container Available:
 
+#### Docker Hub
+
 ```
 docker pull donkevlar/bookshelf-traveller:latest
 ```
+
+#### Github Package Repository
+```
+docker pull ghcr.io/donkevlar/bookshelf-traveller:master
+```
+
 To run the container, paste the following command:
 ```
 docker run -d \
