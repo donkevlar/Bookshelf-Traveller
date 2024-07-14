@@ -1,5 +1,4 @@
 from interactions import *
-from interactions.api.events import BaseVoiceEvent, VoiceUserLeave
 from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
 import settings as s

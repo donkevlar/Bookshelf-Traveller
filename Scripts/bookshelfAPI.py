@@ -596,7 +596,7 @@ def bookshelf_session_update(session_id: str, item_id: str, current_time: float,
                         print("Error, nextTime was not valid")
 
                 logger.info(
-                    f"Duration: {duration}, Current Time: {serverCurrentTime}, Updated Time: {updatedTime}, Item ID: {session_itemID}")  # NOQA
+                    f"Duration: {duration}, Current Time: {serverCurrentTime}, Updated Time: {updatedTime}")
 
                 # Check if session matches the current item playing
                 if item_id == session_itemID and updatedTime <= duration:
@@ -624,11 +624,11 @@ def bookshelf_session_update(session_id: str, item_id: str, current_time: float,
                 print(f"Session sync failed, sync status: {sessionOK}")
 
         except requests.RequestException as e:
-            logger.warning(f"Issue with sync post request: \n{e}")
+            logger.warning(f"Issue with sync post request: {e}")
             print(e)
 
         except Exception as e:
-            logger.warning(f"Issue with sync: \n{e}")
+            logger.warning(f"Issue with sync: {e}")
 
 
 # Need to  revisit this at some point
