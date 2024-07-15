@@ -16,51 +16,80 @@ updateFrequency = s.UPDATES
 
 # Button Vars
 # Initial components loaded when play is first initialized
-component_rows_initial: list[ActionRow] = spread_to_rows(
-            Button(
-                style=ButtonStyle.SECONDARY,
-                label="Pause",
-                custom_id='pause_audio_button'
-            ),
-            Button(
-                style=ButtonStyle.PRIMARY,
-                label="Previous Chapter",
-                custom_id='previous_chapter_button'
-            ),
-            Button(
-                style=ButtonStyle.PRIMARY,
-                label="Next Chapter",
-                custom_id='next_chapter_button'
-            ),
-            Button(
-                style=ButtonStyle.RED,
-                label="Stop",
-                custom_id='stop_audio_button'
-            )
+component_rows_initial: list[ActionRow] = [
+    ActionRow(
+        Button(
+            style=ButtonStyle.SECONDARY,
+            label="Pause",
+            custom_id='pause_audio_button'
+        ),
+        Button(
+            style=ButtonStyle.SUCCESS,
+            label="+",
+            custom_id='volume_up_button'
+        ),
+        Button(
+            style=ButtonStyle.RED,
+            label="-",
+            custom_id='volume_down_button')),
+    ActionRow(
+        Button(
+            style=ButtonStyle.PRIMARY,
+            label="Previous Chapter",
+            custom_id='previous_chapter_button'
+        ),
+        Button(
+            style=ButtonStyle.PRIMARY,
+            label="Next Chapter",
+            custom_id='next_chapter_button'
         )
+    ),
+    ActionRow(
+        Button(
+            style=ButtonStyle.RED,
+            label="Stop",
+            custom_id='stop_audio_button'
+        )
+    )
+]
 # Components when the audio is paused
-component_rows_paused: list[ActionRow] = spread_to_rows(
-            Button(
-                style=ButtonStyle.PRIMARY.SUCCESS,
-                label='Play',
-                custom_id='play_audio_button'
-            ),
-            Button(
-                style=ButtonStyle.PRIMARY,
-                label="Previous Chapter",
-                custom_id='previous_chapter_button'
-            ),
-            Button(
-                style=ButtonStyle.PRIMARY,
-                label="Next Chapter",
-                custom_id='next_chapter_button'
-            ),
-            Button(
-                style=ButtonStyle.RED,
-                label='Stop',
-                custom_id='stop_audio_button'
-            )
-)
+component_rows_paused: list[ActionRow] = [
+    ActionRow(
+        Button(
+            style=ButtonStyle.PRIMARY.SUCCESS,
+            label='Play',
+            custom_id='play_audio_button'
+        ),
+        Button(
+            style=ButtonStyle.SUCCESS,
+            label="+",
+            custom_id='volume_up_button'
+        ),
+        Button(
+            style=ButtonStyle.RED,
+            label="-",
+            custom_id='volume_down_button'
+        )
+    ),
+    ActionRow(
+        Button(
+            style=ButtonStyle.PRIMARY,
+            label="Previous Chapter",
+            custom_id='previous_chapter_button'
+        ),
+        Button(
+            style=ButtonStyle.PRIMARY,
+            label="Next Chapter",
+            custom_id='next_chapter_button'
+        )
+    ),
+    ActionRow(
+        Button(
+            style=ButtonStyle.RED,
+            label='Stop',
+            custom_id='stop_audio_button'
+        )
+    )]
 
 
 # Voice Status Check
@@ -119,9 +148,9 @@ class AudioPlayBack(Extension):
         logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
 
         updatedTime, duration, serverCurrentTime, finished_book = c.bookshelf_session_update(item_id=self.bookItemID,
-                                                                              session_id=self.sessionID,
-                                                                              current_time=updateFrequency,
-                                                                              next_time=self.nextTime)  # NOQA
+                                                                                             session_id=self.sessionID,
+                                                                                             current_time=updateFrequency,
+                                                                                             next_time=self.nextTime)  # NOQA
 
         logger.info(f"Successfully synced session to updated time: {updatedTime}, session ID: {self.sessionID}")
 
@@ -377,7 +406,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="volume", description="change the volume for the bot", dm_permission=False)
     @slash_option(name="volume", description="Must be between 1 and 100", required=False, opt_type=OptionType.INTEGER)
     async def volume_adjuster(self, ctx, volume=0):
-        if ctx.voice_state and ctx.author.voice:
+        if ctx.voice_state:
             audio = self.audioObj
             if volume == 0:
                 await ctx.send(content=f"Volume currently set to: {self.volume * 100}%", ephemaral=True)
@@ -520,7 +549,7 @@ class AudioPlayBack(Extension):
 
             if self.found_next_chapter:
                 await ctx.edit(embed=embed_message)
-                await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj) # NOQA
+                await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
             else:
                 await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
 
@@ -531,11 +560,16 @@ class AudioPlayBack(Extension):
     async def callback_previous_chapter_button(self, ctx: ComponentContext):
         if ctx.voice_state:
             logger.info('Moving to previous chapter!')
+            audio = self.audioObj
 
             if self.play_state == 'playing':
                 await ctx.edit_origin(components=component_rows_initial)
             elif self.play_state == 'paused':
                 await ctx.edit_origin(components=component_rows_paused)
+            else:
+                await ctx.send(content='Error with previous chapter command, bot not active or voice not connected!',
+                               ephemeral=True)
+                return
 
             # Find previous chapter
             self.move_chapter(option='previous')
@@ -574,6 +608,27 @@ class AudioPlayBack(Extension):
             await ctx.edit_origin()
             await ctx.delete()
             await ctx.voice_state.channel.disconnect()
+
+    @component_callback('volume_up_button')
+    async def callback_volume_up_button(self, ctx: ComponentContext):
+        if ctx.voice_state and ctx.author.voice:
+            audio = self.audioObj
+            await ctx.edit_origin()
+            self.volume = audio.volume
+            print(self.volume)
+            audio.volume = self.volume + 0.1  # NOQA
+            self.volume = audio.volume
+            logger.info(f"Set Volume {self.volume * 100}")  # NOQA
+
+    @component_callback('volume_down_button')
+    async def callback_volume_down_button(self, ctx: ComponentContext):
+        if ctx.voice_state and ctx.author.voice:
+            audio = self.audioObj
+            await ctx.edit_origin()
+            self.volume = audio.volume
+            audio.volume = self.volume - 0.1  # NOQA
+            self.volume = audio.volume
+            logger.info(f"Set Volume {self.volume * 100}")  # NOQA
 
     # ----------------------------
     # Other non discord related functions
