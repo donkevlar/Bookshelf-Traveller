@@ -615,7 +615,6 @@ class AudioPlayBack(Extension):
             audio = self.audioObj
             await ctx.edit_origin()
             self.volume = audio.volume
-            print(self.volume)
             audio.volume = self.volume + 0.1  # NOQA
             self.volume = audio.volume
             logger.info(f"Set Volume {self.volume * 100}")  # NOQA
