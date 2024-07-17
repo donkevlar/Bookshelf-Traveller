@@ -17,11 +17,6 @@ logger = logging.getLogger("bot")
 updateFrequency = s.UPDATES
 
 playback_role = s.PLAYBACK_ROLE
-if playback_role == 0 or playback_role == '0':
-    logger.error('System is exiting due to missing ENV VAR PLAYBACK_ROLE')
-    sys.exit('\nExiting! Missing ENV Var PLAYBACK_ROLE!\n')
-else:
-    logger.info(f'Playback role set to {playback_role}')
 
 # Button Vars
 # Initial components loaded when play is first initialized
@@ -225,10 +220,13 @@ class AudioPlayBack(Extension):
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
     async def play_audio(self, ctx, book: str):
-        if not ctx.author.has_role(playback_role): # NOQA
-            logger.info('user not authorized to use this command!')
-            await ctx.send(content='You are not authorized to use this command!', ephemeral=True)
-            return
+        if playback_role != 0:
+            if not ctx.author.has_role(playback_role): # NOQA
+                logger.info('user not authorized to use this command!')
+                await ctx.send(content='You are not authorized to use this command!', ephemeral=True)
+                return
+            else:
+                logger.info('user verified!, executing command!')
         # Check bot is ready, if not exit command
         if not self.bot.is_ready or not ctx.author.voice:
             await ctx.send(content="Bot is not ready or author not in voice channel, please try again later.",
