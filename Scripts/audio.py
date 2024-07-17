@@ -221,7 +221,6 @@ class AudioPlayBack(Extension):
                     self.found_next_chapter = True
 
     # Main play command, place class variables here since this is required to play audio
-    @check(ownership_check)
     @slash_command(name="play", description="Play audio from ABS server", dm_permission=False)
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
