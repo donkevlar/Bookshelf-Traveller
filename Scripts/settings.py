@@ -3,7 +3,7 @@ from logging.config import dictConfig
 from dotenv import load_dotenv
 
 
-load_dotenv()
+load_dotenv(override=True)
 
 # Version Info
 versionNumber = 'Beta_Audio_1.0.5'
@@ -30,6 +30,12 @@ UPDATES = os.getenv('UPDATES', 5)
 
 # TEST ENV1
 TEST_ENV1 = os.getenv('TEST_ENV1')
+
+# Playback Role
+PLAYBACK_ROLE = os.getenv('PLAYBACK_ROLE', 0)
+
+# Ownership check
+OWNER_ONLY = os.getenv('OWNER_ONLY', True)
 
 LOGGING_CONFIG = {
     "version": 1,

@@ -1,3 +1,5 @@
+import sys
+
 from interactions import *
 from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
@@ -13,6 +15,13 @@ logger = logging.getLogger("bot")
 
 # Update Frequency for session sync
 updateFrequency = s.UPDATES
+
+playback_role = s.PLAYBACK_ROLE
+if playback_role == 0 or playback_role == '0':
+    logger.error('System is exiting due to missing ENV VAR PLAYBACK_ROLE')
+    sys.exit('\nExiting! Missing ENV Var PLAYBACK_ROLE!\n')
+else:
+    logger.info(f'Playback role set to {playback_role}')
 
 # Button Vars
 # Initial components loaded when play is first initialized
@@ -95,19 +104,25 @@ component_rows_paused: list[ActionRow] = [
 # Voice Status Check
 
 # Custom check for ownership
-async def ownership_check(ctx):  # NOQA
+async def ownership_check(ctx: BaseContext):  # NOQA
     # Default only owner can use this bot
-    ownership = os.getenv('OWNER_ONLY', True)
-    if ownership:
-        # Check to see if user is the owner while ownership var is true
-        if ctx.bot.owner.username == ctx.user.username:
-            logger.info(f"{ctx.user.username}, you are the owner and ownership is enabled!")
-            return True
+    ownership = s.OWNER_ONLY
+    ownership = eval(ownership)
 
+    logger.info(f'Ownership is currently set to: {ownership}')
+
+    if ownership:
+        logger.info('OWNERSHIP is enabled, verifying if user is authorized.')
+        # Check to see if user is the owner while ownership var is true
+        if ctx.bot.owner.id == ctx.user.id or ctx.user in ctx.bot.owners:
+            logger.info('Verified, executing command!')
+            return True
         else:
-            logger.warning(f"{ctx.user.username}, is not the owner and ownership is enabled!")
+            logger.warning('User is not an owner!')
             return False
+
     else:
+        logger.info('ownership is disabled! skipping!')
         return True
 
 
@@ -211,6 +226,10 @@ class AudioPlayBack(Extension):
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
     async def play_audio(self, ctx, book: str):
+        if not ctx.author.has_role(playback_role): # NOQA
+            logger.info('user not authorized to use this command!')
+            await ctx.send(content='You are not authorized to use this command!', ephemeral=True)
+            return
         # Check bot is ready, if not exit command
         if not self.bot.is_ready or not ctx.author.voice:
             await ctx.send(content="Bot is not ready or author not in voice channel, please try again later.",
