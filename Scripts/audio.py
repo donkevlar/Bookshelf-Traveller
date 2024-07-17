@@ -16,7 +16,12 @@ logger = logging.getLogger("bot")
 # Update Frequency for session sync
 updateFrequency = s.UPDATES
 
-playback_role = s.PLAYBACK_ROLE
+# ENV VARS Specific to Audio Module
+playback_role = int(s.PLAYBACK_ROLE)
+
+# Default only owner can use this bot
+ownership = s.OWNER_ONLY
+ownership = eval(ownership)
 
 # Button Vars
 # Initial components loaded when play is first initialized
@@ -100,9 +105,6 @@ component_rows_paused: list[ActionRow] = [
 
 # Custom check for ownership
 async def ownership_check(ctx: BaseContext):  # NOQA
-    # Default only owner can use this bot
-    ownership = s.OWNER_ONLY
-    ownership = eval(ownership)
 
     logger.info(f'Ownership is currently set to: {ownership}')
 
@@ -221,12 +223,19 @@ class AudioPlayBack(Extension):
                   autocomplete=True)
     async def play_audio(self, ctx, book: str):
         if playback_role != 0:
+            logger.info('PLAYBACK_ROLE is currently active, verifying if user is authorized.')
             if not ctx.author.has_role(playback_role): # NOQA
                 logger.info('user not authorized to use this command!')
                 await ctx.send(content='You are not authorized to use this command!', ephemeral=True)
                 return
             else:
                 logger.info('user verified!, executing command!')
+        elif ownership and playback_role == 0:
+            if ctx.author.id not in ctx.bot.owners:
+                logger.warning(f'User {ctx.author} attempted to use /play, and OWNER_ONLY is enabled!')
+                ctx.send(content="Ownership enabled and you are not authorized to use this command. Contact bot owner.")
+                return
+
         # Check bot is ready, if not exit command
         if not self.bot.is_ready or not ctx.author.voice:
             await ctx.send(content="Bot is not ready or author not in voice channel, please try again later.",
