@@ -133,7 +133,6 @@ def bookshelf_auth_test():
     try:
         endpoint = "/me"
         r = bookshelf_conn(GET=True, endpoint=endpoint)
-        print(r)
         if r.status_code == 200:
             # Place data in JSON Format
             data = r.json()
@@ -142,7 +141,6 @@ def bookshelf_auth_test():
             user_type = data.get('type', "user")
             user_locked = data.get('isLocked', False)
 
-            print(f'Successfully Authenticated as user {username}, type: {user_type}')
             time.sleep(0.5)
             return username, user_type, user_locked
         else:
