@@ -552,11 +552,10 @@ def bookshelf_audio_obj(item_id: str):
     for file in audiofiles:
         ino = file['ino']
 
-    print("Media Type: ", mediaType)
-    print("Current Time: ", currentTime, "Seconds")
+    logger.info(f"Media Type:  {mediaType}, Current Time: {currentTime} Seconds")
 
     onlineURL = f"{defaultAPIURL}/items/{item_id}/file/{ino}{tokenInsert}"
-    print("attempting to play: ", onlineURL)
+    logger.info(f'attempting to play: {onlineURL}')
 
     return onlineURL, currentTime, session_id, bookTitle
 
@@ -637,12 +636,12 @@ def bookshelf_close_session(session_id: str):
     try:
         r = bookshelf_conn(endpoint=endpoint, POST=True)
         if r.status_code == 200:
-            print(f'Session {session_id} closed successfully')
+            logger.info(f'Session {session_id} closed successfully')
         else:
-            print(r.status_code)
+            logger.warning(r.status_code)
 
     except requests.RequestException as e:
-        print(f"Failed to close session {session_id}")
+        logger.error(f"Failed to close session {session_id}")
         logger.warning(f"Failed to close session: {session_id}, {e}")
         print(f"{e}")
 
