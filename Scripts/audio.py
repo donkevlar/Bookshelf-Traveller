@@ -167,6 +167,7 @@ class AudioPlayBack(Extension):
         # Audio VARS
         self.audioObj = AudioVolume
         self.context_voice_channel = None
+        self.bitrate = 44100
         self.volume = 0.0
         self.placeholder = None
         self.playbackSpeed = 1.0
@@ -301,6 +302,7 @@ class AudioPlayBack(Extension):
         audio.locked_stream = True
         self.volume = audio.volume
         audio.ffmpeg_before_args = f"-ss {currentTime}"
+        audio.bitrate = self.bitrate
 
         # Class VARS
 
