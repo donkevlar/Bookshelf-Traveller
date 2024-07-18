@@ -167,7 +167,7 @@ class AudioPlayBack(Extension):
         # Audio VARS
         self.audioObj = AudioVolume
         self.context_voice_channel = None
-        self.bitrate = 44100
+        self.bitrate = 128000
         self.volume = 0.0
         self.placeholder = None
         self.playbackSpeed = 1.0
