@@ -28,6 +28,10 @@ load_dotenv(override=True)
 MULTI_USER = os.environ.get('MULTI_USER', True)
 MULTI_USER = eval(MULTI_USER)
 
+# Audio Enabled
+AUDIO_ENABLED = os.getenv('AUDIO_ENABLED', True)
+AUDIO_ENABLED = eval(AUDIO_ENABLED)
+
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
 
@@ -425,9 +429,12 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 
 # Main Loop
 if __name__ == '__main__':
-    # Load Audio Extension
-    logger.info("Audio module loaded!")
-    bot.load_extension("audio")
+    if AUDIO_ENABLED:
+        # Load Audio Extension
+        logger.info("Audio module loaded!")
+        bot.load_extension("audio")
+    else:
+        logger.warning('Audio module disabled!')
     # Load Admin related extensions
     if ADMIN and not MULTI_USER:
         logger.info("Admin module loaded!")

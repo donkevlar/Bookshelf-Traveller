@@ -32,9 +32,11 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 | `DISCORD_TOKEN`    | Discord API Token                                                                                                                                    | *String*  | **YES**   |
 | `bookshelfToken`   | Bookshelf User Token (All user types work, but some will limit your interaction options.)                                                            | *String*  | **YES**   |
 | `bookshelfURL`     | Bookshelf url with protocol and port, ex: http://localhost:80                                                                                        | *String*  | **YES**   |
+| `PLAYBACK_ROLE`    | A discord role id, used if you want other users to have access to playback.                                                                          | *Integer* | **NO**    |
 | `OWNER_ONLY`       | By default set to `True`. Only allow bot owner to use bot.                                                                                           | *Boolean* | **NO**    |
 | `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you)                                                                    | *Boolean* | **NO**    |
 | `MULTI_USER`       | By default set to `True`, disable this to re-enable admin controls (Conditional on the user logged in.) and to remove the /login and /select options | *Boolean* | **NO**    |
+| `AUDIO_ENABLED`    | By default set to `True`, disable if you want to remove the ability for audio playback.                                                              | *Boolean* |           |
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**
@@ -117,6 +119,11 @@ The following Commands are available:
 | `/recent-sessions` | Will display ***up to*** 10 recent sessions in a filtered and formatted way.                                                 |                                                    |                                                                                                                                                                                                                     |
 | `/user-search`     | Search for a specific user by name                                                                                           | `name`                                             | Only with ABS admin token. current public release only has name, but ill update it to include search by ID, or by using the autocomplete. only with ABS admin token. Otherwise disabled. *MULTI_USER must be False. | **Autocomplete Enabled**                |
 | `/test-connection` | Will test the connection of your bot to the audioboookshelf server                                                           | optional: `opt_url`                                | Optionally you can test the connection to any url.                                                                                                                                                                  |                                         |
+
+### Alternative Packages
+If you only want to manage your instance or have access to instance statistics and don't want the larger audio image, there is also a no-audio image with some of the core modules stripped out. It also removes FFMPEG. 
+
+*Note: This only applies to docker images that are published on github. If you are running the script then you can simply disable the audio-module
 
 ### Screenshots
 Below are a few examples of the commands shown above.
