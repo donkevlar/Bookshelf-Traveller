@@ -429,6 +429,7 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 
 # Main Loop
 if __name__ == '__main__':
+    logger.warning('Bot initializing, please wait until this is complete, you have been warned!')
     if AUDIO_ENABLED:
         # Load Audio Extension
         logger.info("Audio module loaded!")
@@ -447,3 +448,4 @@ if __name__ == '__main__':
         logger.warning("MULTI_USER module disabled!")
     # Start Bot
     bot.start(settings.DISCORD_API_SECRET)
+    logger.info('Bot has finished loading, it is now safe to use! :)')
