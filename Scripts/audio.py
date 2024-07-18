@@ -248,17 +248,6 @@ class AudioPlayBack(Extension):
                     self.session_update.start()
                     self.found_next_chapter = True
 
-    def rewind_forward_playback(self, option: str):
-        if option == "forward":
-            logger.info('Skipping forward 30 seconds!')
-            updatedTime = self.currentTime + 30
-            return updatedTime
-
-        elif option == "rewind":
-            logger.info('Rewinding 30 seconds!')
-            updatedTime = self.currentTime - 30
-            return updatedTime
-
     # Main play command, place class variables here since this is required to play audio
     @slash_command(name="play", description="Play audio from ABS server", dm_permission=False)
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
