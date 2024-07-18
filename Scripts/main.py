@@ -56,6 +56,7 @@ logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
 token = os.environ.get("DISCORD_TOKEN")
 
 logger.info(f'Starting up bookshelf traveller v.{settings.versionNumber}')
+logger.warning('Please wait for this process to finish prior to use, you have been warned!')
 
 # Start Server Connection Prior to Running Bot
 server_status_code = c.bookshelf_test_connection()
@@ -145,6 +146,8 @@ async def on_startup(event: Startup):
             await owner.send("No initial user registered, please use '/login' to register a user.")
     else:
         await owner.send(f'Bot is ready. Logged in as {bot.user}.')
+
+    logger.info('Bot has finished loading, it is now safe to use! :)')
 
 
 # Listening Stats, currently pulls the total time listened and converts it to hours
@@ -429,7 +432,6 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 
 # Main Loop
 if __name__ == '__main__':
-    logger.warning('Bot initializing, please wait until this is complete, you have been warned!')
     if AUDIO_ENABLED:
         # Load Audio Extension
         logger.info("Audio module loaded!")
@@ -447,5 +449,5 @@ if __name__ == '__main__':
     else:
         logger.warning("MULTI_USER module disabled!")
     # Start Bot
+
     bot.start(settings.DISCORD_API_SECRET)
-    logger.info('Bot has finished loading, it is now safe to use! :)')
