@@ -17,6 +17,8 @@ load_dotenv()
 
 keep_active = False
 
+optional_image_url = os.getenv('OPT_IMAGE_URL', '')
+
 
 # Simple Success Message
 def successMSG(endpoint, status):
@@ -429,7 +431,10 @@ def bookshelf_library_csv(library_id: str, file_name='books.csv'):
 
 
 def bookshelf_cover_image(item_id: str):
-    bookshelfURL = os.environ.get("bookshelfURL")
+    if optional_image_url != '':
+        bookshelfURL = optional_image_url
+    else:
+        bookshelfURL = os.environ.get("bookshelfURL")
     defaultAPIURL = bookshelfURL + '/api'
     bookshelfToken = os.environ.get("bookshelfToken")
     tokenInsert = "?token=" + bookshelfToken
