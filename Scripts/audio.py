@@ -584,8 +584,10 @@ class AudioPlayBack(Extension):
 
             if self.play_state == 'playing':
                 await ctx.edit_origin(components=component_rows_initial)
+                ctx.voice_state.channel.voice_state.player.stop()
             elif self.play_state == 'paused':
                 await ctx.edit_origin(components=component_rows_paused)
+                ctx.voice_state.channel.voice_state.player.stop()
 
             # Find next chapter
             self.move_chapter(option='next')
@@ -608,7 +610,6 @@ class AudioPlayBack(Extension):
 
             if self.found_next_chapter:
                 await ctx.edit(embed=embed_message)
-                ctx.voice_state.channel.voice_state.player.stop()
                 await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
             else:
                 await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
@@ -623,8 +624,10 @@ class AudioPlayBack(Extension):
 
             if self.play_state == 'playing':
                 await ctx.edit_origin(components=component_rows_initial)
+                ctx.voice_state.channel.voice_state.player.stop()
             elif self.play_state == 'paused':
                 await ctx.edit_origin(components=component_rows_paused)
+                ctx.voice_state.channel.voice_state.player.stop()
             else:
                 await ctx.send(content='Error with previous chapter command, bot not active or voice not connected!',
                                ephemeral=True)
