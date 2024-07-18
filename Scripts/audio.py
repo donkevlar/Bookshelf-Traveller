@@ -43,6 +43,18 @@ component_rows_initial: list[ActionRow] = [
             custom_id='volume_down_button')),
     ActionRow(
         Button(
+            style=ButtonStyle.SECONDARY,
+            label="- 30s",
+            custom_id='rewind_button'
+        ),
+        Button(
+            style=ButtonStyle.SECONDARY,
+            label="+ 30s",
+            custom_id='forward_button'
+        )
+    ),
+    ActionRow(
+        Button(
             style=ButtonStyle.PRIMARY,
             label="Previous Chapter",
             custom_id='previous_chapter_button'
@@ -78,6 +90,18 @@ component_rows_paused: list[ActionRow] = [
             style=ButtonStyle.RED,
             label="-",
             custom_id='volume_down_button'
+        )
+    ),
+    ActionRow(
+        Button(
+            style=ButtonStyle.SECONDARY,
+            label="- 30s",
+            custom_id='rewind_button'
+        ),
+        Button(
+            style=ButtonStyle.SECONDARY,
+            label="+ 30s",
+            custom_id='forward_button'
         )
     ),
     ActionRow(
@@ -173,6 +197,11 @@ class AudioPlayBack(Extension):
             logger.info("Current Chapter Sync: " + current_chapter['title'])
             self.currentChapter = current_chapter
 
+    @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
+    async def playback_keep_alive(self, ctx: ComponentContext):
+        if ctx.channel.voice_state.player.stopped and ctx.voice_state:
+            pass
+
     # Random Functions
     # Change Chapter Function
     def move_chapter(self, option: str):
@@ -193,6 +222,8 @@ class AudioPlayBack(Extension):
                 chapterID = int(chapter.get('id'))
 
                 if nextChapterID == chapterID:
+                    self.session_update.stop()
+                    c.bookshelf_close_session(self.sessionID)
                     chapterStart = float(chapter.get('start'))
                     self.newChapterTitle = chapter.get('title')
 
@@ -208,7 +239,7 @@ class AudioPlayBack(Extension):
 
                     # Set next time to new chapter time
                     self.nextTime = chapterStart
-                    self.session_update.stop()
+
                     # Send manual next chapter sync
                     c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
                                                current_time=updateFrequency - 0.5, next_time=self.nextTime)
@@ -217,6 +248,17 @@ class AudioPlayBack(Extension):
                     self.session_update.start()
                     self.found_next_chapter = True
 
+    def rewind_forward_playback(self, option: str):
+        if option == "forward":
+            logger.info('Skipping forward 30 seconds!')
+            updatedTime = self.currentTime + 30
+            return updatedTime
+
+        elif option == "rewind":
+            logger.info('Rewinding 30 seconds!')
+            updatedTime = self.currentTime - 30
+            return updatedTime
+
     # Main play command, place class variables here since this is required to play audio
     @slash_command(name="play", description="Play audio from ABS server", dm_permission=False)
     @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
@@ -224,7 +266,7 @@ class AudioPlayBack(Extension):
     async def play_audio(self, ctx, book: str):
         if playback_role != 0:
             logger.info('PLAYBACK_ROLE is currently active, verifying if user is authorized.')
-            if not ctx.author.has_role(playback_role): # NOQA
+            if not ctx.author.has_role(playback_role):  # NOQA
                 logger.info('user not authorized to use this command!')
                 await ctx.send(content='You are not authorized to use this command!', ephemeral=True)
                 return
@@ -266,7 +308,7 @@ class AudioPlayBack(Extension):
 
         # Audio Object Arguments
         audio = AudioVolume(audio_obj)
-        audio.buffer_seconds = 10
+        audio.buffer_seconds = 5
         audio.locked_stream = True
         self.volume = audio.volume
         audio.ffmpeg_before_args = f"-ss {currentTime}"
@@ -471,11 +513,14 @@ class AudioPlayBack(Extension):
                    dm_permission=False)
     @slash_option(name="max_items", description="max number of items to attempt to close, default=100",
                   opt_type=OptionType.INTEGER)
-    async def close_active_sessions(self, ctx, max_items=100):
+    async def close_active_sessions(self, ctx, max_items=50):
+        # Wait for task to complete
+        ctx.defer()
+
         openSessionCount, closedSessionCount, failedSessionCount = c.bookshelf_close_all_sessions(max_items)
-        await ctx.send(content=f"Result of attempting to close sessions. success: {closedSessionCount},"
-                               f"failed: {failedSessionCount},total: {openSessionCount}",
-                       ephemeral=True)
+
+        await ctx.send(content=f"Result of attempting to close sessions. success: {closedSessionCount}, "
+                               f"failed: {failedSessionCount}, total: {openSessionCount}", ephemeral=True)
 
     # -----------------------------
     # Auto complete options below
@@ -574,6 +619,7 @@ class AudioPlayBack(Extension):
 
             if self.found_next_chapter:
                 await ctx.edit(embed=embed_message)
+                ctx.voice_state.channel.voice_state.player.stop()
                 await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
             else:
                 await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
@@ -585,7 +631,6 @@ class AudioPlayBack(Extension):
     async def callback_previous_chapter_button(self, ctx: ComponentContext):
         if ctx.voice_state:
             logger.info('Moving to previous chapter!')
-            audio = self.audioObj
 
             if self.play_state == 'playing':
                 await ctx.edit_origin(components=component_rows_initial)
@@ -619,6 +664,7 @@ class AudioPlayBack(Extension):
                 await ctx.edit(embed=embed_message)
                 # Resetting Variable
                 self.found_next_chapter = False
+                ctx.voice_state.channel.voice_state.player.stop()
                 await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
 
             else:
@@ -630,6 +676,7 @@ class AudioPlayBack(Extension):
             logger.info('Stopping Playback!')
             await ctx.voice_state.channel.voice_state.stop()
             self.session_update.stop()
+            c.bookshelf_close_session(self.sessionID)
             await ctx.edit_origin()
             await ctx.delete()
             await ctx.voice_state.channel.disconnect()
@@ -637,22 +684,66 @@ class AudioPlayBack(Extension):
     @component_callback('volume_up_button')
     async def callback_volume_up_button(self, ctx: ComponentContext):
         if ctx.voice_state and ctx.author.voice:
+            adjustment = 0.1
             audio = self.audioObj
             await ctx.edit_origin()
             self.volume = audio.volume
-            audio.volume = self.volume + 0.1  # NOQA
+            audio.volume = self.volume + adjustment  # NOQA
             self.volume = audio.volume
-            logger.info(f"Set Volume {self.volume * 100}")  # NOQA
+            logger.info(f"Set Volume {round(self.volume * 100)}")  # NOQA
 
     @component_callback('volume_down_button')
     async def callback_volume_down_button(self, ctx: ComponentContext):
         if ctx.voice_state and ctx.author.voice:
+            adjustment = 0.1
             audio = self.audioObj
             await ctx.edit_origin()
             self.volume = audio.volume
-            audio.volume = self.volume - 0.1  # NOQA
+            audio.volume = self.volume - adjustment  # NOQA
             self.volume = audio.volume
-            logger.info(f"Set Volume {self.volume * 100}")  # NOQA
+            logger.info(f"Set Volume {round(self.volume * 100)}")  # NOQA
+
+    @component_callback('forward_button')
+    async def callback_forward_button(self, ctx: ComponentContext):
+        self.session_update.stop()
+        ctx.voice_state.channel.voice_state.player.stop()
+        c.bookshelf_close_session(self.sessionID)
+        self.audioObj.cleanup() # NOQA
+
+        audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
+
+        self.sessionID = sessionID
+        print(self.currentTime)
+        self.nextTime = currentTime + 30.0
+        logger.info(f"Moving to time using forward:  {self.nextTime}")
+
+        audio = AudioVolume(audio_obj)
+
+        audio.ffmpeg_before_args = f"-ss {self.nextTime}"
+        self.audioObj = audio
+        self.session_update.start()
+        await ctx.edit_origin()
+        await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj) # NOQA
+
+    @component_callback('rewind_button')
+    async def callback_rewind_button(self, ctx: ComponentContext):
+        self.session_update.stop()
+        ctx.voice_state.channel.voice_state.player.stop()
+        c.bookshelf_close_session(self.sessionID)
+        self.audioObj.cleanup() # NOQA
+        audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
+
+        self.sessionID = sessionID
+        self.nextTime = currentTime - 30.0
+        logger.info(f"Moving to time using rewind: {self.nextTime}")
+
+        audio = AudioVolume(audio_obj)
+
+        audio.ffmpeg_before_args = f"-ss {self.nextTime}"
+        self.audioObj = audio
+        self.session_update.start()
+        await ctx.edit_origin()
+        await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
 
     # ----------------------------
     # Other non discord related functions

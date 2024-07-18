@@ -36,6 +36,8 @@ def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET=False
 
     if Token:
         link = f'{API_URL}{endpoint}{tokenInsert}{additional_params}'
+        if __name__ == '__main__':
+            print(link)
     else:
         link = f'{API_URL}{endpoint}'
 
@@ -653,42 +655,45 @@ def bookshelf_close_all_sessions(items: int):
     all_sessions_endpoint = f"/me/listening-sessions"
 
     params = f"&itemsPerPage={items}"
+    try:
+        r = bookshelf_conn(GET=True, endpoint=all_sessions_endpoint, params=params)
+        if r.status_code == 200:
+            data = r.json()
 
-    r = bookshelf_conn(POST=True, endpoint=all_sessions_endpoint, params=params)
-    if r.status_code == 200:
-        data = r.json()
+            openSessionCount = 0
+            closedSessionCount = 0
+            failedSessionCount = 0
 
-        openSessionCount = 0
-        closedSessionCount = 0
-        failedSessionCount = 0
+            session_array = []
 
-        session_array = []
-
-        for session in data['sessions']:
-            openSessionCount += 1
-            sessionId = session.get('id')
-            session_array.append({'id': sessionId})
-
-        if openSessionCount > 0:
-
-            print(f"Attempting to close {openSessionCount} sessions")
-            for session in session_array:
+            for session in data['sessions']:
+                openSessionCount += 1
                 sessionId = session.get('id')
-                close_session = f"/session/{sessionId}/close"
+                session_array.append({'id': sessionId})
 
-                r = bookshelf_conn(endpoint=close_session, POST=True)
-                if r.status_code == 200:
-                    closedSessionCount += 1
-                    print(f"Successfully Closed Session with ID: {sessionId}")
-                else:
-                    failedSessionCount += 1
-                    print(f"Failed to close session with id: {sessionId}")
+            if openSessionCount > 0:
 
-        logger.info(f"success: {closedSessionCount}, failed: {failedSessionCount}, total: {openSessionCount} ")
-        return openSessionCount, closedSessionCount, failedSessionCount
+                print(f"Attempting to close {openSessionCount} sessions")
+                for session in session_array:
+                    sessionId = session.get('id')
+                    close_session = f"/session/{sessionId}/close"
+
+                    r = bookshelf_conn(endpoint=close_session, POST=True)
+                    if r.status_code == 200:
+                        closedSessionCount += 1
+                        print(f"Successfully Closed Session with ID: {sessionId}")
+                    else:
+                        failedSessionCount += 1
+                        print(f"Failed to close session with id: {sessionId}")
+
+            logger.info(f"success: {closedSessionCount}, failed: {failedSessionCount}, total: {openSessionCount} ")
+            return openSessionCount, closedSessionCount, failedSessionCount
+
+    except Exception as e:
+        logger.error(e)
 
 
 # Test bookshelf api functions below
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    bookshelf_title_search("dreadgod")
+    bookshelf_close_all_sessions(items=100)
