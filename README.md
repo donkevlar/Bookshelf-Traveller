@@ -131,10 +131,16 @@ If you only want to manage your instance or have access to instance statistics a
 *Note: This only applies to docker images that are published on github. If you are running the script then you can simply disable the audio-module
 
 ### Screenshots
-Below are a few examples of the commands shown above.
+Below are a few examples of the commands shown above. Note: images are subject to change, or can become outdated as the project is very much active. 
 
+#### /recent-sessions
 ![img.png](images/img.png)
 
+#### /play
+![image](https://github.com/user-attachments/assets/9a74535e-b81a-480d-adb9-b84953c7e4ce)
+
+#### /mediaprogress
 ![img.png](images/mediaprogress.png)
 
+#### Other examples
 ![img.png](images/autocomplete.png)
