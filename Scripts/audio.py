@@ -236,6 +236,7 @@ class AudioPlayBack(Extension):
 
                     audio = AudioVolume(audio_obj)
                     audio.ffmpeg_before_args = f"-ss {chapterStart}"
+                    audio.ffmpeg_args = f"-ar 44100 -acodec aac -re"
                     self.audioObj = audio
 
                     # Set next time to new chapter time
@@ -302,6 +303,7 @@ class AudioPlayBack(Extension):
         audio.locked_stream = True
         self.volume = audio.volume
         audio.ffmpeg_before_args = f"-ss {currentTime}"
+        audio.ffmpeg_args = f"-ar 44100 -acodec aac -re"
         audio.bitrate = self.bitrate
 
         # Class VARS
@@ -668,10 +670,10 @@ class AudioPlayBack(Extension):
     async def callback_stop_button(self, ctx: ComponentContext):
         if ctx.voice_state:
             logger.info('Stopping Playback!')
+            await ctx.edit_origin()
             await ctx.voice_state.channel.voice_state.stop()
             self.session_update.stop()
             c.bookshelf_close_session(self.sessionID)
-            await ctx.edit_origin()
             await ctx.delete()
             await ctx.voice_state.channel.disconnect()
 
@@ -714,6 +716,7 @@ class AudioPlayBack(Extension):
         audio = AudioVolume(audio_obj)
 
         audio.ffmpeg_before_args = f"-ss {self.nextTime}"
+        audio.ffmpeg_args = f"-ar 44100 -acodec aac"
         self.audioObj = audio
         self.session_update.start()
         await ctx.edit_origin()
@@ -734,6 +737,7 @@ class AudioPlayBack(Extension):
         audio = AudioVolume(audio_obj)
 
         audio.ffmpeg_before_args = f"-ss {self.nextTime}"
+        audio.ffmpeg_args = f"-ar 44100 -acodec aac"
         self.audioObj = audio
         self.session_update.start()
         await ctx.edit_origin()
