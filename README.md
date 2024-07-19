@@ -39,6 +39,7 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 | `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you)                                                                    | *Boolean* | **NO**    |
 | `MULTI_USER`       | By default set to `True`, disable this to re-enable admin controls (Conditional on the user logged in.) and to remove the /login and /select options | *Boolean* | **NO**    |
 | `AUDIO_ENABLED`    | By default set to `True`, disable if you want to remove the ability for audio playback.                                                              | *Boolean* | **NO**    |
+| `OPT_IMAGE_URL`    | Optional HTTPS URL to your server should you experience similar issues as mentioned above.                                                           | *String*  | **NO**    |
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**
