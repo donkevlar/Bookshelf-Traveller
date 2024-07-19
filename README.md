@@ -29,17 +29,17 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 ### Environmental Variables
 
 
-| ENV Variables      | Description                                                                                                                                          | Type      | Required? |
-|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|-----------|
-| `DISCORD_TOKEN`    | Discord API Token                                                                                                                                    | *String*  | **YES**   |
-| `bookshelfToken`   | Bookshelf User Token (All user types work, but some will limit your interaction options.)                                                            | *String*  | **YES**   |
-| `bookshelfURL`     | Bookshelf url with protocol and port, ex: http://localhost:80                                                                                        | *String*  | **YES**   |
-| `PLAYBACK_ROLE`    | A discord role id, used if you want other users to have access to playback.                                                                          | *Integer* | **NO**    |
-| `OWNER_ONLY`       | By default set to `True`. Only allow bot owner to use bot.                                                                                           | *Boolean* | **NO**    |
-| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you)                                                                    | *Boolean* | **NO**    |
-| `MULTI_USER`       | By default set to `True`, disable this to re-enable admin controls (Conditional on the user logged in.) and to remove the /login and /select options | *Boolean* | **NO**    |
-| `AUDIO_ENABLED`    | By default set to `True`, disable if you want to remove the ability for audio playback.                                                              | *Boolean* | **NO**    |
-| `OPT_IMAGE_URL`    | Optional HTTPS URL to your server should you experience similar issues as mentioned above.                                                           | *String*  | **NO**    |
+| ENV Variables      | Description                                                                                                                                                | Type      | Required? |
+|--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|-----------|
+| `DISCORD_TOKEN`    | Discord API Token                                                                                                                                          | *String*  | **YES**   |
+| `bookshelfToken`   | Bookshelf User Token (All user types work, but some will limit your interaction options.)                                                                  | *String*  | **YES**   |
+| `bookshelfURL`     | Bookshelf url with protocol and port, ex: http://localhost:80                                                                                              | *String*  | **YES**   |
+| `PLAYBACK_ROLE`    | A discord role id, used if you want other users to have access to playback.                                                                                | *Integer* | **NO**    |
+| `OWNER_ONLY`       | By default set to `True`. Only allow bot owner to use bot.                                                                                                 | *Boolean* | **NO**    |
+| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you)                                                                          | *Boolean* | **NO**    |
+| `MULTI_USER`       | By default set to `True`, disable this to re-enable admin controls (Conditional on the user logged in.) and to remove the /login and /select options       | *Boolean* | **NO**    |
+| `AUDIO_ENABLED`    | By default set to `True`, disable if you want to remove the ability for audio playback.                                                                    | *Boolean* | **NO**    |
+| `OPT_IMAGE_URL`    | Optional HTTPS URL for generating cover images and sending them to the discord API. This is primarily if you experience similar issues as mentioned above. | *String*  | **NO**    |
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**
