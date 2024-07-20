@@ -263,11 +263,13 @@ class AudioPlayBack(Extension):
         embed_message.add_field(name='ABS Information', value=user_info)
 
         embed_message.add_field(name='Playback Information', value=f"Current State: **{self.play_state.upper()}**"
-                                                                f"\nCurrent Chapter: **{chapter}**"
-                                                                f"\nCurrent volume: **{round(self.volume * 100)}%**")
+                                                            f"\nCurrent Chapter: **{chapter}**"
+                                                            f"\nCurrent volume: **{round(self.volume * 100)}%**") # NOQA
 
         # Add media image (If using HTTPS)
         embed_message.add_image(self.cover_image)
+
+        embed_message.footer = f'Powered by Bookshelf Traveller 🕮 | {s.versionNumber}'
 
         return embed_message
 
