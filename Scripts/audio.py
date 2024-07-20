@@ -178,7 +178,7 @@ class AudioPlayBack(Extension):
         self.username = ''
         self.user_type = ''
 
-    # Tasks
+    # Tasks ---------------------------------
     #
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
@@ -203,7 +203,7 @@ class AudioPlayBack(Extension):
         if ctx.channel.voice_state.player.stopped and ctx.voice_state:
             pass
 
-    # Random Functions
+    # Random Functions ------------------------
     # Change Chapter Function
     def move_chapter(self, option: str):
         logger.info(f"executing command /next-chapter")
@@ -249,6 +249,29 @@ class AudioPlayBack(Extension):
                     self.nextTime = None
                     self.session_update.start()
                     self.found_next_chapter = True
+
+    def modified_message(self, color, chapter):
+        # Create embedded message
+        embed_message = Embed(
+            title=f"{self.bookTitle}",
+            description=f"Currently playing {self.bookTitle}",
+            color=color,
+        )
+
+        # Add ABS user info
+        user_info = f"Username: **{self.username}**\nUser Type: **{self.user_type}**"
+        embed_message.add_field(name='ABS Information', value=user_info)
+
+        embed_message.add_field(name='Playback Information', value=f"Current State: **{self.play_state.upper()}**"
+                                                                f"\nCurrent Chapter: **{chapter}**"
+                                                                f"\nCurrent volume: **{round(self.volume * 100)}%**")
+
+        # Add media image (If using HTTPS)
+        embed_message.add_image(self.cover_image)
+
+        return embed_message
+
+    # Commands --------------------------------
 
     # Main play command, place class variables here since this is required to play audio
     @slash_command(name="play", description="Play audio from ABS server", dm_permission=False)
@@ -327,23 +350,10 @@ class AudioPlayBack(Extension):
         self.chapterArray = chapter_array
         self.bookFinished = bookFinished
         self.context_voice_channel = ctx.voice_state
+        self.play_state = 'playing'
 
         # Create embedded message
-        embed_message = Embed(
-            title=f"{self.bookTitle}",
-            description=f"Currently playing {self.bookTitle}",
-            color=ctx.author.accent_color,
-        )
-
-        # Add ABS user info
-        user_info = f"Username: {self.username}\nUser Type: {self.user_type}"
-        embed_message.add_field(name='ABS Information', value=user_info)
-
-        # Current Chapter
-        embed_message.add_field(name='Current Chapter', value=self.currentChapterTitle)
-
-        # Add media image (If using HTTPS)
-        embed_message.add_image(self.cover_image)
+        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
 
         # check if bot currently connected to voice
         if not ctx.voice_state:
@@ -365,7 +375,6 @@ class AudioPlayBack(Extension):
 
                 await self.client.change_presence(activity=Activity.create(name=f"{self.bookTitle}",
                                                                            type=ActivityType.LISTENING))
-                self.play_state = 'playing'
 
                 # Start audio playback
                 await ctx.voice_state.play_no_wait(audio)
@@ -384,7 +393,7 @@ class AudioPlayBack(Extension):
         # Play Audio, skip channel connection
         else:
             try:
-                print("\nVoice already connected, playing new audio selection.")
+                logger.info("Voice already connected, playing new audio selection.")
 
                 await ctx.voice_state.play_no_wait(audio)
 
@@ -394,8 +403,8 @@ class AudioPlayBack(Extension):
                 await ctx.author.voice.channel.disconnect()
                 await self.client.change_presence(activity=None)
                 await ctx.author.channel.send(f'Issue with playback: {e}')
-                logger.warning(f"Error occured during execution of /play : \n {e}")
-                print(e)
+                logger.error(f"Error occured during execution of /play : \n {e}")
+                logger.error(e)
 
         # Check if bot is playing something
         if not ctx.voice_state:
@@ -487,7 +496,9 @@ class AudioPlayBack(Extension):
         if ctx.voice_state:
             logger.info(f"executing command /stop")
             await ctx.send(content="Disconnected from audio channel and stopping playback.", ephemeral=True)
+            await ctx.voice_state.channel.voice_state.stop()
             await ctx.author.voice.channel.disconnect()
+            self.audioObj.cleanup()  # NOQA
             await self.client.change_presence(activity=None)
 
             if self.session_update.running:
@@ -563,23 +574,27 @@ class AudioPlayBack(Extension):
         ]
         await ctx.send(choices=choices)
 
-    # Component Callbacks
+    # Component Callbacks ---------------------------
     @component_callback('pause_audio_button')
     async def callback_pause_button(self, ctx: ComponentContext):
         if ctx.voice_state:
             logger.info('Pausing Playback!')
+            self.play_state = 'paused'
             ctx.voice_state.channel.voice_state.pause()
             self.session_update.stop()
-            await ctx.edit_origin(content="Play", components=component_rows_paused)
+            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
+            await ctx.edit_origin(content="Play", components=component_rows_paused, embed=embed_message)
 
     @component_callback('play_audio_button')
     async def callback_play_button(self, ctx: ComponentContext):
         if ctx.voice_state:
             logger.info('Resuming Playback!')
+            self.play_state = 'playing'
             ctx.voice_state.channel.voice_state.resume()
             self.session_update.start()
+            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
 
-            await ctx.edit_origin(components=component_rows_initial)
+            await ctx.edit_origin(components=component_rows_initial, embed=embed_message)
 
     @component_callback('next_chapter_button')
     async def callback_next_chapter_button(self, ctx: ComponentContext):
@@ -596,21 +611,7 @@ class AudioPlayBack(Extension):
             # Find next chapter
             self.move_chapter(option='next')
 
-            # Create embedded message
-            embed_message = Embed(
-                title=f"{self.bookTitle}",
-                description=f"Currently playing {self.bookTitle}",
-                color=ctx.author.accent_color,
-            )
-
-            # Add ABS user info
-            user_info = f"Username: {self.username}\nUser Type: {self.user_type}"
-            embed_message.add_field(name='ABS Information', value=user_info)
-
-            embed_message.add_field(name='Current Chapter', value=self.newChapterTitle)
-
-            # Add media image (If using HTTPS)
-            embed_message.add_image(self.cover_image)
+            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
 
             if self.found_next_chapter:
                 await ctx.edit(embed=embed_message)
@@ -640,21 +641,7 @@ class AudioPlayBack(Extension):
             # Find previous chapter
             self.move_chapter(option='previous')
 
-            # Create embedded message
-            embed_message = Embed(
-                title=f"{self.bookTitle}",
-                description=f"Currently playing {self.bookTitle}",
-                color=ctx.author.accent_color,
-            )
-
-            # Add ABS user info
-            user_info = f"Username: {self.username}\nUser Type: {self.user_type}"
-            embed_message.add_field(name='ABS Information', value=user_info)
-
-            embed_message.add_field(name='Current Chapter', value=self.newChapterTitle)
-
-            # Add media image (If using HTTPS)
-            embed_message.add_image(self.cover_image)
+            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
 
             if self.found_next_chapter:
                 await ctx.edit(embed=embed_message)
@@ -670,33 +657,47 @@ class AudioPlayBack(Extension):
     async def callback_stop_button(self, ctx: ComponentContext):
         if ctx.voice_state:
             logger.info('Stopping Playback!')
-            await ctx.edit_origin()
             await ctx.voice_state.channel.voice_state.stop()
-            self.session_update.stop()
-            c.bookshelf_close_session(self.sessionID)
+            await ctx.edit_origin()
             await ctx.delete()
+            self.audioObj.cleanup()  # NOQA
+            self.session_update.stop()
             await ctx.voice_state.channel.disconnect()
+            await self.client.change_presence(activity=None)
+            # Cleanup Session
+            c.bookshelf_close_session(self.sessionID)
 
     @component_callback('volume_up_button')
     async def callback_volume_up_button(self, ctx: ComponentContext):
         if ctx.voice_state and ctx.author.voice:
             adjustment = 0.1
+            # Update Audio OBJ
             audio = self.audioObj
-            await ctx.edit_origin()
             self.volume = audio.volume
             audio.volume = self.volume + adjustment  # NOQA
             self.volume = audio.volume
+
+            # Create embedded message
+            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
+
+            await ctx.edit_origin(embed=embed_message)
             logger.info(f"Set Volume {round(self.volume * 100)}")  # NOQA
 
     @component_callback('volume_down_button')
     async def callback_volume_down_button(self, ctx: ComponentContext):
         if ctx.voice_state and ctx.author.voice:
             adjustment = 0.1
+
             audio = self.audioObj
-            await ctx.edit_origin()
             self.volume = audio.volume
             audio.volume = self.volume - adjustment  # NOQA
             self.volume = audio.volume
+
+            # Create embedded message
+            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
+
+            await ctx.edit_origin(embed=embed_message)
+
             logger.info(f"Set Volume {round(self.volume * 100)}")  # NOQA
 
     @component_callback('forward_button')
@@ -704,7 +705,7 @@ class AudioPlayBack(Extension):
         self.session_update.stop()
         ctx.voice_state.channel.voice_state.player.stop()
         c.bookshelf_close_session(self.sessionID)
-        self.audioObj.cleanup() # NOQA
+        self.audioObj.cleanup()  # NOQA
 
         audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
 
@@ -720,14 +721,14 @@ class AudioPlayBack(Extension):
         self.audioObj = audio
         self.session_update.start()
         await ctx.edit_origin()
-        await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj) # NOQA
+        await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
 
     @component_callback('rewind_button')
     async def callback_rewind_button(self, ctx: ComponentContext):
         self.session_update.stop()
         ctx.voice_state.channel.voice_state.player.stop()
         c.bookshelf_close_session(self.sessionID)
-        self.audioObj.cleanup() # NOQA
+        self.audioObj.cleanup()  # NOQA
         audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
 
         self.sessionID = sessionID
