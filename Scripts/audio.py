@@ -533,7 +533,7 @@ class AudioPlayBack(Extension):
                                f"failed: {failedSessionCount}, total: {openSessionCount}", ephemeral=True)
 
     @check(ownership_check)
-    @slash_command(name='refresh', description='refreshes or re-sends your current playback card.')
+    @slash_command(name='refresh', description='re-sends your current playback card.')
     async def refresh_play_card(self, ctx: SlashContext):
         if ctx.voice_state:
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
