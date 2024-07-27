@@ -532,6 +532,7 @@ class AudioPlayBack(Extension):
         await ctx.send(content=f"Result of attempting to close sessions. success: {closedSessionCount}, "
                                f"failed: {failedSessionCount}, total: {openSessionCount}", ephemeral=True)
 
+    @check(ownership_check)
     @slash_command(name='refresh', description='refreshes or re-sends your current playback card.')
     async def refresh_play_card(self, ctx: SlashContext):
         if ctx.voice_state:
