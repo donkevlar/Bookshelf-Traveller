@@ -1,4 +1,5 @@
 import sys
+import time
 
 from interactions import *
 from interactions.api.voice.audio import AudioVolume
@@ -6,6 +7,7 @@ import bookshelfAPI as c
 import settings as s
 from settings import os
 import logging
+from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -251,6 +253,8 @@ class AudioPlayBack(Extension):
                     self.found_next_chapter = True
 
     def modified_message(self, color, chapter):
+        now = datetime.now()
+        formatted_time = now.strftime("%m-%d %H:%M:%S")
         # Create embedded message
         embed_message = Embed(
             title=f"{self.bookTitle}",
@@ -269,7 +273,7 @@ class AudioPlayBack(Extension):
         # Add media image (If using HTTPS)
         embed_message.add_image(self.cover_image)
 
-        embed_message.footer = f'Powered by Bookshelf Traveller 🕮 | {s.versionNumber}'
+        embed_message.footer = f'Powered by Bookshelf Traveller 🕮 | {s.versionNumber} | Last Update: {formatted_time}'
 
         return embed_message
 
@@ -527,6 +531,18 @@ class AudioPlayBack(Extension):
 
         await ctx.send(content=f"Result of attempting to close sessions. success: {closedSessionCount}, "
                                f"failed: {failedSessionCount}, total: {openSessionCount}", ephemeral=True)
+
+    @slash_command(name='refresh', description='refreshes or re-sends your current playback card.')
+    async def refresh_play_card(self, ctx: SlashContext):
+        if ctx.voice_state:
+            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
+            if self.play_state == "playing":
+                await ctx.send(embed=embed_message, components=component_rows_initial, ephemeral=True)
+            elif self.play_state == "paused":
+                await ctx.send(embed=embed_message, components=component_rows_paused, ephemeral=True)
+        else:
+            return await ctx.send("Bot not in voice channel or an error has occured. Please try again later!",
+                                  ephemeral=True)
 
     # -----------------------------
     # Auto complete options below
