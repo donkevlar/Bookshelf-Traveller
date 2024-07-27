@@ -304,8 +304,9 @@ def bookshelf_item_progress(item_id):
         return formatted_info
 
 
-def bookshelf_title_search(display_title: str, only_audio=True):
+def bookshelf_title_search(display_title: str):
     libraries = bookshelf_libraries()
+    valid_media_types = ['book']
 
     valid_libraries = []
     valid_library_count = 0
@@ -313,23 +314,18 @@ def bookshelf_title_search(display_title: str, only_audio=True):
 
     # Get valid libraries using filter only_audio
     for name, (library_id, audiobooks_only) in libraries.items():
+
         # Parse for the library that is only audio
-        if only_audio and audiobooks_only:
-            valid_libraries.append({"id": library_id, "name": name})
-            valid_library_count += 1
-            print(f"\nValid Libraries Found: {valid_library_count} | Name: {name}\n")
-        # Parse for the library that is anything
-        elif only_audio is False and audiobooks_only is False:
-            valid_libraries.append({"id": library_id, "name": name})
-            valid_library_count += 1
-            print(f"Valid Libraries Found: {valid_library_count}\n")
+        valid_libraries.append({"id": library_id, "name": name})
+        valid_library_count += 1
+        logger.info(f"\nValid Libraries Found: {valid_library_count} | Name: {name}\n")
 
     if valid_library_count > 0:
 
         # Search the libraries for the title name
         for lib_id in valid_libraries:
             library_iD = lib_id.get('id')
-            print(f"Beginning to search libraries: {lib_id.get('name')} | {library_iD}\n")
+            logger.info(f"Beginning to search libraries: {lib_id.get('name')} | {library_iD}\n")
             # Search for the title name using endpoint
             try:
                 limit = 10
@@ -347,11 +343,16 @@ def bookshelf_title_search(display_title: str, only_audio=True):
                     for book in dataset:
                         title = book['libraryItem']['media']['metadata']['title']
                         book_id = book['libraryItem']['id']
+                        media_type = book['libraryItem']['mediaType']
                         # Add to dict
-                        found_titles.append({'id': book_id, 'title': title})
+                        if media_type in valid_media_types:
+                            logger.info(f'accepted: {title} | media type: {media_type}')
+                            found_titles.append({'id': book_id, 'title': title})
+                        else:
+                            logger.warning(f'rejected: {title}, reason: media-type {media_type} rejected')
 
                     # Append None to book_titles if nothing is found
-                    print(found_titles)
+                    logger.info(found_titles)
                     return found_titles
 
             except Exception as e:
@@ -700,4 +701,5 @@ def bookshelf_close_all_sessions(items: int):
 # Test bookshelf api functions below
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    bookshelf_close_all_sessions(items=100)
+    books = bookshelf_title_search('harry potter')
+    print(books)
