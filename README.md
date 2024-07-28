@@ -86,7 +86,7 @@ services:
 ```
 
 ### Unraid
-Visit the community applications (CA) store and follow the instructions. 
+Visit the community applications (CA) store and search for the template name listed below, click install and insert your discord and ABS tokens respectively and enjoy! 
 
 *Template Name:* `Bookshelf-Traveller`
 
