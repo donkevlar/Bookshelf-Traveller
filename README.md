@@ -86,7 +86,9 @@ services:
 ```
 
 ### Unraid
-*Coming Soon!*
+Visit the community applications (CA) store and follow the instructions. 
+
+*Template Name:* `Bookshelf-Traveller`
 
 ### Python Script
 Requirements: Python 3.11 or above.
