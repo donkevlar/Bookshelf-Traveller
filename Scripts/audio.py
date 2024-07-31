@@ -6,7 +6,6 @@ from interactions import *
 from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
 import settings as s
-from Scripts import settings
 from settings import os, TIMEZONE
 import logging
 from datetime import datetime

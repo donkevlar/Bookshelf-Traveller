@@ -48,9 +48,6 @@ ALERT_INT = os.getenv("ALERT_INT", 60)
 TIMEZONE = settings.TIMEZONE
 timeZone = pytz.timezone(TIMEZONE)
 
-# Clear Log on startup
-os.system('cls' if os.name == 'nt' else 'clear')
-
 # Print Startup Time
 current_time = datetime.now(timeZone)
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
@@ -94,9 +91,6 @@ else:
 
 # Bot basic setup
 bot = Client(intents=Intents.DEFAULT, logger=logger)
-
-# Bot VARS
-bot.admin = ADMIN
 
 
 # Function which holds the library options for related autocomplete
