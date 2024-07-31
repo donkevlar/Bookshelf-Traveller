@@ -40,6 +40,7 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 | `MULTI_USER`       | By default set to `True`, disable this to re-enable admin controls (Conditional on the user logged in.) and to remove the /login and /select options       | *Boolean* | **NO**    |
 | `AUDIO_ENABLED`    | By default set to `True`, disable if you want to remove the ability for audio playback.                                                                    | *Boolean* | **NO**    |
 | `OPT_IMAGE_URL`    | Optional HTTPS URL for generating cover images and sending them to the discord API. This is primarily if you experience similar issues as mentioned above. | *String*  | **NO**    |
+| `TIMEZONE`         | Default set to `America/Toronto`                                                                                                                           | *String*  | **NO**    |
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**
@@ -53,7 +54,7 @@ Docker Container Available:
 docker pull donkevlar/bookshelf-traveller:latest
 ```
 
-#### Github Package Repository
+#### GitHub Package Repository
 ```
 docker pull ghcr.io/donkevlar/bookshelf-traveller:master
 ```
