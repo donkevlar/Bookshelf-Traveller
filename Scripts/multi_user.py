@@ -187,10 +187,16 @@ class MultiUser(Extension):
                 if admin_user:
                     await ctx.send("Logged in as ABS ADMIN, loading administration module! Important, you may have to "
                                    "reload discord!", ephemeral=True)
-                    ctx.bot.load_extension("administration")
+                    try:
+                        ctx.bot.load_extension("administration")
+                    except Exception as e:
+                        logger.warning(e)
                 else:
                     await ctx.send("Important changing users may require reloading discord!", ephemeral=True)
-                    ctx.bot.unload_extension("administration")
+                    try:
+                        ctx.bot.unload_extension("administration")
+                    except Exception as e:
+                        logger.warning(e)
 
             else:
                 logger.info('Option 4 executed')
@@ -203,10 +209,16 @@ class MultiUser(Extension):
                 if admin_user:
                     await ctx.send("Logged in as ABS ADMIN, loading administration module! Important, you may have to "
                                    "reload discord!", ephemeral=True)
-                    ctx.bot.load_extension("administration")
+                    try:
+                        ctx.bot.load_extension("administration")
+                    except Exception as e:
+                        logger.warning(e)
                 else:
                     await ctx.send("Important changing users may require reloading discord!", ephemeral=True)
-                    ctx.bot.unload_extension("administration")
+                    try:
+                        ctx.bot.unload_extension("administration")
+                    except Exception as e:
+                        logger.warning(e)
 
     @check(ownership_check)
     @slash_command(name="select",
@@ -241,10 +253,16 @@ class MultiUser(Extension):
                 if admin_user:
                     await ctx.send("Logged in as ABS ADMIN, loading administration module! Important, you may have to "
                                    "reload discord!", ephemeral=True)
-                    ctx.bot.load_extension("administration")
+                    try:
+                        ctx.bot.load_extension("administration")
+                    except Exception as e:
+                        logger.warning(e)
                 else:
                     await ctx.send("Important changing users may require reloading discord!", ephemeral=True)
-                    ctx.bot.unload_extension("administration")
+                    try:
+                        ctx.bot.unload_extension("administration")
+                    except Exception as e:
+                        logger.warning(e)
             else:
                 await ctx.send(content="Error occured, please try again later.", ephemeral=True)
         else:
