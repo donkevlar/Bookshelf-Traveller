@@ -114,7 +114,7 @@ class MultiUser(Extension):
 
     @check(ownership_check)
     @slash_command(name="login", description="Login into ABS", dm_permission=True)
-    async def user_login(self, ctx):
+    async def user_login(self, ctx: SlashContext):
         if ctx.voice_state:
             return await ctx.send("Cannot perform login during playback, please use the /stop command and try again.",
                                   ephemeral=True)
@@ -140,6 +140,10 @@ class MultiUser(Extension):
         abs_token = user_info["token"]
         abs_username = user_info["username"]
         abs_user_type = user_info["type"]
+        admin_user = False
+
+        if abs_user_type == "admin" or abs_user_type == "root":
+            admin_user = True
 
         logger.info("Attempting to find logged in user...")
         user_result = search_user_db(int(author_discord_id), abs_username)
@@ -180,6 +184,13 @@ class MultiUser(Extension):
                 logger.warning(f'user {ctx.author} logged in to ABS, changing token to assigned user: {abs_username}')
                 await modal_ctx.send(content=f"Successfully logged in as {abs_username}.",
                                      ephemeral=True)
+                if admin_user:
+                    await ctx.send("Logged in as ABS ADMIN, loading administration module! Important, you may have to "
+                                   "reload discord!", ephemeral=True)
+                    ctx.bot.load_extension("administration")
+                else:
+                    await ctx.send("Important changing users may require reloading discord!", ephemeral=True)
+                    ctx.bot.unload_extension("administration")
 
             else:
                 logger.info('Option 4 executed')
@@ -189,13 +200,20 @@ class MultiUser(Extension):
                 logger.warning(f'user {ctx.author} logged in to ABS, changing token to assigned user: {retrieved_user}')
                 await modal_ctx.send(content=f"Successfully logged in as {retrieved_user}.",
                                      ephemeral=True)
+                if admin_user:
+                    await ctx.send("Logged in as ABS ADMIN, loading administration module! Important, you may have to "
+                                   "reload discord!", ephemeral=True)
+                    ctx.bot.load_extension("administration")
+                else:
+                    await ctx.send("Important changing users may require reloading discord!", ephemeral=True)
+                    ctx.bot.unload_extension("administration")
 
     @check(ownership_check)
     @slash_command(name="select",
                    description="log a user in via db pull")
     @slash_option(name="user", description="Select from previously logged in users.", opt_type=OptionType.STRING,
                   required=True, autocomplete=True)
-    async def user_select_db(self, ctx, user):
+    async def user_select_db(self, ctx: SlashContext, user):
         if ctx.voice_state:
             return await ctx.send("Cannot perform login during playback, please use the /stop command and try again.",
                                   ephemeral=True)
@@ -207,6 +225,12 @@ class MultiUser(Extension):
             token = user_result[0]
             user_info = c.bookshelf_user_login(token=token)
             username = user_info['username']
+            user_type = user_info['type']
+            admin_user = False
+
+            if user_type == "root" or user_type == "admin":
+                admin_user = True
+
             if token == abs_stored_token:
                 await ctx.send(content=f"user: {username} already logged in.", ephemeral=True)
                 return
@@ -214,13 +238,20 @@ class MultiUser(Extension):
                 os.environ['bookshelfToken'] = token
                 logger.warning(f'user {ctx.author} logged in to ABS, changing token to assigned user: {username}')
                 await ctx.send(content=f'Successfully logged in as user {username}', ephemeral=True)
+                if admin_user:
+                    await ctx.send("Logged in as ABS ADMIN, loading administration module! Important, you may have to "
+                                   "reload discord!", ephemeral=True)
+                    ctx.bot.load_extension("administration")
+                else:
+                    await ctx.send("Important changing users may require reloading discord!", ephemeral=True)
+                    ctx.bot.unload_extension("administration")
             else:
                 await ctx.send(content="Error occured, please try again later.", ephemeral=True)
         else:
             await ctx.send(content="Error occured, please try again later.", ephemeral=True)
 
     @slash_command(name='user', description="display the currently logged in ABS user", dm_permission=False)
-    async def user_check(self, ctx):
+    async def user_check(self, ctx: SlashContext):
         abs_stored_token = os.getenv('bookshelfToken')
         discord_id = ctx.author.id
         result = search_user_db(token=abs_stored_token)
