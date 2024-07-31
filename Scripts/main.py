@@ -48,6 +48,9 @@ ALERT_INT = os.getenv("ALERT_INT", 60)
 TIMEZONE = settings.TIMEZONE
 timeZone = pytz.timezone(TIMEZONE)
 
+# Clear Log on startup
+os.system('cls' if os.name == 'nt' else 'clear')
+
 # Print Startup Time
 current_time = datetime.now(timeZone)
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
@@ -81,7 +84,7 @@ if user_locked:
     logger.warning("User locked from logging in, please unlock via web gui.")
     sys.exit("User locked from logging in, please unlock via web gui.")
 
-# CHeck if ABS user is an admin
+# Check if ABS user is an admin
 ADMIN = False
 if user_type == "root" or user_type == "admin":
     ADMIN = True
@@ -91,6 +94,9 @@ else:
 
 # Bot basic setup
 bot = Client(intents=Intents.DEFAULT, logger=logger)
+
+# Bot VARS
+bot.admin = ADMIN
 
 
 # Function which holds the library options for related autocomplete
@@ -361,34 +367,8 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
             traceback.print_exc()
 
 
-# tests the connection to the server, option to use a different url if you want. WHY IDK, stop asking.
-@slash_command(name="test-connection",
-               description="test the connection between this bot and the audiobookshelf server, "
-                           "optionally can place any url")
-@check(ownership_check)
-@slash_option(name="opt_url", description="enter an optional url to test outside of server", required=False,
-              opt_type=OptionType.STRING)
-async def test_server_connection(ctx: SlashContext, opt_url=None):
-    try:
-        if opt_url is not None:
-            r = requests.get(opt_url)
-            status = r.status_code
-
-            await ctx.send(f"Successfully connected to {opt_url} with status: {status}", ephemeral=EPHEMERAL_OUTPUT)
-        else:
-            status = c.bookshelf_test_connection()
-            await ctx.send(f"Successfully connected to {os.getenv('bookshelfURL')} with status: {status}",
-                           ephemeral=EPHEMERAL_OUTPUT)
-
-        logger.info(f' Successfully sent command: test-connection')
-
-    except Exception as e:
-        logger.warning(
-            f'User:{bot.user} (ID: {bot.user.id}) | Error occured: {e} | Command Name: add-user')
-
-
 # Self-explanatory, pulls all a library's items
-@slash_command(name="all-library-items", description="Get all library items")
+@slash_command(name="all-library-items", description=f"Get all library items from the currently signed in ABS user.")
 @check(ownership_check)
 @option_library_name()
 async def all_library_items(ctx: SlashContext, library_name: str):
