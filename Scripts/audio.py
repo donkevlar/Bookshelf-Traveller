@@ -501,7 +501,7 @@ class AudioPlayBack(Extension):
                 volume_float = float(volume / 100)
                 audio.volume = volume_float
                 self.volume = audio.volume
-                await ctx.send(content=f"Set volume to: {volume}%", ephemaral=True)
+                await ctx.send(content=f"Volume set to: {volume}%", ephemaral=True)
 
             else:
                 await ctx.send(content=f"Invalid Entry", ephemeral=True)
