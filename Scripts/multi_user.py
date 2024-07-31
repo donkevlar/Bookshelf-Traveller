@@ -91,6 +91,18 @@ def search_user_db(discord_id=0, user='', token=''):
     return rows
 
 
+def remove_user_db(user: str):
+    logger.warning(f'Attempting to delete user {user} from db!')
+    try:
+        cursor.execute("DELETE FROM users WHERE user = ?", (user,))
+        conn.commit()
+        logger.info(f"Successfully deleted user {user} from db!")
+        return True
+    except sqlite3.Error as e:
+        logger.error(f"Error while attempting to delete {user}: {e}")
+        return False
+
+
 # Custom check for ownership
 async def ownership_check(ctx: BaseContext):
     # Default only owner can use this bot
@@ -268,6 +280,16 @@ class MultiUser(Extension):
         else:
             await ctx.send(content="Error occured, please try again later.", ephemeral=True)
 
+    @slash_command(name="remove-user", description="Remove a user from the Bookshelf-Traveller database.")
+    @slash_option(name='user', description='Select which user to remove', autocomplete=True, required=True,
+                  opt_type=OptionType.STRING)
+    async def remove_db_user(self, ctx: SlashContext, user: str):
+        user_result = remove_user_db(user)
+        if user_result:
+            await ctx.send(f'Successfully deleted user: {user} from database!', ephemeral=True)
+        else:
+            await ctx.send(f'Failed to delete user {user} from database!', ephemeral=True)
+
     @slash_command(name='user', description="display the currently logged in ABS user", dm_permission=False)
     async def user_check(self, ctx: SlashContext):
         abs_stored_token = os.getenv('bookshelfToken')
@@ -287,7 +309,10 @@ class MultiUser(Extension):
                 await ctx.send(content=f"Error occured, please visit logs for details and try again later.",
                                ephemeral=True)
 
+    # Autocomplete Options -------------------------------------
+
     @user_select_db.autocomplete(option_name="user")
+    @remove_db_user.autocomplete(option_name="user")
     async def user_search_autocomplete(self, ctx: AutocompleteContext):
         choices = []
         user_result = search_user_db()
