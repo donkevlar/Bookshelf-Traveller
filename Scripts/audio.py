@@ -1,11 +1,13 @@
 import sys
 import time
 
+import pytz
 from interactions import *
 from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
 import settings as s
-from settings import os
+from Scripts import settings
+from settings import os, TIMEZONE
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
@@ -24,6 +26,9 @@ playback_role = int(s.PLAYBACK_ROLE)
 # Default only owner can use this bot
 ownership = s.OWNER_ONLY
 ownership = eval(ownership)
+
+# Timezone
+timeZone = pytz.timezone(TIMEZONE)
 
 # Button Vars
 # Initial components loaded when play is first initialized
@@ -200,10 +205,11 @@ class AudioPlayBack(Extension):
             logger.info("Current Chapter Sync: " + current_chapter['title'])
             self.currentChapter = current_chapter
 
-    @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
-    async def playback_keep_alive(self, ctx: ComponentContext):
-        if ctx.channel.voice_state.player.stopped and ctx.voice_state:
-            pass
+    @Task.create(trigger=IntervalTrigger(minutes=10))
+    async def terminal_clearer(self, ctx: ComponentContext):
+        if ctx.voice_state:
+            os.system('cls' if os.name == 'nt' else 'clear')
+            logger.warning('Cleared terminal after 10 minutes of playback!')
 
     # Random Functions ------------------------
     # Change Chapter Function
@@ -226,6 +232,7 @@ class AudioPlayBack(Extension):
 
                 if nextChapterID == chapterID:
                     self.session_update.stop()
+                    self.terminal_clearer.stop()
                     c.bookshelf_close_session(self.sessionID)
                     chapterStart = float(chapter.get('start'))
                     self.newChapterTitle = chapter.get('title')
@@ -250,10 +257,11 @@ class AudioPlayBack(Extension):
                     # Reset Next Time to None before starting task again
                     self.nextTime = None
                     self.session_update.start()
+                    self.terminal_clearer.start()
                     self.found_next_chapter = True
 
     def modified_message(self, color, chapter):
-        now = datetime.now()
+        now = datetime.now(tz=timeZone)
         formatted_time = now.strftime("%m-%d %H:%M:%S")
         # Create embedded message
         embed_message = Embed(
@@ -369,8 +377,9 @@ class AudioPlayBack(Extension):
                 # Connect to voice channel
                 await ctx.author.voice.channel.connect()
 
-                # Start Session Updates
+                # Start Tasks
                 self.session_update.start()
+                self.terminal_clearer.start()
 
                 # Start Voice Check
                 await ctx.defer(ephemeral=True)
@@ -388,6 +397,7 @@ class AudioPlayBack(Extension):
             except Exception as e:
                 # Stop Any Associated Tasks
                 self.session_update.stop()
+                self.terminal_clearer.stop()
                 # Close ABS session
                 c.bookshelf_close_session(sessionID)  # NOQA
                 # Cleanup discord interactions
@@ -417,6 +427,7 @@ class AudioPlayBack(Extension):
             # Stop any running tasks
             if self.session_update.running:
                 self.session_update.stop()
+                self.terminal_clearer.stop()
             # close ABS session
             c.bookshelf_close_session(sessionID)
             return
@@ -433,6 +444,7 @@ class AudioPlayBack(Extension):
             # Stop Any Tasks Running
             if self.session_update.running:
                 self.session_update.stop()
+                self.terminal_clearer.stop()
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
@@ -449,6 +461,7 @@ class AudioPlayBack(Extension):
                 # Start session
                 self.play_state = 'playing'
                 self.session_update.start()
+                self.terminal_clearer.start()
             else:
                 await ctx.send(content="Bot or author isn't connected to channel, aborting.",
                                ephemeral=True)
@@ -509,6 +522,7 @@ class AudioPlayBack(Extension):
 
             if self.session_update.running:
                 self.session_update.stop()
+                self.terminal_clearer.stop()
                 self.play_state = 'stopped'
                 c.bookshelf_close_session(self.sessionID)
                 c.bookshelf_close_all_sessions(10)
