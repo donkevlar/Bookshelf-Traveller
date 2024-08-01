@@ -205,10 +205,9 @@ class AudioPlayBack(Extension):
             self.currentChapter = current_chapter
 
     @Task.create(trigger=IntervalTrigger(minutes=10))
-    async def terminal_clearer(self, ctx: ComponentContext):
-        if ctx.voice_state:
-            os.system('cls' if os.name == 'nt' else 'clear')
-            logger.warning('Cleared terminal after 10 minutes of playback!')
+    async def terminal_clearer(self):
+        os.system('cls' if os.name == 'nt' else 'clear')
+        logger.warning('Cleared terminal after 10 minutes of playback!')
 
     # Random Functions ------------------------
     # Change Chapter Function
