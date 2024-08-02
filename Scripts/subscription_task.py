@@ -85,10 +85,11 @@ class SubscriptionTask(Extension):
     @slash_option(name="option", description="", opt_type=OptionType.STRING, autocomplete=True, required=True)
     async def activeBookCheck(self, ctx: SlashContext, option: str):
         if option == 'enable':
-            await ctx.send("Activating New Book Task! This task will automatically refresh every *60 minutes*!",
+            await ctx.send(f"Activating New Book Task! This task will automatically refresh every *{task_frequency} minutes*!",
                            ephemeral=True)
             await ctx.send(f"Important: *The task will be sent to where this message originates from!*", ephemeral=True)
             self.newBookCheck.start(ctx)
+
         elif option == 'disable':
             if self.newBookCheck.running:
                 await ctx.send("Disabled Task: *Recently Added Books*", ephemeral=True)
