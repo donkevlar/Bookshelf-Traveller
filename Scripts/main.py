@@ -406,22 +406,28 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 
 # Main Loop
 if __name__ == '__main__':
+    # Load subscription module
+    logger.info('Subscribable Task module loaded!')
+    bot.load_extension("subscription_task")
+
     if AUDIO_ENABLED:
         # Load Audio Extension
         logger.info("Audio module loaded!")
         bot.load_extension("audio")
     else:
         logger.warning('Audio module disabled!')
+
     # Load Admin related extensions
     if ADMIN and not MULTI_USER:
         logger.info("Admin module loaded!")
         bot.load_extension("administration")
+
     # Load multi user extension
     if MULTI_USER:
         logger.info("MULTI_USER module loaded!")
         bot.load_extension("multi_user")
     else:
         logger.warning("MULTI_USER module disabled!")
-    # Start Bot
 
+    # Start Bot
     bot.start(settings.DISCORD_API_SECRET)
