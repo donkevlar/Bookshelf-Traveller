@@ -2,7 +2,7 @@ import os
 import sys
 import time
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 import traceback
 import csv
 import logging
@@ -264,7 +264,6 @@ def bookshelf_libraries():
             audiobooks_only = library['settings'].get('audiobooksOnly')
             library_data[name] = (library_id, audiobooks_only)
 
-        print(library_data)
         return library_data
 
 
@@ -312,7 +311,7 @@ def bookshelf_title_search(display_title: str):
     valid_library_count = 0
     found_titles = []
 
-    # Get valid libraries using filter only_audio
+    # Get valid libraries
     for name, (library_id, audiobooks_only) in libraries.items():
 
         # Parse for the library that is only audio
@@ -447,10 +446,13 @@ def bookshelf_cover_image(item_id: str):
     return link
 
 
-def bookshelf_all_library_items(library_id):
+def bookshelf_all_library_items(library_id, params=''):
     found_titles = []
     endpoint = f"/libraries/{library_id}/items"
-    params = '&sort=media.metadata.title'
+    if params == '':
+        params = '&sort=media.metadata.title'
+    else:
+        params = '&' + params
     r = bookshelf_conn(GET=True, endpoint=endpoint, params=params)
     if r.status_code == 200:
         data = r.json()
@@ -459,11 +461,15 @@ def bookshelf_all_library_items(library_id):
         for items in dataset:
             book_title = items['media']['metadata']['title']
             author = items['media']['metadata']['authorName']
-            book_id = items['media']['id']
+            media_type = items['mediaType']
+            item_id = items['id']
 
-            found_titles.append({'id': book_id, 'title': book_title, 'author': author})
+            # Added time is in linux
+            addedTime = items['addedAt']
 
-        print(found_titles)
+            found_titles.append({'id': item_id, 'title': book_title, 'author': author, 'addedTime': addedTime,
+                                 "mediaType": media_type})
+
         return found_titles
 
 
@@ -701,5 +707,5 @@ def bookshelf_close_all_sessions(items: int):
 # Test bookshelf api functions below
 if __name__ == '__main__':
     print("TESTING COMMENCES")
-    books = bookshelf_title_search('harry potter')
-    print(books)
+    bookshelf_all_library_items('5427680c-4e01-4d59-94d4-c73e5039fa9f')
+
