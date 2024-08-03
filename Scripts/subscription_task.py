@@ -15,7 +15,7 @@ load_dotenv()
 logger = logging.getLogger("bot")
 
 # VARS
-task_frequency = int(os.getenv('TASK_FREQUENCY', 60))
+task_frequency = s.TASK_FREQUENCY
 
 
 class SubscriptionTask(Extension):
