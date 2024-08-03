@@ -204,10 +204,10 @@ class AudioPlayBack(Extension):
             logger.info("Current Chapter Sync: " + current_chapter['title'])
             self.currentChapter = current_chapter
 
-    @Task.create(trigger=IntervalTrigger(minutes=10))
+    @Task.create(trigger=IntervalTrigger(minutes=5))
     async def terminal_clearer(self):
         os.system('cls' if os.name == 'nt' else 'clear')
-        logger.warning('Cleared terminal after 10 minutes of playback!')
+        logger.warning('Cleared terminal after 5 minutes of playback!')
 
     # Random Functions ------------------------
     # Change Chapter Function
