@@ -37,7 +37,7 @@ EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
 EXPERIMENTAL = os.getenv('EXPERIMENTAL', False)
 
 # Task frequency
-TASK_FREQUENCY = int(os.getenv('TASK_FREQUENCY', 60))
+TASK_FREQUENCY = int(os.getenv('TASK_FREQUENCY', 10))
 
 # Update Frequency for internal tasks, default 5 seconds
 UPDATES = os.getenv('UPDATES', 5)
