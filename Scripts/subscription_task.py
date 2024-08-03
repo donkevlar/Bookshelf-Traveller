@@ -113,6 +113,7 @@ class SubscriptionTask(Extension):
                 self.message = paginator.send(ctx)
                 await self.message
             else:
+                await ctx.send(f"No recent books found in given lookback period of {TASK_FREQUENCY} minutes.", ephemeral=True)
                 logger.info(f'No recent books found. Task will refresh and execute in {TASK_FREQUENCY} minutes')
 
         elif option == 'disable':
