@@ -1,13 +1,15 @@
-import settings as s
+from settings import *
 
 current_config = {
-    "VERSION": s.versionNumber,
-    "TIMEZONE": s.TIMEZONE,
-    "PLAYBACK_ROLE": s.PLAYBACK_ROLE,
-    "OWNER_ONLY": s.OWNER_ONLY,
-    "TASK_FREQUENCY": s.TASK_FREQUENCY,
-    "AUDIO_ENABLED": s.AUDIO_ENABLED,
-    "MULTI_USER": s.MULTI_USER
+    "VERSION": versionNumber,
+    "SERVER_URL": SERVER_URL,
+    "OPT_IMAGE_URL": OPT_IMAGE_URL,
+    "TIMEZONE": TIMEZONE,
+    "PLAYBACK_ROLE": PLAYBACK_ROLE,
+    "OWNER_ONLY": OWNER_ONLY,
+    "TASK_FREQUENCY": TASK_FREQUENCY,
+    "AUDIO_ENABLED": AUDIO_ENABLED,
+    "MULTI_USER": MULTI_USER
 }
 
 

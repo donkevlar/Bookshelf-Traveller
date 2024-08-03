@@ -2,12 +2,13 @@ import os
 import sys
 import time
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime
 import traceback
 import csv
 import logging
 from dotenv import load_dotenv
 import requests
+from settings import OPT_IMAGE_URL, SERVER_URL
 
 # Logger Config
 logger = logging.getLogger("bot")
@@ -17,7 +18,7 @@ load_dotenv()
 
 keep_active = False
 
-optional_image_url = os.getenv('OPT_IMAGE_URL', '')
+optional_image_url = OPT_IMAGE_URL
 
 
 # Simple Success Message
@@ -27,7 +28,7 @@ def successMSG(endpoint, status):
 
 def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET=False,
                    POST=False, params=None):
-    bookshelfURL = os.environ.get("bookshelfURL")
+    bookshelfURL = SERVER_URL
     API_URL = bookshelfURL + "/api"
     bookshelfToken = os.environ.get("bookshelfToken")
     tokenInsert = "?token=" + bookshelfToken
