@@ -16,6 +16,12 @@ MONITOR_ALERTS = os.getenv("MONITOR_ALERTS", False)
 # Time Zone
 TIMEZONE = os.getenv("TIMEZONE", "America/Toronto")
 
+# Audio Enabled
+AUDIO_ENABLED = os.getenv('AUDIO_ENABLED', True)
+
+# Multi-user functionality, will remove token from admin and all admin functions
+MULTI_USER = os.environ.get('MULTI_USER', True)
+
 # Discord token
 DISCORD_API_SECRET = os.getenv("DISCORD_TOKEN")
 

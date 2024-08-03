@@ -2,6 +2,7 @@ import traceback
 import requests
 import os
 import settings
+from config import current_config
 import logging
 from interactions import *
 from interactions.ext.paginators import Paginator
@@ -23,26 +24,14 @@ load_dotenv(override=True)
 
 
 # Global Vars
-
-# Multi-user functionality, will remove token from admin and all admin functions
-MULTI_USER = os.environ.get('MULTI_USER', True)
-MULTI_USER = eval(MULTI_USER)
-
-# Audio Enabled
-AUDIO_ENABLED = os.getenv('AUDIO_ENABLED', True)
-AUDIO_ENABLED = eval(AUDIO_ENABLED)
+MULTI_USER = eval(settings.MULTI_USER)
+AUDIO_ENABLED = eval(settings.AUDIO_ENABLED)
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
 
 # Logger Config
 logger = logging.getLogger("bot")
-
-# alert monitor, can be changed with command: alerts
-monitor_enabled = os.getenv("MONITOR_ALERTS", False)
-
-# Alert interval for MONITOR_ALERTS Task, in minutes, default=60
-ALERT_INT = os.getenv("ALERT_INT", 60)
 
 # Timezone
 TIMEZONE = settings.TIMEZONE
@@ -51,6 +40,8 @@ timeZone = pytz.timezone(TIMEZONE)
 # Print Startup Time
 current_time = datetime.now(timeZone)
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
+# Print current config
+logger.info(current_config)
 
 # Get Discord Token from ENV
 token = os.environ.get("DISCORD_TOKEN")
