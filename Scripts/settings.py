@@ -10,8 +10,10 @@ versionNumber = 'Beta_V1.1.3'
 
 COMMAND_COUNT = 0
 
-# Enables monitor to send alerts to the owner
-MONITOR_ALERTS = os.getenv("MONITOR_ALERTS", False)
+# Server URL
+SERVER_URL = os.environ.get("bookshelfURL")
+
+OPT_IMAGE_URL = os.getenv('OPT_IMAGE_URL', '')
 
 # Time Zone
 TIMEZONE = os.getenv("TIMEZONE", "America/Toronto")
