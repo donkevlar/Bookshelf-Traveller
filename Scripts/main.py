@@ -42,6 +42,7 @@ current_time = datetime.now(timeZone)
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
 
 # Print current config
+logger.info("Current config to follow!")
 for line in current_config:
     logger.info(line)
 
