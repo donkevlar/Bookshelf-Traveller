@@ -27,6 +27,7 @@ class SubscriptionTask(Extension):
         items_added = []
         libraries = c.bookshelf_libraries()
         current_time = datetime.now()
+        bookshelfURL = os.environ.get("bookshelfURL")
 
         time_minus_one_hour = current_time - timedelta(minutes=task_frequency)
         timestamp_minus_one_hour = int(time.mktime(time_minus_one_hour.timetuple()) * 1000)
@@ -65,7 +66,7 @@ class SubscriptionTask(Extension):
 
                 embed_message = Embed(
                     title=f"Recently Added Book {count}",
-                    description=f"Recently added books, this will refresh every 60 minutes!",
+                    description=f"Recently added books for {bookshelfURL}",
                     color=ctx.author.accent_color,
                 )
                 embed_message.add_field(name="Title", value=title)
