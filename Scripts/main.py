@@ -26,6 +26,7 @@ load_dotenv(override=True)
 # Global Vars
 MULTI_USER = eval(settings.MULTI_USER)
 AUDIO_ENABLED = eval(settings.AUDIO_ENABLED)
+DEBUG_MODE = eval(settings.DEBUG_MODE)
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
@@ -135,12 +136,14 @@ async def on_startup(event: Startup):
         if username != '':
             mu.insert_data(discord_id=owner_id, user=username, token=user_token)
             logger.info(f'Registered initial user {username} successfully')
-            await owner.send(f'Bot is ready. Logged in as {bot.user}. ABS user: {username} signed in.')
+            if not DEBUG_MODE:
+                await owner.send(f'Bot is ready. Logged in as {bot.user}. ABS user: {username} signed in.')
         else:
             logger.warning("No initial user registered, please use '/login' to register a user.")
             await owner.send("No initial user registered, please use '/login' to register a user.")
     else:
-        await owner.send(f'Bot is ready. Logged in as {bot.user}.')
+        if not DEBUG_MODE:
+            await owner.send(f'Bot is ready. Logged in as {bot.user}.')
 
     logger.info('Bot has finished loading, it is now safe to use! :)')
 
