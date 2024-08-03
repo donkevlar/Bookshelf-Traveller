@@ -10,6 +10,9 @@ versionNumber = 'Beta_V1.1.3'
 
 COMMAND_COUNT = 0
 
+# Debug Mode
+DEBUG_MODE = os.environ.get('DEBUG_MODE', True)
+
 # Server URL
 SERVER_URL = os.environ.get("bookshelfURL")
 
