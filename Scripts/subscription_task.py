@@ -78,7 +78,7 @@ class SubscriptionTask(Extension):
             return embeds
 
     @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
-    async def newBookCheck(self, ctx: SlashContext):
+    async def newBookCheck(self, ctx: InteractionContext):
         embeds = self.newBookTask(colour=ctx.author.accent_color)
         if embeds:
             paginator = Paginator.create_from_embeds(self.bot, *embeds, timeout=120)
