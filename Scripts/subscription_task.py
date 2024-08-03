@@ -90,20 +90,10 @@ class SubscriptionTask(Extension):
 
     @slash_command(name="task-new-books",
                    description="Enable/Disable a background task checking for newly added books.")
-    @slash_option(name="option", description="", opt_type=OptionType.STRING, autocomplete=True, required=True)
+    @slash_option(name="option", description="Enable, disable or immediately pull recently added books. ", opt_type=OptionType.STRING, autocomplete=True, required=True)
     async def activeBookCheck(self, ctx: SlashContext, option: str):
         if option == 'enable':
             logger.info('Activating New Book Task! A message will follow.')
-
-            embeds = self.newBookTask(colour=ctx.author.accent_color)
-            if embeds:
-                logger.info(f'Recent books found! Task will refresh and execute in {TASK_FREQUENCY} minutes')
-                paginator = Paginator.create_from_embeds(self.bot, *embeds, timeout=120)
-                self.message = paginator.send(ctx)
-                await self.message
-            else:
-                logger.info(f'No recent books found. Task will refresh and execute in {TASK_FREQUENCY} minutes')
-
             if not self.newBookCheck.running:
                 await ctx.send(
                     f"Activating New Book Task! This task will automatically refresh every *{TASK_FREQUENCY} minutes*!",
@@ -114,6 +104,16 @@ class SubscriptionTask(Extension):
             else:
                 logger.warning('New book check task was already running, ignoring...')
                 await ctx.send('New book check task is already running, ignoring...', ephemeral=True)
+
+        elif option == 'view':
+            embeds = self.newBookTask(colour=ctx.author.accent_color)
+            if embeds:
+                logger.info(f'Recent books found! Task will refresh and execute in {TASK_FREQUENCY} minutes')
+                paginator = Paginator.create_from_embeds(self.bot, *embeds, timeout=120)
+                self.message = paginator.send(ctx)
+                await self.message
+            else:
+                logger.info(f'No recent books found. Task will refresh and execute in {TASK_FREQUENCY} minutes')
 
         elif option == 'disable':
             if self.newBookCheck.running:
@@ -132,7 +132,8 @@ class SubscriptionTask(Extension):
     async def autocomplete_book_check(self, ctx: AutocompleteContext):
         choices = [
             {"name": "enable", "value": "enable"},
-            {"name": "disable", "value": "disable"}
+            {"name": "disable", "value": "disable"},
+            {"name": "view", "value": "view"}
         ]
 
         await ctx.send(choices=choices)
