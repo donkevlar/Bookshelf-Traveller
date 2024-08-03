@@ -40,8 +40,10 @@ timeZone = pytz.timezone(TIMEZONE)
 # Print Startup Time
 current_time = datetime.now(timeZone)
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
+
 # Print current config
-logger.info(current_config)
+for line in current_config:
+    logger.info(line)
 
 # Get Discord Token from ENV
 token = os.environ.get("DISCORD_TOKEN")
