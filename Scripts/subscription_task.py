@@ -15,15 +15,14 @@ load_dotenv()
 logger = logging.getLogger("bot")
 
 # VARS
-task_frequency = s.TASK_FREQUENCY
+TASK_FREQUENCY = s.TASK_FREQUENCY
 
 
 class SubscriptionTask(Extension):
     def __init__(self, bot):
-        pass
+        self.message = None
 
-    @Task.create(trigger=IntervalTrigger(minutes=task_frequency))
-    async def newBookCheck(self, ctx: SlashContext):
+    def newBookTask(self, colour, task_frequency=TASK_FREQUENCY):
         items_added = []
         libraries = c.bookshelf_libraries()
         current_time = datetime.now()
@@ -67,7 +66,7 @@ class SubscriptionTask(Extension):
                 embed_message = Embed(
                     title=f"Recently Added Book {count}",
                     description=f"Recently added books for {bookshelfURL}",
-                    color=ctx.author.accent_color,
+                    color=colour,
                 )
                 embed_message.add_field(name="Title", value=title)
                 embed_message.add_field(name="Author", value=author)
@@ -75,6 +74,14 @@ class SubscriptionTask(Extension):
                 embed_message.add_image(cover_link)
 
                 embeds.append(embed_message)
+
+            return embeds
+
+    @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
+    async def newBookCheck(self, ctx: SlashContext):
+        embeds = self.newBookTask(colour=ctx.author.accent_color)
+        if embeds:
+            await ctx.delete(message=self.message)
 
             paginator = Paginator.create_from_embeds(self.bot, *embeds, timeout=120)
             await paginator.send(ctx)
@@ -86,10 +93,27 @@ class SubscriptionTask(Extension):
     @slash_option(name="option", description="", opt_type=OptionType.STRING, autocomplete=True, required=True)
     async def activeBookCheck(self, ctx: SlashContext, option: str):
         if option == 'enable':
-            await ctx.send(f"Activating New Book Task! This task will automatically refresh every *{task_frequency} minutes*!",
-                           ephemeral=True)
-            await ctx.send(f"Important: *The task will be sent to where this message originates from!*", ephemeral=True)
-            self.newBookCheck.start(ctx)
+            logger.info('Activating New Book Task! A message will follow.')
+
+            embeds = self.newBookTask(colour=ctx.author.accent_color)
+            if embeds:
+                logger.info(f'Recent books found! Task will refresh and execute in {TASK_FREQUENCY} minutes')
+                paginator = Paginator.create_from_embeds(self.bot, *embeds, timeout=120)
+                self.message = paginator.send(ctx)
+                await self.message
+            else:
+                logger.info(f'No recent books found. Task will refresh and execute in {TASK_FREQUENCY} minutes')
+
+            if not self.newBookCheck.running:
+                await ctx.send(
+                    f"Activating New Book Task! This task will automatically refresh every *{TASK_FREQUENCY} minutes*!",
+                    ephemeral=True)
+                await ctx.send(f"Important: *The task will be sent to where this message originates from!*",
+                               ephemeral=True)
+                self.newBookCheck.start(ctx)
+            else:
+                logger.warning('New book check task was already running, ignoring...')
+                await ctx.send('New book check task is already running, ignoring...', ephemeral=True)
 
         elif option == 'disable':
             if self.newBookCheck.running:
