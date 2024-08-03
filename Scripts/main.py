@@ -41,16 +41,16 @@ timeZone = pytz.timezone(TIMEZONE)
 current_time = datetime.now(timeZone)
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
 
-# Print current config
-logger.info("Current config to follow!")
-for line in current_config:
-    logger.info(line)
-
 # Get Discord Token from ENV
 token = os.environ.get("DISCORD_TOKEN")
 
 logger.info(f'Starting up bookshelf traveller v.{settings.versionNumber}')
 logger.warning('Please wait for this process to finish prior to use, you have been warned!')
+
+# Print current config
+logger.info("Current config to follow!")
+for key, value in current_config.items():
+    logger.info(f"{key}: {value}")
 
 # Start Server Connection Prior to Running Bot
 server_status_code = c.bookshelf_test_connection()
