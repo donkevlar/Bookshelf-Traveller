@@ -20,7 +20,7 @@ TASK_FREQUENCY = s.TASK_FREQUENCY
 
 class SubscriptionTask(Extension):
     def __init__(self, bot):
-        self.message = None
+        pass
 
     def newBookTask(self, colour, task_frequency=TASK_FREQUENCY):
         items_added = []
@@ -81,8 +81,6 @@ class SubscriptionTask(Extension):
     async def newBookCheck(self, ctx: SlashContext):
         embeds = self.newBookTask(colour=ctx.author.accent_color)
         if embeds:
-            await ctx.delete(message=self.message)
-
             paginator = Paginator.create_from_embeds(self.bot, *embeds, timeout=120)
             await paginator.send(ctx)
 
