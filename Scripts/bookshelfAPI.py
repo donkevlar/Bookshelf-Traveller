@@ -63,7 +63,6 @@ def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET=False
 def bookshelf_test_connection():
     bookshelfURL = os.environ.get("bookshelfURL")
     logger.info("Testing Server Connection")
-    logger.info(f"Server URL  {bookshelfURL}")
     connected = False
     count = 0
 
