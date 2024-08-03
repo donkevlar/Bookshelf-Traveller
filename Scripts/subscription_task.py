@@ -22,14 +22,14 @@ class SubscriptionTask(Extension):
     def __init__(self, bot):
         pass
 
-    def newBookTask(self, colour, task_frequency=TASK_FREQUENCY):
+    def newBookTask(self, colour, task_frequency=TASK_FREQUENCY): # NOQA
         items_added = []
         libraries = c.bookshelf_libraries()
         current_time = datetime.now()
         bookshelfURL = os.environ.get("bookshelfURL")
 
-        time_minus_one_hour = current_time - timedelta(minutes=task_frequency)
-        timestamp_minus_one_hour = int(time.mktime(time_minus_one_hour.timetuple()) * 1000)
+        time_minus_delta = current_time - timedelta(minutes=task_frequency)
+        timestamp_minus_delta = int(time.mktime(time_minus_delta.timetuple()) * 1000)
 
         for name, (library_id, audiobooks_only) in libraries.items():
             library_items = c.bookshelf_all_library_items(library_id, params="sort=addedAt&desc=1")
@@ -45,7 +45,7 @@ class SubscriptionTask(Extension):
                 formatted_time = datetime.fromtimestamp(formatted_time)
                 formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
 
-                if latest_item_time_added >= timestamp_minus_one_hour and latest_item_type == 'book':
+                if latest_item_time_added >= timestamp_minus_delta and latest_item_type == 'book':
                     items_added.append({"title": latest_item_title, "addedTime": formatted_time,
                                         "author": latest_item_author, "id": latest_item_bookID})
 
