@@ -47,10 +47,11 @@ token = os.environ.get("DISCORD_TOKEN")
 logger.info(f'Starting up bookshelf traveller v.{settings.versionNumber}')
 logger.warning('Please wait for this process to finish prior to use, you have been warned!')
 
-# Print current config
+# Print current config if value is present
 logger.info("Current config to follow!")
 for key, value in current_config.items():
-    logger.info(f"{key}: {value}")
+    if value != '' and value is not None:
+        logger.info(f"{key}: {value}")
 
 # Start Server Connection Prior to Running Bot
 server_status_code = c.bookshelf_test_connection()
