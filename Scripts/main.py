@@ -26,7 +26,13 @@ load_dotenv(override=True)
 # Global Vars
 MULTI_USER = eval(settings.MULTI_USER)
 AUDIO_ENABLED = eval(settings.AUDIO_ENABLED)
-DEBUG_MODE = eval(settings.DEBUG_MODE)
+DEBUG_MODE = settings.DEBUG_MODE
+
+# TEMP
+if DEBUG_MODE == "True":
+    DEBUG_MODE = True
+else:
+    DEBUG_MODE = False
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
