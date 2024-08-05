@@ -101,11 +101,11 @@ class SubscriptionTask(Extension):
         #     else:
         #         logger.warning('New book check task was already running, ignoring...')
         #         await ctx.send('New book check task is already running, ignoring...', ephemeral=True)
-
+        await ctx.send(f'Searching for recently added books in given period of {days} days.', ephemeral=True)
         embeds = self.NewBookCheck(task_frequency=days)
         if embeds:
             logger.info(f'Recent books found in given search period of {days} days!')
-            paginator = Paginator.create_from_embeds(self.bot, *embeds, timeout=120)
+            paginator = Paginator.create_from_embeds(self.bot, *embeds)
             await paginator.send(ctx, ephemeral=True)
         else:
             await ctx.send(f"No recent books found in given search period of {days} days.",
