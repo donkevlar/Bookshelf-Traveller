@@ -32,6 +32,7 @@ def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET=False
     API_URL = bookshelfURL + "/api"
     bookshelfToken = os.environ.get("bookshelfToken")
     tokenInsert = "?token=" + bookshelfToken
+    s = requests.session()
     if params is not None:
         additional_params = params
     else:
@@ -45,14 +46,14 @@ def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET=False
         link = f'{API_URL}{endpoint}'
 
     if GET:
-        r = requests.get(link)
+        r = s.get(link)
         return r
     elif POST:
         if Data is not None and Headers is not None:
-            r = requests.post(link, headers=Headers, json=Data)
+            r = s.post(link, headers=Headers, json=Data)
             return r
         else:
-            r = requests.post(link)
+            r = s.post(link)
             return r
     else:
         logger.warning('Must include GET, POST or PATCH in arguments')
