@@ -642,6 +642,7 @@ class AudioPlayBack(Extension):
     async def callback_next_chapter_button(self, ctx: ComponentContext):
         if ctx.voice_state:
             logger.info('Moving to next chapter!')
+            await ctx.defer(edit_origin=True)
 
             if self.play_state == 'playing':
                 await ctx.edit_origin(components=component_rows_initial)
@@ -668,6 +669,7 @@ class AudioPlayBack(Extension):
     async def callback_previous_chapter_button(self, ctx: ComponentContext):
         if ctx.voice_state:
             logger.info('Moving to previous chapter!')
+            await ctx.defer(edit_origin=True)
 
             if self.play_state == 'playing':
                 await ctx.edit_origin(components=component_rows_initial)
@@ -744,16 +746,20 @@ class AudioPlayBack(Extension):
 
     @component_callback('forward_button')
     async def callback_forward_button(self, ctx: ComponentContext):
+        await ctx.defer(edit_origin=True)
         self.session_update.stop()
-        ctx.voice_state.channel.voice_state.player.stop()
+        ctx.voice_state.channel.voice_state.player.pause()
         c.bookshelf_close_session(self.sessionID)
         self.audioObj.cleanup()  # NOQA
 
         audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
 
         self.sessionID = sessionID
+        self.currentTime = currentTime
+
         print(self.currentTime)
-        self.nextTime = currentTime + 30.0
+
+        self.nextTime = self.currentTime + 30.0
         logger.info(f"Moving to time using forward:  {self.nextTime}")
 
         audio = AudioVolume(audio_obj)
@@ -767,14 +773,16 @@ class AudioPlayBack(Extension):
 
     @component_callback('rewind_button')
     async def callback_rewind_button(self, ctx: ComponentContext):
+        await ctx.defer(edit_origin=True)
         self.session_update.stop()
-        ctx.voice_state.channel.voice_state.player.stop()
+        ctx.voice_state.channel.voice_state.player.pause()
         c.bookshelf_close_session(self.sessionID)
         self.audioObj.cleanup()  # NOQA
         audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
 
+        self.currentTime = currentTime
         self.sessionID = sessionID
-        self.nextTime = currentTime - 30.0
+        self.nextTime = self.currentTime - 30.0
         logger.info(f"Moving to time using rewind: {self.nextTime}")
 
         audio = AudioVolume(audio_obj)
