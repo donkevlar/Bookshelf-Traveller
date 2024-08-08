@@ -11,6 +11,18 @@ import logging
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Temp hot fix
+from interactions.api.voice.voice_gateway import VoiceGateway, OP, random
+
+
+# HOT FIX for voice - Remove once 5.14 has been released.
+async def send_heartbeat(self) -> None:
+    await self.send_json({"op": OP.HEARTBEAT, "d": random.getrandbits(64)})
+    self.logger.debug("❤ Voice Connection is sending Heartbeat")
+
+
+VoiceGateway.send_heartbeat = send_heartbeat
+
 load_dotenv()
 
 # Logger Config
@@ -273,8 +285,8 @@ class AudioPlayBack(Extension):
         embed_message.add_field(name='ABS Information', value=user_info)
 
         embed_message.add_field(name='Playback Information', value=f"Current State: **{self.play_state.upper()}**"
-                                                            f"\nCurrent Chapter: **{chapter}**"
-                                                            f"\nCurrent volume: **{round(self.volume * 100)}%**") # NOQA
+                                                                   f"\nCurrent Chapter: **{chapter}**"
+                                                                   f"\nCurrent volume: **{round(self.volume * 100)}%**")  # NOQA
 
         # Add media image (If using HTTPS)
         embed_message.add_image(self.cover_image)
