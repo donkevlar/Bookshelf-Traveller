@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 import bookshelfAPI as c
 
 # Pulls from bookshelf file
-load_dotenv(override=True)
+load_dotenv()
 
 # Experimental Imports
 # enables experimental features and modules
