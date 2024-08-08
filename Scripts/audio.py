@@ -768,6 +768,7 @@ class AudioPlayBack(Extension):
         audio.ffmpeg_args = f"-ar 44100 -acodec aac"
         self.audioObj = audio
         self.session_update.start()
+        self.nextTime = None
         await ctx.edit_origin()
         await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
 
@@ -791,6 +792,7 @@ class AudioPlayBack(Extension):
         audio.ffmpeg_args = f"-ar 44100 -acodec aac"
         self.audioObj = audio
         self.session_update.start()
+        self.nextTime = None
         await ctx.edit_origin()
         await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
 
