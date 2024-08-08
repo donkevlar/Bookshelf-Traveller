@@ -6,6 +6,8 @@ from datetime import datetime
 import traceback
 import csv
 import logging
+
+import httpx
 from dotenv import load_dotenv
 import requests
 from settings import OPT_IMAGE_URL, SERVER_URL
@@ -27,37 +29,35 @@ def successMSG(endpoint, status):
 
 
 def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET=False,
-                   POST=False, params=None):
+                         POST=False, params=None):
     bookshelfURL = SERVER_URL
     API_URL = bookshelfURL + "/api"
     bookshelfToken = os.environ.get("bookshelfToken")
-    tokenInsert = "?token=" + bookshelfToken
-    s = requests.session()
+    tokenInsert = "?token=" + bookshelfToken if Token else ""
+
     if params is not None:
         additional_params = params
     else:
         additional_params = ''
 
-    if Token:
-        link = f'{API_URL}{endpoint}{tokenInsert}{additional_params}'
-        if __name__ == '__main__':
-            print(link)
-    else:
-        link = f'{API_URL}{endpoint}'
+    link = f'{API_URL}{endpoint}{tokenInsert}{additional_params}'
+    if __name__ == '__main__':
+        print(link)
 
-    if GET:
-        r = s.get(link)
-        return r
-    elif POST:
-        if Data is not None and Headers is not None:
-            r = s.post(link, headers=Headers, json=Data)
+    # Create an HTTPX client
+    with httpx.Client() as client:
+        if GET:
+            r = client.get(link)
+            return r
+        elif POST:
+            if Data is not None and Headers is not None:
+                r = client.post(link, headers=Headers, json=Data)
+            else:
+                r = client.post(link)
             return r
         else:
-            r = s.post(link)
-            return r
-    else:
-        logger.warning('Must include GET, POST or PATCH in arguments')
-        raise Exception
+            logger.warning('Must include GET, POST or PATCH in arguments')
+            raise Exception
 
 
 # Test initial Connection to Bookshelf Server
@@ -314,7 +314,6 @@ def bookshelf_title_search(display_title: str):
 
     # Get valid libraries
     for name, (library_id, audiobooks_only) in libraries.items():
-
         # Parse for the library that is only audio
         valid_libraries.append({"id": library_id, "name": name})
         valid_library_count += 1
@@ -709,4 +708,3 @@ def bookshelf_close_all_sessions(items: int):
 if __name__ == '__main__':
     print("TESTING COMMENCES")
     bookshelf_all_library_items('5427680c-4e01-4d59-94d4-c73e5039fa9f')
-
