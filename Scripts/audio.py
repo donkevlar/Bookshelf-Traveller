@@ -748,7 +748,7 @@ class AudioPlayBack(Extension):
     async def callback_forward_button(self, ctx: ComponentContext):
         await ctx.defer(edit_origin=True)
         self.session_update.stop()
-        ctx.voice_state.channel.voice_state.player.pause()
+        ctx.voice_state.channel.voice_state.player.stop()
         c.bookshelf_close_session(self.sessionID)
         self.audioObj.cleanup()  # NOQA
 
@@ -766,9 +766,15 @@ class AudioPlayBack(Extension):
 
         audio.ffmpeg_before_args = f"-ss {self.nextTime}"
         audio.ffmpeg_args = f"-ar 44100 -acodec aac"
+
+        # Send manual next chapter sync
+        c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
+                                   current_time=updateFrequency - 0.5, next_time=self.nextTime)
+
         self.audioObj = audio
         self.session_update.start()
         self.nextTime = None
+
         await ctx.edit_origin()
         await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
 
@@ -776,7 +782,7 @@ class AudioPlayBack(Extension):
     async def callback_rewind_button(self, ctx: ComponentContext):
         await ctx.defer(edit_origin=True)
         self.session_update.stop()
-        ctx.voice_state.channel.voice_state.player.pause()
+        ctx.voice_state.channel.voice_state.player.stop()
         c.bookshelf_close_session(self.sessionID)
         self.audioObj.cleanup()  # NOQA
         audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
@@ -790,6 +796,11 @@ class AudioPlayBack(Extension):
 
         audio.ffmpeg_before_args = f"-ss {self.nextTime}"
         audio.ffmpeg_args = f"-ar 44100 -acodec aac"
+
+        # Send manual next chapter sync
+        c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
+                                   current_time=updateFrequency - 0.5, next_time=self.nextTime)
+
         self.audioObj = audio
         self.session_update.start()
         self.nextTime = None
