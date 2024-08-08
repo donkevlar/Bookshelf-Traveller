@@ -20,7 +20,6 @@ async def new_send_heartbeat(self) -> None:
     await self.send_json({"op": OP.HEARTBEAT, "d": random.getrandbits(64)})
     self.logger.debug("❤ Voice Connection is sending Heartbeat")
 
-
 VoiceGateway.send_heartbeat = new_send_heartbeat
 
 load_dotenv()
