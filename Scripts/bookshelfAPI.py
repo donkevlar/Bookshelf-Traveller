@@ -29,7 +29,7 @@ def successMSG(endpoint, status):
 
 
 def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET=False,
-                         POST=False, params=None):
+                   POST=False, params=None):
     bookshelfURL = SERVER_URL
     API_URL = bookshelfURL + "/api"
     bookshelfToken = os.environ.get("bookshelfToken")
@@ -541,7 +541,9 @@ def bookshelf_get_current_chapter(item_id: str, current_time=0):
 
 def bookshelf_audio_obj(item_id: str):
     endpoint = f"/items/{item_id}/play"
-    params = "&forceDirectPlay=true&mediaPlayer=discord"
+    headers = {'Content-Type': 'application/json'}
+    data = {"deviceInfo": {"clientName": "Bookshelf-Traveller", "deviceId": "Bookshelf-Traveller"},
+            "supportedMimeTypes": ["audio/flac", "audio/mp4"], "mediaPlayer": "Discord", "forceDirectPlay": "true"}
 
     bookshelfURL = os.environ.get("bookshelfURL")
     defaultAPIURL = bookshelfURL + "/api"
@@ -549,7 +551,7 @@ def bookshelf_audio_obj(item_id: str):
     tokenInsert = "?token=" + bookshelfToken
 
     # Send request to play
-    audio_obj = bookshelf_conn(POST=True, params=params, endpoint=endpoint)
+    audio_obj = bookshelf_conn(POST=True, endpoint=endpoint, Headers=headers, Data=data)
 
     data = audio_obj.json()
 
