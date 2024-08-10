@@ -30,6 +30,9 @@ MULTI_USER = os.environ.get('MULTI_USER', True)
 # Discord token
 DISCORD_API_SECRET = os.getenv("DISCORD_TOKEN")
 
+# Default search provider
+DEFAULT_PROVIDER = os.getenv("DEFAULT_PROVIDER", '')
+
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
 
@@ -56,9 +59,9 @@ LOGGING_CONFIG = {
     "disabled_existing_loggers": False,
     "formatters": {
         "verbose": {
-            "format": "%(levelname)-10s - %(asctime)s - %(module)-15s : %(message)s"
+            "format": "%(levelname)-5s - %(asctime)s - %(module)-5s : %(message)s"
         },
-        "standard": {"format": "%(levelname)-10s - %(name)-15s : %(message)s"},
+        "standard": {"format": "%(levelname)-5s - %(asctime)s : %(message)s"},
     },
     "handlers": {
         "console": {

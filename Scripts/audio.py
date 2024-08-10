@@ -1,6 +1,3 @@
-import sys
-import time
-
 import pytz
 from interactions import *
 from interactions.api.voice.audio import AudioVolume
@@ -19,6 +16,7 @@ from interactions.api.voice.voice_gateway import VoiceGateway, OP, random
 async def new_send_heartbeat(self) -> None:
     await self.send_json({"op": OP.HEARTBEAT, "d": random.getrandbits(64)})
     self.logger.debug("❤ Voice Connection is sending Heartbeat")
+
 
 VoiceGateway.send_heartbeat = new_send_heartbeat
 
@@ -201,28 +199,28 @@ class AudioPlayBack(Extension):
     async def session_update(self):
         logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
 
-        updatedTime, duration, serverCurrentTime, finished_book = c.bookshelf_session_update(item_id=self.bookItemID,
+        updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(item_id=self.bookItemID,
                                                                                              session_id=self.sessionID,
                                                                                              current_time=updateFrequency,
                                                                                              next_time=self.nextTime)  # NOQA
 
         logger.info(f"Successfully synced session to updated time: {updatedTime}, session ID: {self.sessionID}")
 
-        current_chapter, chapter_array, bookFinished, isPodcast = c.bookshelf_get_current_chapter(self.bookItemID,
+        current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(self.bookItemID,
                                                                                                   updatedTime)
 
         if not isPodcast:
             logger.info("Current Chapter Sync: " + current_chapter['title'])
             self.currentChapter = current_chapter
 
-    @Task.create(trigger=IntervalTrigger(minutes=5))
-    async def terminal_clearer(self):
-        os.system('cls' if os.name == 'nt' else 'clear')
-        logger.warning('Cleared terminal after 5 minutes of playback!')
+    # @Task.create(trigger=IntervalTrigger(minutes=5))
+    # async def terminal_clearer(self):
+    #     os.system('cls' if os.name == 'nt' else 'clear')
+    #     logger.warning('Cleared terminal after 5 minutes of playback!')
 
     # Random Functions ------------------------
     # Change Chapter Function
-    def move_chapter(self, option: str):
+    async def move_chapter(self, option: str):
         logger.info(f"executing command /next-chapter")
         CurrentChapter = self.currentChapter
         ChapterArray = self.chapterArray
@@ -241,14 +239,14 @@ class AudioPlayBack(Extension):
 
                 if nextChapterID == chapterID:
                     self.session_update.stop()
-                    self.terminal_clearer.stop()
-                    c.bookshelf_close_session(self.sessionID)
+                    # self.terminal_clearer.stop()
+                    await c.bookshelf_close_session(self.sessionID)
                     chapterStart = float(chapter.get('start'))
                     self.newChapterTitle = chapter.get('title')
 
                     logger.info(f"Selected Chapter: {self.newChapterTitle}, Starting at: {chapterStart}")
 
-                    audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
+                    audio_obj, currentTime, sessionID, bookTitle = await c.bookshelf_audio_obj(self.bookItemID)
                     self.sessionID = sessionID
                     self.currentTime = currentTime
 
@@ -261,12 +259,12 @@ class AudioPlayBack(Extension):
                     self.nextTime = chapterStart
 
                     # Send manual next chapter sync
-                    c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
+                    await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
                                                current_time=updateFrequency - 0.5, next_time=self.nextTime)
                     # Reset Next Time to None before starting task again
                     self.nextTime = None
                     self.session_update.start()
-                    self.terminal_clearer.start()
+                    # self.terminal_clearer.start()
                     self.found_next_chapter = True
 
     def modified_message(self, color, chapter):
@@ -323,7 +321,7 @@ class AudioPlayBack(Extension):
 
         logger.info(f"executing command /play")
 
-        current_chapter, chapter_array, bookFinished, isPodcast = c.bookshelf_get_current_chapter(item_id=book)
+        current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(item_id=book)
 
         if bookFinished:
             await ctx.send(content="Book finished, please mark it as unfinished in UI. Aborting.", ephemeral=True)
@@ -335,13 +333,13 @@ class AudioPlayBack(Extension):
             return
 
         # Get Bookshelf Playback URI, Starts new session
-        audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(book)
+        audio_obj, currentTime, sessionID, bookTitle = await c.bookshelf_audio_obj(book)
 
         # Get Book Cover URL
-        cover_image = c.bookshelf_cover_image(book)
+        cover_image = await c.bookshelf_cover_image(book)
 
         # Retrieve current user information
-        username, user_type, user_locked = c.bookshelf_auth_test()
+        username, user_type, user_locked = await c.bookshelf_auth_test()
 
         # Audio Object Arguments
         audio = AudioVolume(audio_obj)
@@ -388,7 +386,7 @@ class AudioPlayBack(Extension):
 
                 # Start Tasks
                 self.session_update.start()
-                self.terminal_clearer.start()
+                # self.terminal_clearer.start()
 
                 # Start Voice Check
                 await ctx.defer(ephemeral=True)
@@ -406,9 +404,9 @@ class AudioPlayBack(Extension):
             except Exception as e:
                 # Stop Any Associated Tasks
                 self.session_update.stop()
-                self.terminal_clearer.stop()
+                # self.terminal_clearer.stop()
                 # Close ABS session
-                c.bookshelf_close_session(sessionID)  # NOQA
+                await c.bookshelf_close_session(sessionID)  # NOQA
                 # Cleanup discord interactions
                 await ctx.author.voice.channel.disconnect()
                 audio.cleanup()  # NOQA
@@ -436,9 +434,9 @@ class AudioPlayBack(Extension):
             # Stop any running tasks
             if self.session_update.running:
                 self.session_update.stop()
-                self.terminal_clearer.stop()
+                # self.terminal_clearer.stop()
             # close ABS session
-            c.bookshelf_close_session(sessionID)
+            await c.bookshelf_close_session(sessionID)
             return
 
     # Pause audio, stops tasks, keeps session active.
@@ -453,7 +451,7 @@ class AudioPlayBack(Extension):
             # Stop Any Tasks Running
             if self.session_update.running:
                 self.session_update.stop()
-                self.terminal_clearer.stop()
+                # self.terminal_clearer.stop()
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
@@ -470,7 +468,7 @@ class AudioPlayBack(Extension):
                 # Start session
                 self.play_state = 'playing'
                 self.session_update.start()
-                self.terminal_clearer.start()
+                # self.terminal_clearer.start()
             else:
                 await ctx.send(content="Bot or author isn't connected to channel, aborting.",
                                ephemeral=True)
@@ -485,7 +483,7 @@ class AudioPlayBack(Extension):
                 await ctx.send(content="Item type is not book, chapter skip disabled", ephemeral=True)
                 return
 
-            self.move_chapter(option)
+            await self.move_chapter(option)
 
             await ctx.send(content=f"Moving to chapter: {self.newChapterTitle}", ephemeral=True)
 
@@ -531,14 +529,14 @@ class AudioPlayBack(Extension):
 
             if self.session_update.running:
                 self.session_update.stop()
-                self.terminal_clearer.stop()
+                # self.terminal_clearer.stop()
                 self.play_state = 'stopped'
-                c.bookshelf_close_session(self.sessionID)
-                c.bookshelf_close_all_sessions(10)
+                await c.bookshelf_close_session(self.sessionID)
+                await c.bookshelf_close_all_sessions(10)
 
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
-            c.bookshelf_close_all_sessions(10)
+            await c.bookshelf_close_all_sessions(10)
 
     @check(ownership_check)
     @slash_command(name="close-all-sessions",
@@ -550,7 +548,7 @@ class AudioPlayBack(Extension):
         # Wait for task to complete
         ctx.defer()
 
-        openSessionCount, closedSessionCount, failedSessionCount = c.bookshelf_close_all_sessions(max_items)
+        openSessionCount, closedSessionCount, failedSessionCount = await c.bookshelf_close_all_sessions(max_items)
 
         await ctx.send(content=f"Result of attempting to close sessions. success: {closedSessionCount}, "
                                f"failed: {failedSessionCount}, total: {openSessionCount}", ephemeral=True)
@@ -577,7 +575,7 @@ class AudioPlayBack(Extension):
         choices = []
         if user_input == "":
             try:
-                formatted_sessions_string, data = c.bookshelf_listening_stats()
+                formatted_sessions_string, data = await c.bookshelf_listening_stats()
 
                 for sessions in data['recentSessions']:
                     title = sessions.get('displayTitle')
@@ -596,7 +594,7 @@ class AudioPlayBack(Extension):
 
         else:
             try:
-                titles_ = c.bookshelf_title_search(user_input)
+                titles_ = await c.bookshelf_title_search(user_input)
                 for info in titles_:
                     book_title = info["title"]
                     book_id = info["id"]
@@ -652,7 +650,7 @@ class AudioPlayBack(Extension):
                 ctx.voice_state.channel.voice_state.player.stop()
 
             # Find next chapter
-            self.move_chapter(option='next')
+            await self.move_chapter(option='next')
 
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
 
@@ -683,7 +681,7 @@ class AudioPlayBack(Extension):
                 return
 
             # Find previous chapter
-            self.move_chapter(option='previous')
+            await self.move_chapter(option='previous')
 
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
 
@@ -709,7 +707,7 @@ class AudioPlayBack(Extension):
             await ctx.voice_state.channel.disconnect()
             await self.client.change_presence(activity=None)
             # Cleanup Session
-            c.bookshelf_close_session(self.sessionID)
+            await c.bookshelf_close_session(self.sessionID)
 
     @component_callback('volume_up_button')
     async def callback_volume_up_button(self, ctx: ComponentContext):
@@ -749,10 +747,10 @@ class AudioPlayBack(Extension):
         await ctx.defer(edit_origin=True)
         self.session_update.stop()
         ctx.voice_state.channel.voice_state.player.stop()
-        c.bookshelf_close_session(self.sessionID)
+        await c.bookshelf_close_session(self.sessionID)
         self.audioObj.cleanup()  # NOQA
 
-        audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
+        audio_obj, currentTime, sessionID, bookTitle = await c.bookshelf_audio_obj(self.bookItemID)
 
         self.sessionID = sessionID
         self.currentTime = currentTime
@@ -768,8 +766,8 @@ class AudioPlayBack(Extension):
         audio.ffmpeg_args = f"-ar 44100 -acodec aac"
 
         # Send manual next chapter sync
-        c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
-                                   current_time=updateFrequency - 0.5, next_time=self.nextTime)
+        await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
+                                         current_time=updateFrequency - 0.5, next_time=self.nextTime)
 
         self.audioObj = audio
         self.session_update.start()
@@ -783,9 +781,9 @@ class AudioPlayBack(Extension):
         await ctx.defer(edit_origin=True)
         self.session_update.stop()
         ctx.voice_state.channel.voice_state.player.stop()
-        c.bookshelf_close_session(self.sessionID)
+        await c.bookshelf_close_session(self.sessionID)
         self.audioObj.cleanup()  # NOQA
-        audio_obj, currentTime, sessionID, bookTitle = c.bookshelf_audio_obj(self.bookItemID)
+        audio_obj, currentTime, sessionID, bookTitle = await c.bookshelf_audio_obj(self.bookItemID)
 
         self.currentTime = currentTime
         self.sessionID = sessionID
@@ -798,8 +796,8 @@ class AudioPlayBack(Extension):
         audio.ffmpeg_args = f"-ar 44100 -acodec aac"
 
         # Send manual next chapter sync
-        c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
-                                   current_time=updateFrequency - 0.5, next_time=self.nextTime)
+        await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
+                                         current_time=updateFrequency - 0.5, next_time=self.nextTime)
 
         self.audioObj = audio
         self.session_update.start()
