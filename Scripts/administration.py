@@ -120,7 +120,7 @@ class ABSAdmin(Extension):
             current_directory = os.getcwd()
 
             # Create CSV File
-            c.bookshelf_library_csv(library_name)
+            await c.bookshelf_library_csv(library_name)
 
             # Get Filepath
             file_path = os.path.join(current_directory, 'books.csv')
@@ -158,7 +158,7 @@ class ABSAdmin(Extension):
     # Autocomplete, pulls all the libraries
     @library_csv_booklist.autocomplete("library_name")
     async def autocomplete_library_csv(self, ctx: AutocompleteContext):
-        library_data = c.bookshelf_libraries()
+        library_data = await c.bookshelf_libraries()
         choices = []
 
         for name, (library_id, audiobooks_only) in library_data.items():

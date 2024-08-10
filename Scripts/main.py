@@ -1,5 +1,5 @@
+import asyncio
 import traceback
-import requests
 import os
 import settings
 from config import current_config
@@ -74,22 +74,26 @@ if server_status_code != 200:
 else:
     logger.info(f'Current Server Status = {server_status_code}, Good to go!')
 
-# Will print username when successful
-auth_test, user_type, user_locked = c.bookshelf_auth_test()
-logger.info(f"Logging user in and verifying role.")
 
-# Quit if user is locked
-if user_locked:
-    logger.warning("User locked from logging in, please unlock via web gui.")
-    sys.exit("User locked from logging in, please unlock via web gui.")
+async def conn_test():
+    # Will print username when successful
+    auth_test, user_type, user_locked = await c.bookshelf_auth_test()
+    logger.info(f"Logging user in and verifying role.")
 
-# Check if ABS user is an admin
-ADMIN = False
-if user_type == "root" or user_type == "admin":
-    ADMIN = True
-    logger.info(f"ABS user logged in as ADMIN with type: {user_type}")
-else:
-    logger.info(f"ABS user logged in as NON-ADMIN with type: {user_type}")
+    # Quit if user is locked
+    if user_locked:
+        logger.warning("User locked from logging in, please unlock via web gui.")
+        sys.exit("User locked from logging in, please unlock via web gui.")
+
+    # Check if ABS user is an admin
+    ADMIN = False
+    if user_type == "root" or user_type == "admin":
+        ADMIN = True
+        logger.info(f"ABS user logged in as ADMIN with type: {user_type}")
+    else:
+        logger.info(f"ABS user logged in as NON-ADMIN with type: {user_type}")
+    return ADMIN
+
 
 # Bot basic setup
 bot = Client(intents=Intents.DEFAULT, logger=logger)
@@ -191,7 +195,7 @@ async def ping(ctx: SlashContext):
 async def show_all_libraries(ctx: SlashContext):
     try:
         # Get Library Data from API
-        library_data = c.bookshelf_libraries()
+        library_data = await c.bookshelf_libraries()
         formatted_data = ""
 
         # Create Embed Message
@@ -247,7 +251,7 @@ async def show_recent_sessions(ctx: SlashContext):
             play_count = session_lines[4].split(': ')[1]
             aggregate_time = session_lines[5].split(': ')[1]
 
-            cover_link = c.bookshelf_cover_image(library_ID)
+            cover_link = await c.bookshelf_cover_image(library_ID)
             logger.info(f"cover url: {cover_link}")
 
             # Use display title as the name for the field
@@ -281,9 +285,9 @@ async def show_recent_sessions(ctx: SlashContext):
               autocomplete=True)
 async def search_media_progress(ctx: SlashContext, book_title: str):
     try:
-        formatted_data = c.bookshelf_item_progress(book_title)
+        formatted_data = await c.bookshelf_item_progress(book_title)
 
-        cover_title = c.bookshelf_cover_image(book_title)
+        cover_title = await c.bookshelf_cover_image(book_title)
 
         chapter_progress, chapter_array, bookFinished, isPodcast = c.bookshelf_get_current_chapter(book_title)
         if bookFinished:
@@ -333,7 +337,7 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
     print(user_input)
     if user_input == "":
         try:
-            formatted_sessions_string, data = c.bookshelf_listening_stats()
+            formatted_sessions_string, data = await c.bookshelf_listening_stats()
 
             for sessions in data['recentSessions']:
                 title = sessions.get('displayTitle')
@@ -351,7 +355,7 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
 
     else:
         try:
-            titles_ = c.bookshelf_title_search(user_input)
+            titles_ = await c.bookshelf_title_search(user_input)
             for info in titles_:
                 book_title = info["title"]
                 book_id = info["id"]
@@ -372,7 +376,7 @@ async def search_media_auto_complete(ctx: AutocompleteContext):
 async def all_library_items(ctx: SlashContext, library_name: str):
     try:
         await ctx.defer()
-        library_items = c.bookshelf_all_library_items(library_name)
+        library_items = await c.bookshelf_all_library_items(library_name)
         print(library_items)
         formatted_info = ""
 
@@ -397,7 +401,7 @@ async def all_library_items(ctx: SlashContext, library_name: str):
 # Another Library Name autocomplete
 @all_library_items.autocomplete("library_name")
 async def autocomplete_all_library_items(ctx: AutocompleteContext):
-    library_data = c.bookshelf_libraries()
+    library_data = await c.bookshelf_libraries()
     choices = []
 
     for name, (library_id, audiobooks_only) in library_data.items():
@@ -410,6 +414,7 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 
 # Main Loop
 if __name__ == '__main__':
+    ADMIN = asyncio.run(conn_test())
     # Load subscription module
     logger.info('Subscribable Task module loaded!')
     bot.load_extension("subscription_task")

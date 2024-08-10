@@ -22,9 +22,9 @@ class SubscriptionTask(Extension):
     def __init__(self, bot):
         pass
 
-    def NewBookCheck(self, task_frequency=TASK_FREQUENCY):  # NOQA
+    async def NewBookCheck(self, task_frequency=TASK_FREQUENCY):  # NOQA
         items_added = []
-        libraries = c.bookshelf_libraries()
+        libraries = await c.bookshelf_libraries()
         current_time = datetime.now()
         bookshelfURL = os.environ.get("bookshelfURL")
 
@@ -32,7 +32,7 @@ class SubscriptionTask(Extension):
         timestamp_minus_delta = int(time.mktime(time_minus_delta.timetuple()) * 1000)
 
         for name, (library_id, audiobooks_only) in libraries.items():
-            library_items = c.bookshelf_all_library_items(library_id, params="sort=addedAt&desc=1")
+            library_items = await c.bookshelf_all_library_items(library_id, params="sort=addedAt&desc=1")
 
             for item in library_items:
                 latest_item_time_added = int(item.get('addedTime'))
@@ -61,7 +61,7 @@ class SubscriptionTask(Extension):
                 addedTime = item.get('addedTime')
                 bookID = item.get('id')
 
-                cover_link = c.bookshelf_cover_image(bookID)
+                cover_link = await c.bookshelf_cover_image(bookID)
 
                 embed_message = Embed(
                     title=f"Recently Added Book {count}",
@@ -102,7 +102,7 @@ class SubscriptionTask(Extension):
         #         logger.warning('New book check task was already running, ignoring...')
         #         await ctx.send('New book check task is already running, ignoring...', ephemeral=True)
         await ctx.send(f'Searching for recently added books in given period of {days} days.', ephemeral=True)
-        embeds = self.NewBookCheck(task_frequency=days)
+        embeds = await self.NewBookCheck(task_frequency=days)
         if embeds:
             logger.info(f'Recent books found in given search period of {days} days!')
             paginator = Paginator.create_from_embeds(self.bot, *embeds)
