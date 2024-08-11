@@ -165,6 +165,7 @@ class SubscriptionTask(Extension):
 
     @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def newBookTask(self):
+        logger.info("Initializing new-book-check task!")
         channel_list = []
         search_result = search_task_db()
         if search_result:
