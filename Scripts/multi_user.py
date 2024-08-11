@@ -22,7 +22,9 @@ CREATE TABLE IF NOT EXISTS users (
 id INTEGER PRIMARY KEY,
 user TEXT NOT NULL,
 token TEXT NOT NULL UNIQUE,
-discord_id INTEGER NOT NULL)
+discord_id INTEGER NOT NULL,
+UNIQUE(user, token)
+)
                         ''')
 
 
@@ -37,10 +39,10 @@ def insert_data(user: str, token: str, discord_id: int):
         INSERT INTO users (user, token, discord_id) VALUES (?, ?, ?)''',
                        (str(user), str(token), int(discord_id)))
         conn.commit()
-        print(f"Inserted: {user} with token and discord_id")
+        logger.info(f"Inserted: {user} with token and discord_id")
         return True
     except sqlite3.IntegrityError:
-        print(f"Failed to insert: {user}. User or token already exists.")
+        logger.warning(f"Failed to insert: {user}. User or token already exists.")
         return False
 
 
