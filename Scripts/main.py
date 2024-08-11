@@ -87,13 +87,13 @@ async def conn_test():
         sys.exit("User locked from logging in, please unlock via web gui.")
 
     # Check if ABS user is an admin
-    ADMIN = False
+    ADMIN_USER = False
     if user_type == "root" or user_type == "admin":
-        ADMIN = True
+        ADMIN_USER = True
         logger.info(f"ABS user logged in as ADMIN with type: {user_type}")
     else:
         logger.info(f"ABS user logged in as NON-ADMIN with type: {user_type}")
-    return ADMIN
+    return ADMIN_USER
 
 
 # Bot basic setup
@@ -227,7 +227,7 @@ async def show_all_libraries(ctx: SlashContext):
 async def show_recent_sessions(ctx: SlashContext):
     try:
         await ctx.defer(ephemeral=EPHEMERAL_OUTPUT)
-        formatted_sessions_string, data = c.bookshelf_listening_stats()
+        formatted_sessions_string, data = await c.bookshelf_listening_stats()
 
         # Split formatted_sessions_string by newline character to separate individual sessions
         sessions_list = formatted_sessions_string.split('\n\n')
@@ -290,7 +290,8 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
 
         cover_title = await c.bookshelf_cover_image(book_title)
 
-        chapter_progress, chapter_array, bookFinished, isPodcast = c.bookshelf_get_current_chapter(book_title)
+        chapter_progress, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(book_title)
+
         if bookFinished:
             chapterTitle = "Book Finished"
         else:
@@ -416,6 +417,9 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 # Main Loop
 if __name__ == '__main__':
     ADMIN = asyncio.run(conn_test())
+    # Load context menu module
+    logger.info('Context Menus module loaded!')
+    bot.load_extension("context-menus")
     # Load subscription module
     logger.info('Subscribable Task module loaded!')
     bot.load_extension("subscription_task")
