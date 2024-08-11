@@ -3,7 +3,7 @@ from interactions import *
 from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
 import settings as s
-from settings import os, TIMEZONE
+from settings import TIMEZONE
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
@@ -182,6 +182,7 @@ class AudioPlayBack(Extension):
         # Audio VARS
         self.audioObj = AudioVolume
         self.context_voice_channel = None
+        self.current_playback_time = 0
         self.bitrate = 128000
         self.volume = 0.0
         self.placeholder = None
@@ -197,17 +198,33 @@ class AudioPlayBack(Extension):
     #
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
+        playbackTimeState = ''
+        formatted_time = None
         logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
 
-        updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(item_id=self.bookItemID,
-                                                                                             session_id=self.sessionID,
-                                                                                             current_time=updateFrequency,
-                                                                                             next_time=self.nextTime)  # NOQA
+        self.current_playback_time = self.current_playback_time + updateFrequency
 
-        logger.info(f"Successfully synced session to updated time: {updatedTime}, session ID: {self.sessionID}")
+        if self.current_playback_time < 60:
+            formatted_time = self.current_playback_time
+            playbackTimeState = 'Seconds'
+        elif self.current_playback_time >= 60:
+            formatted_time = self.current_playback_time / 60
+            playbackTimeState = 'Minutes'
+        elif self.current_playback_time >= 3600:
+            formatted_time = self.current_playback_time / 3600
+            playbackTimeState = 'Hours'
+
+        updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
+            item_id=self.bookItemID,
+            session_id=self.sessionID,
+            current_time=updateFrequency,
+            next_time=self.nextTime)  # NOQA
+
+        logger.info(f"Successfully synced session to updated time: {updatedTime}| "
+                    f"Current Playback Time: {round(formatted_time, 2)} {playbackTimeState} | session ID: {self.sessionID}")
 
         current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(self.bookItemID,
-                                                                                                  updatedTime)
+                                                                                                        updatedTime)
 
         if not isPodcast:
             logger.info("Current Chapter Sync: " + current_chapter['title'])
@@ -260,7 +277,7 @@ class AudioPlayBack(Extension):
 
                     # Send manual next chapter sync
                     await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
-                                               current_time=updateFrequency - 0.5, next_time=self.nextTime)
+                                                     current_time=updateFrequency - 0.5, next_time=self.nextTime)
                     # Reset Next Time to None before starting task again
                     self.nextTime = None
                     self.session_update.start()
@@ -363,6 +380,7 @@ class AudioPlayBack(Extension):
         self.bookTitle = bookTitle
         self.audioObj = audio
         self.currentTime = currentTime
+        self.current_playback_time = 0
 
         # Chapter Vars
         self.isPodcast = isPodcast
@@ -399,7 +417,7 @@ class AudioPlayBack(Extension):
                                                                            type=ActivityType.LISTENING))
 
                 # Start audio playback
-                await ctx.voice_state.play_no_wait(audio)
+                await ctx.voice_state.play(audio)
 
             except Exception as e:
                 # Stop Any Associated Tasks
@@ -418,7 +436,7 @@ class AudioPlayBack(Extension):
             try:
                 logger.info("Voice already connected, playing new audio selection.")
 
-                await ctx.voice_state.play_no_wait(audio)
+                await ctx.voice_state.play(audio)
 
             except Exception as e:
 
@@ -487,7 +505,7 @@ class AudioPlayBack(Extension):
 
             await ctx.send(content=f"Moving to chapter: {self.newChapterTitle}", ephemeral=True)
 
-            await ctx.voice_state.play_no_wait(self.audioObj)
+            await ctx.voice_state.play(self.audioObj)
 
             if not self.found_next_chapter:
                 await ctx.send(content=f"Book Finished or No New Chapter Found, aborting",
@@ -526,6 +544,8 @@ class AudioPlayBack(Extension):
             await ctx.author.voice.channel.disconnect()
             self.audioObj.cleanup()  # NOQA
             await self.client.change_presence(activity=None)
+            # Reset current playback time
+            self.current_playback_time = 0
 
             if self.session_update.running:
                 self.session_update.stop()
@@ -656,7 +676,7 @@ class AudioPlayBack(Extension):
 
             if self.found_next_chapter:
                 await ctx.edit(embed=embed_message)
-                await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
+                await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
             else:
                 await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
 
@@ -690,7 +710,7 @@ class AudioPlayBack(Extension):
                 # Resetting Variable
                 self.found_next_chapter = False
                 ctx.voice_state.channel.voice_state.player.stop()
-                await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
+                await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
 
             else:
                 await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
@@ -702,8 +722,11 @@ class AudioPlayBack(Extension):
             await ctx.voice_state.channel.voice_state.stop()
             await ctx.edit_origin()
             await ctx.delete()
+            # Class VARS
             self.audioObj.cleanup()  # NOQA
             self.session_update.stop()
+            self.current_playback_time = 0
+            self.play_state = 'stopped'
             await ctx.voice_state.channel.disconnect()
             await self.client.change_presence(activity=None)
             # Cleanup Session
@@ -774,7 +797,7 @@ class AudioPlayBack(Extension):
         self.nextTime = None
 
         await ctx.edit_origin()
-        await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
+        await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
 
     @component_callback('rewind_button')
     async def callback_rewind_button(self, ctx: ComponentContext):
@@ -803,7 +826,7 @@ class AudioPlayBack(Extension):
         self.session_update.start()
         self.nextTime = None
         await ctx.edit_origin()
-        await ctx.voice_state.channel.voice_state.play_no_wait(self.audioObj)  # NOQA
+        await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
 
     # ----------------------------
     # Other non discord related functions

@@ -19,6 +19,9 @@ import bookshelfAPI as c
 # Pulls from bookshelf file
 load_dotenv()
 
+# Logger Config
+logger = logging.getLogger("bot")
+
 # Experimental Imports
 # enables experimental features and modules
 
@@ -31,14 +34,12 @@ DEBUG_MODE = settings.DEBUG_MODE
 # TEMP
 if DEBUG_MODE == "True":
     DEBUG_MODE = True
+    logger.setLevel(logging.DEBUG)
 else:
     DEBUG_MODE = False
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
-
-# Logger Config
-logger = logging.getLogger("bot")
 
 # Timezone
 TIMEZONE = settings.TIMEZONE

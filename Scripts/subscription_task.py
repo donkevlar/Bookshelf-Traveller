@@ -22,7 +22,7 @@ class SubscriptionTask(Extension):
     def __init__(self, bot):
         pass
 
-    async def NewBookCheck(self, task_frequency=TASK_FREQUENCY):  # NOQA
+    async def NewBookCheck(self, bot: Client, task_frequency=TASK_FREQUENCY):  # NOQA
         items_added = []
         libraries = await c.bookshelf_libraries()
         current_time = datetime.now()
