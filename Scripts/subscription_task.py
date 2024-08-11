@@ -195,8 +195,9 @@ class SubscriptionTask(Extension):
                   opt_type=OptionType.INTEGER)
     @slash_option(name="enable_task", description="If set to true will enable recurring task.",
                   opt_type=OptionType.BOOLEAN)
-    async def newBookCheck(self, ctx: InteractionContext, minutes=TASK_FREQUENCY, enable_task=False):
-        if enable_task:
+    @slash_option(name="disable_task", description="If set to true, this will disable the task.", opt_type=OptionType.BOOLEAN)
+    async def newBookCheck(self, ctx: InteractionContext, minutes=TASK_FREQUENCY, enable_task=False, disable_task=False):
+        if enable_task and not disable_task:
             logger.info('Activating New Book Task! A message will follow.')
             if not self.newBookTask.running:
                 operationSuccess = False
@@ -220,13 +221,16 @@ class SubscriptionTask(Extension):
                 logger.warning('New book check task was already running, ignoring...')
                 await ctx.send('New book check task is already running, ignoring...', ephemeral=True)
                 return
-        else:
+        elif disable_task and not enable_task:
             if self.newBookTask.running:
                 await ctx.send("Disabled Task: *Recently Added Books*", ephemeral=True)
                 self.newBookTask.stop()
                 return
             else:
                 pass
+        else:
+            await ctx.send("Invalid option entered, please ensure only one option is entered from this command at a time.")
+            return
 
         await ctx.send(f'Searching for recently added books in given period of {minutes} minutes.', ephemeral=True)
         embeds = await self.NewBookCheckEmbed(task_frequency=minutes)
