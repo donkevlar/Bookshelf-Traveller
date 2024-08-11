@@ -190,12 +190,15 @@ class AudioPlayBack(Extension):
         self.isPodcast = False
         self.updateFreqMulti = updateFrequency * self.playbackSpeed
         self.play_state = 'stopped'
+        self.audio_message = None
         # User Vars
         self.username = ''
         self.user_type = ''
+        self.current_channel = None
 
     # Tasks ---------------------------------
     #
+
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
         playbackTimeState = ''
@@ -327,7 +330,7 @@ class AudioPlayBack(Extension):
         elif ownership and playback_role == 0:
             if ctx.author.id not in ctx.bot.owners:
                 logger.warning(f'User {ctx.author} attempted to use /play, and OWNER_ONLY is enabled!')
-                ctx.send(content="Ownership enabled and you are not authorized to use this command. Contact bot owner.")
+                await ctx.send(content="Ownership enabled and you are not authorized to use this command. Contact bot owner.")
                 return
 
         # Check bot is ready, if not exit command
@@ -409,7 +412,7 @@ class AudioPlayBack(Extension):
                 # Start Voice Check
                 await ctx.defer(ephemeral=True)
 
-                await ctx.send(embed=embed_message, ephemeral=True, components=component_rows_initial)
+                self.audio_message = await ctx.send(embed=embed_message, ephemeral=True, components=component_rows_initial)
 
                 logger.info(f"Beginning audio stream")
 
