@@ -19,7 +19,7 @@ Make sure that you select all intents when setting up your bot and that you have
 ### Known Limitations
 **Podcast playback is currently not supported due to the many differences in pulling the audio sources.**
 
-**Ownership by default will allow you to run all commands (NOT ADMIN), to disable this, use the env variable `OWNER_ONLY`.**
+**Ownership by default will allow you to run all commands, to disable this, use the env variable `OWNER_ONLY`.**
 
 **When using commands that use images, i.e. `/media_progress` or `/recent_sessions`, 
 the server must use an `HTTPS` connection due to a requirement from discord's API. If not, no image will be generated.**
