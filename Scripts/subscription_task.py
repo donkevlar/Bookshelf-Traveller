@@ -2,7 +2,7 @@ import os
 import sqlite3
 import time
 
-import interactions.ext.hybrid_commands.context
+from interactions.api.events import Startup
 
 import bookshelfAPI as c
 import settings as s
@@ -281,3 +281,16 @@ class SubscriptionTask(Extension):
             {"name": "new-book-check", "value": "1"}
         ]
         await ctx.send(choices=choices)
+
+    # Auto Start Task if db is populated
+    @listen()
+    async def tasks_startup(self, event: Startup):
+        logger.info("Initialized subscription task module, verifying if any tasks are enabled...")
+        result = search_task_db()
+        if result:
+            if not self.newBookTask.running:
+                self.newBookTask.start()
+                owner = event.bot.owner
+                logger.info(f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
+                if s.DEBUG_MODE != "True":
+                    await owner.send(f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
