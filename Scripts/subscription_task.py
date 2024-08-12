@@ -1,6 +1,9 @@
 import os
 import sqlite3
 import time
+
+import interactions.ext.hybrid_commands.context
+
 import bookshelfAPI as c
 import settings as s
 from interactions import *
@@ -180,7 +183,7 @@ class SubscriptionTask(Extension):
                 for channelID in channel_list:
                     channel_query = await self.bot.fetch_channel(channel_id=channelID, force=True)
                     if channel_query:
-                        await channel_query.send("A new book has been added to your library!", embeds=embeds,
+                        await channel_query.send(content="A new book has been added to your library!", embeds=embeds,
                                                  ephemeral=True)
                         logger.info("Successfully completed new-book-check task!")
 
@@ -229,7 +232,7 @@ class SubscriptionTask(Extension):
                 return
             else:
                 pass
-        else:
+        elif disable_task and enable_task:
             await ctx.send("Invalid option entered, please ensure only one option is entered from this command at a time.")
             return
 
