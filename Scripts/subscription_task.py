@@ -44,7 +44,7 @@ UNIQUE(channel_id, task)
 
 
 # Initialize table
-logger.info("Initializing Sqlite DB")
+logger.info("Initializing tasks table")
 table_create()
 
 
@@ -73,12 +73,20 @@ def remove_task_db(task: str, discord_id):
         return False
 
 
-def search_task_db(discord_id=0, task='', channel_id=0):
-    logger.info('Initializing sqlite db search for subscription task module.')
+def search_task_db(discord_id=0, task='', channel_id=0, override_response='') -> ():
+    override = False
+
+    if override_response != '':
+        response = override_response
+        logger.warning(response)
+        override = True
+    else:
+        logger.info('Initializing sqlite db search for subscription task module.')
 
     if channel_id != 0 and task == '' and discord_id == 0:
         option = 1
-        logger.info(f'OPTION {option}: Searching db using channel ID in tasks table.')
+        if not override:
+            logger.info(f'OPTION {option}: Searching db using channel ID in tasks table.')
         cursor.execute('''
         SELECT discord_id, task FROM tasks WHERE channel_id = ?
         ''', (channel_id, task))
@@ -86,7 +94,8 @@ def search_task_db(discord_id=0, task='', channel_id=0):
 
     elif discord_id != 0 and task == '' and channel_id == 0:
         option = 2
-        logger.info(f'OPTION {option}: Searching db using discord ID and task name in tasks table.')
+        if not override:
+            logger.info(f'OPTION {option}: Searching db using discord ID and task name in tasks table.')
         cursor.execute('''
                 SELECT channel_id FROM tasks WHERE discord_id = ? AND task = ?
                 ''', (discord_id, task))
@@ -94,16 +103,75 @@ def search_task_db(discord_id=0, task='', channel_id=0):
 
     else:
         option = 3
-        logger.info(f'OPTION {option}: Searching db using no arguments in tasks table.')
+        if not override:
+            logger.info(f'OPTION {option}: Searching db using no arguments in tasks table.')
         cursor.execute('''SELECT discord_id, task, channel_id FROM tasks''')
         rows = cursor.fetchall()
 
     if rows:
-        logger.info(f'Successfully found query using option: {option} using table tasks in subscription task module.')
+        if not override:
+            logger.info(
+                f'Successfully found query using option: {option} using table tasks in subscription task module.')
     else:
-        logger.warning('Query returned null using table tasks, an error may follow.')
+        if not override:
+            logger.warning('Query returned null using table tasks, an error may follow.')
 
     return rows
+
+
+async def NewBookCheckEmbed(task_frequency=TASK_FREQUENCY):  # NOQA
+    items_added = []
+    libraries = await c.bookshelf_libraries()
+    current_time = datetime.now()
+    bookshelfURL = os.environ.get("bookshelfURL")
+
+    time_minus_delta = current_time - timedelta(minutes=task_frequency)
+    timestamp_minus_delta = int(time.mktime(time_minus_delta.timetuple()) * 1000)
+
+    for name, (library_id, audiobooks_only) in libraries.items():
+        library_items = await c.bookshelf_all_library_items(library_id, params="sort=addedAt&desc=1")
+
+        for item in library_items:
+            latest_item_time_added = int(item.get('addedTime'))
+            latest_item_title = item.get('title')
+            latest_item_type = item.get('mediaType')
+            latest_item_author = item.get('author')
+            latest_item_bookID = item.get('id')
+
+            formatted_time = latest_item_time_added / 1000
+            formatted_time = datetime.fromtimestamp(formatted_time)
+            formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
+
+            if latest_item_time_added >= timestamp_minus_delta and latest_item_type == 'book':
+                items_added.append({"title": latest_item_title, "addedTime": formatted_time,
+                                    "author": latest_item_author, "id": latest_item_bookID})
+
+    if items_added:
+        count = 0
+        embeds = []
+        logger.info('New books found, executing Task!')
+
+        for item in items_added:
+            count += 1
+            title = item.get('title')
+            author = item.get('author')
+            addedTime = item.get('addedTime')
+            bookID = item.get('id')
+
+            cover_link = await c.bookshelf_cover_image(bookID)
+
+            embed_message = Embed(
+                title=f"Recently Added Book {count}",
+                description=f"Recently added books for {bookshelfURL}",
+            )
+            embed_message.add_field(name="Title", value=title)
+            embed_message.add_field(name="Author", value=author)
+            embed_message.add_field(name="Added Time", value=addedTime)
+            embed_message.add_image(cover_link)
+
+            embeds.append(embed_message)
+
+        return embeds
 
 
 class SubscriptionTask(Extension):
@@ -112,60 +180,6 @@ class SubscriptionTask(Extension):
         self.newBookCheckChannel = None
         self.newBookCheckChannelID = None
 
-    async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY):  # NOQA
-        items_added = []
-        libraries = await c.bookshelf_libraries()
-        current_time = datetime.now()
-        bookshelfURL = os.environ.get("bookshelfURL")
-
-        time_minus_delta = current_time - timedelta(minutes=task_frequency)
-        timestamp_minus_delta = int(time.mktime(time_minus_delta.timetuple()) * 1000)
-
-        for name, (library_id, audiobooks_only) in libraries.items():
-            library_items = await c.bookshelf_all_library_items(library_id, params="sort=addedAt&desc=1")
-
-            for item in library_items:
-                latest_item_time_added = int(item.get('addedTime'))
-                latest_item_title = item.get('title')
-                latest_item_type = item.get('mediaType')
-                latest_item_author = item.get('author')
-                latest_item_bookID = item.get('id')
-
-                formatted_time = latest_item_time_added / 1000
-                formatted_time = datetime.fromtimestamp(formatted_time)
-                formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
-
-                if latest_item_time_added >= timestamp_minus_delta and latest_item_type == 'book':
-                    items_added.append({"title": latest_item_title, "addedTime": formatted_time,
-                                        "author": latest_item_author, "id": latest_item_bookID})
-
-        if items_added:
-            count = 0
-            embeds = []
-            logger.info('New books found, executing Task!')
-
-            for item in items_added:
-                count += 1
-                title = item.get('title')
-                author = item.get('author')
-                addedTime = item.get('addedTime')
-                bookID = item.get('id')
-
-                cover_link = await c.bookshelf_cover_image(bookID)
-
-                embed_message = Embed(
-                    title=f"Recently Added Book {count}",
-                    description=f"Recently added books for {bookshelfURL}",
-                )
-                embed_message.add_field(name="Title", value=title)
-                embed_message.add_field(name="Author", value=author)
-                embed_message.add_field(name="Added Time", value=addedTime)
-                embed_message.add_image(cover_link)
-
-                embeds.append(embed_message)
-
-            return embeds
-
     @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def newBookTask(self):
         logger.info("Initializing new-book-check task!")
@@ -173,7 +187,7 @@ class SubscriptionTask(Extension):
         search_result = search_task_db()
         if search_result:
             logger.debug(f"search result: {search_result}")
-            embeds = await self.NewBookCheckEmbed()
+            embeds = await NewBookCheckEmbed()
             if embeds:
                 for result in search_result:
                     channel_id = int(result[2])
@@ -193,14 +207,17 @@ class SubscriptionTask(Extension):
     # Slash Commands ----------------------------------------------------
 
     @slash_command(name="new-book-check",
-                   description="Enable/Disable a background task checking for newly added books.", dm_permission=True)
+                   description="Verify if a new book has been added to your library. Can be setup as a task.",
+                   dm_permission=True)
     @slash_option(name="minutes", description=f"Lookback period, in minutes. "
                                               f"Defaults to {TASK_FREQUENCY} minutes. DOES NOT AFFECT TASK.",
                   opt_type=OptionType.INTEGER)
     @slash_option(name="enable_task", description="If set to true will enable recurring task.",
                   opt_type=OptionType.BOOLEAN)
-    @slash_option(name="disable_task", description="If set to true, this will disable the task.", opt_type=OptionType.BOOLEAN)
-    async def newBookCheck(self, ctx: InteractionContext, minutes=TASK_FREQUENCY, enable_task=False, disable_task=False):
+    @slash_option(name="disable_task", description="If set to true, this will disable the task.",
+                  opt_type=OptionType.BOOLEAN)
+    async def newBookCheck(self, ctx: InteractionContext, minutes=TASK_FREQUENCY, enable_task=False,
+                           disable_task=False):
         if enable_task and not disable_task:
             logger.info('Activating New Book Task! A message will follow.')
             if not self.newBookTask.running:
@@ -233,11 +250,12 @@ class SubscriptionTask(Extension):
             else:
                 pass
         elif disable_task and enable_task:
-            await ctx.send("Invalid option entered, please ensure only one option is entered from this command at a time.")
+            await ctx.send(
+                "Invalid option entered, please ensure only one option is entered from this command at a time.")
             return
 
         await ctx.send(f'Searching for recently added books in given period of {minutes} minutes.', ephemeral=True)
-        embeds = await self.NewBookCheckEmbed(task_frequency=minutes)
+        embeds = await NewBookCheckEmbed(task_frequency=minutes)
         if embeds:
             logger.info(f'Recent books found in given search period of {minutes} minutes!')
             paginator = Paginator.create_from_embeds(self.bot, *embeds)
@@ -255,11 +273,21 @@ class SubscriptionTask(Extension):
     async def task_setup(self, ctx: SlashContext, task, channel):
         task_name = ""
         success = False
-        task_command = ""
+        task_instruction = ''
 
         if int(task) == 1:
             task_name = 'new-book-check'
             task_command = '`/new-book-check enable_task: True`'
+            task_instruction = f'To activate the task use **{task_command}**'
+            result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name)
+
+            if result:
+                success = True
+
+        if int(task) == 2:
+            task_name = 'add-book'
+            task_command = '`/add-book`'
+            task_instruction = f'Once a book is added to the wishlist by using {task_command}, the task will start automatically.'
             result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name)
 
             if result:
@@ -267,7 +295,7 @@ class SubscriptionTask(Extension):
 
         if success:
             await ctx.send(
-                f"Successfully setup task **{task_name}** with channel **{channel.name}**. To activate the task use **{task_command}**",
+                f"Successfully setup task **{task_name}** with channel **{channel.name}**. Instructions: {task_instruction}",
                 ephemeral=True)
         else:
             await ctx.send(
@@ -279,18 +307,31 @@ class SubscriptionTask(Extension):
     async def auto_com_task(self, ctx: AutocompleteContext):
         choices = [
             {"name": "new-book-check", "value": "1"}
+            # {"name": "add-book", "value": "2"}
         ]
         await ctx.send(choices=choices)
 
     # Auto Start Task if db is populated
     @listen()
     async def tasks_startup(self, event: Startup):
-        logger.info("Initialized subscription task module, verifying if any tasks are enabled...")
-        result = search_task_db()
+        result = search_task_db(
+            override_response="Initialized subscription task module, verifying if any tasks are enabled...")
+        task_name = "new-book-check"
+        task_list = []
         if result:
-            if not self.newBookTask.running:
+            for item in result:
+                task = item[1]
+                task_list.append(task)
+                # Debug stuff
+                if s.DEBUG_MODE != "True":
+                    logger.debug(f"Tasks db search result: {task}")
+
+            if not self.newBookTask.running and task_name in task_list:
                 self.newBookTask.start()
                 owner = event.bot.owner
-                logger.info(f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
+                logger.info(
+                    f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
+                # Debug Stuff
                 if s.DEBUG_MODE != "True":
-                    await owner.send(f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
+                    await owner.send(
+                        f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
