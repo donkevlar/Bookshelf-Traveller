@@ -163,7 +163,7 @@ async def on_startup(event: Startup):
 @slash_command(name="listening-stats", description="Pulls your total listening time and other useful stats")
 async def totalTime(ctx: SlashContext):
     try:
-        formatted_sessions_string, data = c.bookshelf_listening_stats()
+        formatted_sessions_string, data = await c.bookshelf_listening_stats()
         total_time = round(data.get('totalTime') / 60)  # Convert to Minutes
         if total_time >= 60:
             total_time = round(total_time / 60)  # Convert to hours

@@ -361,7 +361,6 @@ class SubscriptionTask(Extension):
     async def auto_com_task(self, ctx: AutocompleteContext):
         choices = [
             {"name": "new-book-check", "value": "1"}
-            # {"name": "add-book", "value": "2"}
         ]
         await ctx.send(choices=choices)
 
