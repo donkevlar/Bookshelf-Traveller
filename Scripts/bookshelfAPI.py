@@ -26,7 +26,7 @@ optional_image_url = OPT_IMAGE_URL
 
 # Simple Success Message
 def successMSG(endpoint, status):
-    logger.info(f'Successfully Reached {endpoint} with Status {status}')
+    logger.debug(f'Successfully Reached {endpoint} with Status {status}')
 
 
 async def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET=False,
