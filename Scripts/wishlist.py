@@ -140,7 +140,7 @@ class WishList(Extension):
     @slash_command(name='add-book', description='Add a book to your wishlist. Server wide command.')
     @slash_option(name='title', description='Book Title', opt_type=OptionType.STRING, required=True)
     async def add_book_command(self, ctx: SlashContext, title: str):
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
         book_search = await c.bookshelf_search_books(title=title)
         title_list = []
         count = 0
@@ -156,16 +156,23 @@ class WishList(Extension):
             book_title = books.get('title')
             book_author = books.get('author')
             book_published = books.get('publishedYear')
+            book_publisher = books.get('publisher')
 
             if book_title not in title_list:
                 title_list.append(book_title)
                 count += 1
                 books['internal_id'] = count
 
+                desc_component = f"Author: {book_author} | Year: {book_published}"
+                if len(desc_component) <= 100:
+                    pass
+                else:
+                    desc_component = f"Year: {book_published} | Publisher: {book_publisher}"
+
                 if count <= 25 and book_title is not None:
                     valid = True
                     options.append(StringSelectOption(label=book_title, value=str(count),
-                                                      description=f"internalID: {books.get('internal_id')} | Author: {book_author} | Year: {book_published}"))
+                                                      description=desc_component))
                     book_list.append(books)
 
         components = StringSelectMenu(
