@@ -54,6 +54,9 @@ PLAYBACK_ROLE = os.getenv('PLAYBACK_ROLE', 0)
 # Ownership check
 OWNER_ONLY = os.getenv('OWNER_ONLY', True)
 
+# Used for embed footers
+bookshelf_traveller_footer = f'Powered by Bookshelf Traveller 🕮 | {versionNumber}'
+
 LOGGING_CONFIG = {
     "version": 1,
     "disabled_existing_loggers": False,
