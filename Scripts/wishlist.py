@@ -47,8 +47,8 @@ logger.info("Initializing wishlist table")
 table_create()
 
 
-def insert_data(title: str, author: str, description: str, cover: str, provider: str, provider_id: str,
-                discord_id: int, data: str):
+def insert_wishlist_data(title: str, author: str, description: str, cover: str, provider: str, provider_id: str,
+                         discord_id: int, data: str):
     try:
         wishlist_cursor.execute('''
         INSERT INTO wishlist (title, author, description, cover, provider, provider_id, discord_id, book_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
@@ -63,14 +63,14 @@ def insert_data(title: str, author: str, description: str, cover: str, provider:
 
 
 def search_wishlist_db(discord_id: int = 0):
-    if DEBUG_MODE != 'True':
-        logger.info('Searching for books in wishlist db!')
+    logger.debug('Searching for books in wishlist db!')
     if discord_id == 0:
         wishlist_cursor.execute(
             '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist''')
 
         rows = wishlist_cursor.fetchall()
     else:
+        logger.debug("Searching wishlist db using discord id!")
         wishlist_cursor.execute(
             '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist WHERE discord_id = ?''', (discord_id,))
 
@@ -89,10 +89,10 @@ async def wishlist_search_embed(title: str, title_desc: str, author: str, cover:
     return embed_message
 
 
-def remove_book_db(title: str, author: str, discord_id: int):
+def remove_book_db(title: str, discord_id: int):
     logger.warning(f'Attempting to delete user {title} from db!')
     try:
-        wishlist_cursor.execute("DELETE FROM wishlist WHERE title = ? AND author = ? AND discord_id = ?", (title, author, int(discord_id)))
+        wishlist_cursor.execute("DELETE FROM wishlist WHERE title = ? AND discord_id = ?", (title, int(discord_id)))
         wishlist_conn.commit()
         logger.info(f"Successfully deleted title {title} from db!")
         return True
@@ -139,7 +139,8 @@ class WishList(Extension):
 
     @slash_command(name='add-book', description='Add a book to your wishlist. Server wide command.')
     @slash_option(name='title', description='Book Title', opt_type=OptionType.STRING, required=True)
-    async def add_book_command(self, ctx: SlashContext, title):
+    async def add_book_command(self, ctx: SlashContext, title: str):
+        await ctx.defer()
         book_search = await c.bookshelf_search_books(title=title)
         title_list = []
         count = 0
@@ -186,6 +187,16 @@ class WishList(Extension):
             logger.error(f"Error occured: {e}")
             await ctx.send(f"An error occured while trying to search for book title {title}. Normally this occurs if the title has a bad typo or if there are too many results. Visit logs for details.")
 
+    @slash_command(name='remove-book', description="Manually remove a book from your wishlist.")
+    @slash_option(name='book', description='Your wishlist of books. Note: If empty, no books were found.', opt_type=OptionType.STRING, required=True, autocomplete=True)
+    async def remove_book_command(self, ctx: SlashContext, book: str):
+        await ctx.defer(ephemeral=True)
+        result = remove_book_db(discord_id=ctx.author_id, title=book)
+        if result:
+            await ctx.send(f"Successfully removed {book} from your wishlist!", ephemeral=True)
+        else:
+            await ctx.send(f"Failed to remove {book} from your wishlist, please visit logs for additional details.", ephemeral=True)
+
     @slash_command(name='wishlist', description='View your wishlist')
     async def view_wishlist(self, ctx: SlashContext):
         result = search_wishlist_db(ctx.author_id)
@@ -217,6 +228,19 @@ class WishList(Extension):
         else:
             await ctx.send("You currently don't have any items in your wishlist. Please use **`/add-book`** to add items to your wishlist.", ephemeral=True)
 
+    # Autocomplete -------------------------------------------------
+    @remove_book_command.autocomplete('book')
+    async def book_search_autocomplete(self, ctx: AutocompleteContext):
+        choices = []
+        result = search_wishlist_db(ctx.author_id)
+        if result:
+            for item in result:
+                book_data = json5.loads(item[7])
+                title = book_data.get('title')
+                choices.append({"name": title, "value": title})
+        await ctx.send(choices=choices)
+
+    # Component Callbacks -----------------------------------------
     @component_callback('search_select_menu')
     async def on_search_menu_select(self, ctx: ComponentContext):
         selected_value = ctx.values
@@ -269,8 +293,8 @@ class WishList(Extension):
         else:
             provider_id = self.selectedBook['id']
 
-        result = insert_data(title=title, author=author, description=description, cover=cover, provider=provider,
-                             provider_id=provider_id, discord_id=discord_id, data=str(json.dumps(self.selectedBook)))
+        result = insert_wishlist_data(title=title, author=author, description=description, cover=cover, provider=provider,
+                                      provider_id=provider_id, discord_id=discord_id, data=str(json.dumps(self.selectedBook)))
         if result:
             logger.info('Successfully added book to wishlist db!')
             await ctx.edit_origin(content=f"Successfully added title **{title}** to wishlist", components=component_success)
