@@ -711,7 +711,7 @@ async def bookshelf_close_all_sessions(items: int):
         logger.error(e)
 
 
-async def bookshelf_search_books(title: str, provider=DEFAULT_PROVIDER, author=''):
+async def bookshelf_search_books(title: str, provider=DEFAULT_PROVIDER, author='') -> list:
     endpoint = '/search/books'
     bookshelfToken = os.environ.get("bookshelfToken")
     bookshelfURL = os.getenv('bookshelfURL')
