@@ -417,12 +417,18 @@ async def autocomplete_all_library_items(ctx: AutocompleteContext):
 # Main Loop
 if __name__ == '__main__':
     ADMIN = asyncio.run(conn_test())
+
     # Load context menu module
     logger.info('Context Menus module loaded!')
     bot.load_extension("context-menus")
+
     # Load subscription module
     logger.info('Subscribable Task module loaded!')
     bot.load_extension("subscription_task")
+
+    # Load wishlist module
+    logger.info('Wishlist module loaded!')
+    bot.load_extension("wishlist")
 
     if AUDIO_ENABLED:
         # Load Audio Extension
