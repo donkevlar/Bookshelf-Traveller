@@ -62,21 +62,28 @@ def insert_wishlist_data(title: str, author: str, description: str, cover: str, 
         return False
 
 
-def search_wishlist_db(discord_id: int = 0):
+def search_wishlist_db(discord_id: int = 0, title=""):
     logger.debug('Searching for books in wishlist db!')
-    if discord_id == 0:
+    if discord_id == 0 and title == "":
         wishlist_cursor.execute(
             '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist''')
 
         rows = wishlist_cursor.fetchall()
-    else:
+    elif discord_id != 0 and title =="":
         logger.debug("Searching wishlist db using discord id!")
         wishlist_cursor.execute(
             '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist WHERE discord_id = ?''', (discord_id,))
 
         rows = wishlist_cursor.fetchall()
 
-    return rows
+    elif title != "" and discord_id == 0:
+        wishlist_cursor.execute(
+            '''SELECT discord_id, book_data, title FROM wishlist WHERE title LIKE ?''',
+            (title,))
+
+        rows = wishlist_cursor.fetchall()
+
+    return rows # NOQA
 
 
 async def wishlist_search_embed(title: str, title_desc: str, author: str, cover: str, additional_info: str, footer=''):

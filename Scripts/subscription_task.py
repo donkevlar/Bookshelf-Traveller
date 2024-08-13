@@ -15,7 +15,6 @@ from interactions.ext.paginators import Paginator
 from dotenv import load_dotenv
 from wishlist import search_wishlist_db, remove_book_db
 
-
 # Enable dot env outside of docker
 load_dotenv()
 
@@ -165,100 +164,84 @@ async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
         return items_added
 
 
-async def NewBookCheckEmbed(task_frequency=TASK_FREQUENCY):  # NOQA
-    bookshelfURL = os.environ.get("bookshelfURL")
-
-    items_added = await newBookList(task_frequency)
-
-    if items_added:
-        count = 0
-        embeds = []
-        merged_title = ''
-        wishlist_titles = []
-        logger.info('New books found, executing Task!')
-
-        wishlist_result = search_wishlist_db()
-        if wishlist_result:
-            for wl_item in wishlist_result:
-                data = json5.loads(wl_item[7])
-                title_wl = data.get('title')
-                subtitle = data.get('subtitle')
-                author = data.get('author')
-
-                if subtitle != '' and subtitle is not None:
-                    merged_title = title_wl + ": " + subtitle
-                    logger.debug(f"Merged Title: {title_wl}")
-
-                wishlist_titles.append(title_wl)
-
-        if wishlist_titles:
-            logger.debug(f"Wishlist Titles: {wishlist_titles}")
-
-        for item in items_added:
-            count += 1
-            title = item.get('title')
-            logger.debug(title)
-            author = item.get('author')
-            addedTime = item.get('addedTime')
-            bookID = item.get('id')
-
-            wishlisted = False
-
-            cover_link = await c.bookshelf_cover_image(bookID)
-
-            if title in wishlist_titles or merged_title in wishlist_titles:
-                logger.info(f"Title {title} is wishlisted!")
-                wishlisted = True
-
-            embed_message = Embed(
-                title=f"Recently Added Book {count}",
-                description=f"Recently added books for {bookshelfURL}",
-            )
-            embed_message.add_field(name="Title", value=title, inline=False)
-            embed_message.add_field(name="Author", value=author)
-            embed_message.add_field(name="Added Time", value=addedTime)
-            embed_message.add_field(name="Additional Information", value=f"Wishlisted: **{wishlisted}**", inline=False)
-            embed_message.add_image(cover_link)
-
-            embeds.append(embed_message)
-
-        return embeds
-
-
 class SubscriptionTask(Extension):
     def __init__(self, bot):
         # Channel object has 3 main properties .name, .id, .type
         self.newBookCheckChannel = None
         self.newBookCheckChannelID = None
 
-    @Task.create(trigger=IntervalTrigger(minutes=2))
+    async def send_user_wishlist(self, discord_id: int, title: str, author: str, embed: list):
+        user = await self.bot.fetch_user(discord_id)
+
+        await user.send(
+                f"Hello {user}, {title} by author {author} is now available on your Audiobookshelf server: {os.getenv('bookshelfURL')}! ", embeds=embed) # NOQA
+
+    async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
+        bookshelfURL = os.environ.get("bookshelfURL")
+
+        items_added = await newBookList(task_frequency)
+
+        if items_added:
+            count = 0
+            embeds = []
+            wishlist_titles = []
+            logger.info('New books found, executing Task!')
+
+            if wishlist_titles:
+                logger.debug(f"Wishlist Titles: {wishlist_titles}")
+
+            for item in items_added:
+                count += 1
+                title = item.get('title')
+                logger.debug(title)
+                author = item.get('author')
+                addedTime = item.get('addedTime')
+                bookID = item.get('id')
+
+                wishlisted = False
+
+                cover_link = await c.bookshelf_cover_image(bookID)
+
+                wl_search = search_wishlist_db(title=title)
+                if wl_search:
+                    wishlisted = True
+
+                embed_message = Embed(
+                    title=f"Recently Added Book {count}",
+                    description=f"Recently added books for {bookshelfURL}",
+                )
+                embed_message.add_field(name="Title", value=title, inline=False)
+                embed_message.add_field(name="Author", value=author)
+                embed_message.add_field(name="Added Time", value=addedTime)
+                embed_message.add_field(name="Additional Information", value=f"Wishlisted: **{wishlisted}**",
+                                        inline=False)
+                embed_message.add_image(cover_link)
+
+                embeds.append(embed_message)
+
+                if wl_search:
+                    for user in wl_search:
+                        discord_id = user[0]
+                        search_title = user[2]
+                        if enable_notifications:
+                            await self.send_user_wishlist(discord_id=discord_id, title=title, author=author, embed=embeds)
+                            remove_book_db(title=search_title, discord_id=discord_id)
+
+            return embeds
+
+    @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def newBookTask(self):
         logger.info("Initializing new-book-check task!")
         channel_list = []
         search_result = search_task_db()
-        wishlist_result = search_wishlist_db()
         if search_result:
             logger.debug(f"search result: {search_result}")
             new_titles = await newBookList()
             if new_titles:
                 logger.debug(f"New Titles Found: {new_titles}")
 
-            embeds = await NewBookCheckEmbed()
+            embeds = await self.NewBookCheckEmbed(enable_notifications=True)
             if embeds:
-                if wishlist_result:
-                    for item in wishlist_result:
-                        title = item[0]
-                        author = item[1]
-                        discord_id = item[6]
-                        try:
-                            if title in new_titles:
-                                user = await self.bot.fetch_user(discord_id)
-                                await user.send(f"{user.username}, **{title}** by author {author} that you wishlisted has been added to your Audiobookshelf server.")
-
-                        except Exception as e:
-                            logger.error(f"An error occured while attempting to send a message to userid {discord_id}")
-                            logger.error(e)
-
                 for result in search_result:
                     channel_id = int(result[2])
                     channel_list.append(channel_id)
@@ -326,7 +309,7 @@ class SubscriptionTask(Extension):
             return
 
         await ctx.send(f'Searching for recently added books in given period of {minutes} minutes.', ephemeral=True)
-        embeds = await NewBookCheckEmbed(task_frequency=minutes)
+        embeds = await self.NewBookCheckEmbed(task_frequency=minutes, enable_notifications=False)
         if embeds:
             logger.info(f'Recent books found in given search period of {minutes} minutes!')
             paginator = Paginator.create_from_embeds(self.bot, *embeds)
