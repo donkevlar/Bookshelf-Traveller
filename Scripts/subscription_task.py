@@ -2,15 +2,19 @@ import os
 import sqlite3
 import time
 
-from interactions.api.events import Startup
+import json5
 
 import bookshelfAPI as c
 import settings as s
-from interactions import *
 import logging
+
+from interactions import *
+from interactions.api.events import Startup
 from datetime import datetime, timedelta
 from interactions.ext.paginators import Paginator
 from dotenv import load_dotenv
+from wishlist import search_wishlist_db, remove_book_db
+
 
 # Enable dot env outside of docker
 load_dotenv()
@@ -119,11 +123,18 @@ def search_task_db(discord_id=0, task='', channel_id=0, override_response='') ->
     return rows
 
 
-async def NewBookCheckEmbed(task_frequency=TASK_FREQUENCY):  # NOQA
+async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
+    logger.debug("Initializing NewBookList function")
     items_added = []
-    libraries = await c.bookshelf_libraries()
     current_time = datetime.now()
-    bookshelfURL = os.environ.get("bookshelfURL")
+    library_count = 0
+
+    libraries = await c.bookshelf_libraries()
+
+    for library in libraries:
+        library_count += 1
+
+    logger.debug(f'Found {library_count} libraries')
 
     time_minus_delta = current_time - timedelta(minutes=task_frequency)
     timestamp_minus_delta = int(time.mktime(time_minus_delta.timetuple()) * 1000)
@@ -138,6 +149,11 @@ async def NewBookCheckEmbed(task_frequency=TASK_FREQUENCY):  # NOQA
             latest_item_author = item.get('author')
             latest_item_bookID = item.get('id')
 
+            if "(Abridged)" in latest_item_title:
+                latest_item_title = latest_item_title.replace("(Abridged)", '').strip()
+            if "(Unabridged)" in latest_item_title:
+                latest_item_title = latest_item_title.replace("(Unabridged)", '').strip()
+
             formatted_time = latest_item_time_added / 1000
             formatted_time = datetime.fromtimestamp(formatted_time)
             formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
@@ -146,27 +162,62 @@ async def NewBookCheckEmbed(task_frequency=TASK_FREQUENCY):  # NOQA
                 items_added.append({"title": latest_item_title, "addedTime": formatted_time,
                                     "author": latest_item_author, "id": latest_item_bookID})
 
+        return items_added
+
+
+async def NewBookCheckEmbed(task_frequency=TASK_FREQUENCY):  # NOQA
+    bookshelfURL = os.environ.get("bookshelfURL")
+
+    items_added = await newBookList(task_frequency)
+
     if items_added:
         count = 0
         embeds = []
+        merged_title = ''
+        wishlist_titles = []
         logger.info('New books found, executing Task!')
+
+        wishlist_result = search_wishlist_db()
+        if wishlist_result:
+            for wl_item in wishlist_result:
+                data = json5.loads(wl_item[7])
+                title_wl = data.get('title')
+                subtitle = data.get('subtitle')
+                author = data.get('author')
+
+                if subtitle != '' and subtitle is not None:
+                    merged_title = title_wl + ": " + subtitle
+                    logger.debug(f"Merged Title: {title_wl}")
+
+                wishlist_titles.append(title_wl)
+
+        if wishlist_titles:
+            logger.debug(f"Wishlist Titles: {wishlist_titles}")
 
         for item in items_added:
             count += 1
             title = item.get('title')
+            logger.debug(title)
             author = item.get('author')
             addedTime = item.get('addedTime')
             bookID = item.get('id')
 
+            wishlisted = False
+
             cover_link = await c.bookshelf_cover_image(bookID)
+
+            if title in wishlist_titles or merged_title in wishlist_titles:
+                logger.info(f"Title {title} is wishlisted!")
+                wishlisted = True
 
             embed_message = Embed(
                 title=f"Recently Added Book {count}",
                 description=f"Recently added books for {bookshelfURL}",
             )
-            embed_message.add_field(name="Title", value=title)
+            embed_message.add_field(name="Title", value=title, inline=False)
             embed_message.add_field(name="Author", value=author)
             embed_message.add_field(name="Added Time", value=addedTime)
+            embed_message.add_field(name="Additional Information", value=f"Wishlisted: **{wishlisted}**", inline=False)
             embed_message.add_image(cover_link)
 
             embeds.append(embed_message)
@@ -180,23 +231,43 @@ class SubscriptionTask(Extension):
         self.newBookCheckChannel = None
         self.newBookCheckChannelID = None
 
-    @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
+    @Task.create(trigger=IntervalTrigger(minutes=2))
     async def newBookTask(self):
         logger.info("Initializing new-book-check task!")
         channel_list = []
         search_result = search_task_db()
+        wishlist_result = search_wishlist_db()
         if search_result:
             logger.debug(f"search result: {search_result}")
+            new_titles = await newBookList()
+            if new_titles:
+                logger.debug(f"New Titles Found: {new_titles}")
+
             embeds = await NewBookCheckEmbed()
             if embeds:
+                if wishlist_result:
+                    for item in wishlist_result:
+                        title = item[0]
+                        author = item[1]
+                        discord_id = item[6]
+                        try:
+                            if title in new_titles:
+                                user = await self.bot.fetch_user(discord_id)
+                                await user.send(f"{user.username}, **{title}** by author {author} that you wishlisted has been added to your Audiobookshelf server.")
+
+                        except Exception as e:
+                            logger.error(f"An error occured while attempting to send a message to userid {discord_id}")
+                            logger.error(e)
+
                 for result in search_result:
                     channel_id = int(result[2])
-                    logger.info(f"Bot will now attempt to send a message to channel id: {channel_id}")
                     channel_list.append(channel_id)
 
                 for channelID in channel_list:
                     channel_query = await self.bot.fetch_channel(channel_id=channelID, force=True)
                     if channel_query:
+                        logger.debug(f"Found Channel: {channelID}")
+                        logger.debug(f"Bot will now attempt to send a message to channel id: {channelID}")
                         await channel_query.send(content="A new book has been added to your library!", embeds=embeds,
                                                  ephemeral=True)
                         logger.info("Successfully completed new-book-check task!")
