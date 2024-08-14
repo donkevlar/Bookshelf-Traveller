@@ -322,21 +322,21 @@ async def bookshelf_title_search(display_title: str):
         # Parse for the library that is only audio
         valid_libraries.append({"id": library_id, "name": name})
         valid_library_count += 1
-        logger.info(f"\nValid Libraries Found: {valid_library_count} | Name: {name}\n")
+        logger.debug(f"Valid Libraries Found: {valid_library_count} | Name: {name}\n")
 
     if valid_library_count > 0:
 
         # Search the libraries for the title name
         for lib_id in valid_libraries:
             library_iD = lib_id.get('id')
-            logger.info(f"Beginning to search libraries: {lib_id.get('name')} | {library_iD}\n")
+            logger.debug(f"Beginning to search libraries: {lib_id.get('name')} | {library_iD}\n")
             # Search for the title name using endpoint
             try:
                 limit = 10
                 endpoint = f"/libraries/{library_iD}/search"
                 params = f"&q={display_title}&limit={limit}"
                 r = await bookshelf_conn(endpoint=endpoint, GET=True, params=params)
-                print(f"\nstatus code: {r.status_code}")
+                logger.debug(f"status code: {r.status_code}")
                 if r.status_code == 200:
                     data = r.json()
 
@@ -350,13 +350,13 @@ async def bookshelf_title_search(display_title: str):
                         media_type = book['libraryItem']['mediaType']
                         # Add to dict
                         if media_type in valid_media_types:
-                            logger.info(f'accepted: {title} | media type: {media_type}')
+                            logger.debug(f'accepted: {title} | media type: {media_type}')
                             found_titles.append({'id': book_id, 'title': title})
                         else:
                             logger.warning(f'rejected: {title}, reason: media-type {media_type} rejected')
 
                     # Append None to book_titles if nothing is found
-                    logger.info(found_titles)
+                    logger.debug(found_titles)
                     return found_titles
 
             except Exception as e:
@@ -755,7 +755,14 @@ async def main():
     if __name__ == '__main__':
         print("TESTING COMMENCES")
         bookshelf_test_connection()
-        await bookshelf_search_books(title='He who fights with monsters')
+        title = "Eragon"
+        result = await bookshelf_title_search('eragon')
+        if result:
+            for found_ in result:
+                found_title = found_.get('title')
+                if title in found_title:
+                    print("Book Found!")
+                    return
 
 
 asyncio.run(main())
