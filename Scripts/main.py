@@ -304,10 +304,10 @@ async def search_media_progress(ctx: SlashContext, book_title: str):
         totalDuration = formatted_data['totalDuration']
         lastUpdated = formatted_data['lastUpdated']
 
-        media_progress = (f"Progress: {progress}\nChapter Title: {chapterTitle}\n "
-                          f"Time Progressed: {currentTime} Hours\n "
-                          f"Total Duration: {totalDuration} Hours\n")
-        media_status = f"Is Finished: {finished}\n " f"Last Updated: {lastUpdated}\n"
+        media_progress = (f"Progress: **{progress}**\nChapter Title: **{chapterTitle}**\n "
+                          f"Time Progressed: **{currentTime}** Hours\n "
+                          f"Total Duration: **{totalDuration}** Hours\n")
+        media_status = f"Is Finished: **{finished}**\n " f"Last Updated: **{lastUpdated}**\n"
 
         # Create Embed Message
         embed_message = Embed(
