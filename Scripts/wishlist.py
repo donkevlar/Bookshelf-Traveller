@@ -152,10 +152,9 @@ class WishList(Extension):
     @slash_option(name='title', description='Book Title', opt_type=OptionType.STRING, required=True)
     @slash_option(name="provider",
                   description="Search provider. Type: 'default' to view your current default provider.",
-                  opt_type=OptionType.STRING, autocomplete=True,
-                  required=True)
+                  opt_type=OptionType.STRING, autocomplete=True)
     @slash_option(name="force", description="Skips library checks, forcefully attempt to add to wishlist.", opt_type=OptionType.BOOLEAN)
-    async def add_book_command(self, ctx: SlashContext, title: str, provider: str, force=False):
+    async def add_book_command(self, ctx: SlashContext, title: str, provider=DEFAULT_PROVIDER, force=False):
         await ctx.defer(ephemeral=True)
         book_search = await c.bookshelf_search_books(title=title, provider=provider)
         title_list = []
