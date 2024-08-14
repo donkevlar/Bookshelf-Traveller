@@ -185,6 +185,7 @@ class SubscriptionTask(Extension):
         # Channel object has 3 main properties .name, .id, .type
         self.newBookCheckChannel = None
         self.newBookCheckChannelID = None
+        self.ServerNickName = ''
 
     async def send_user_wishlist(self, discord_id: int, title: str, author: str, embed: list):
         user = await self.bot.fetch_user(discord_id)
@@ -339,6 +340,7 @@ class SubscriptionTask(Extension):
                            ephemeral=True)
             logger.info(f'No recent books found.')
 
+    @check(is_owner())
     @slash_command(name='setup-tasks', description="Setup a task")
     @slash_option(name='task', description='The task you wish to setup', required=True, autocomplete=True,
                   opt_type=OptionType.STRING)
@@ -355,6 +357,7 @@ class SubscriptionTask(Extension):
             task_command = '`/new-book-check enable_task: True`'
             task_instruction = f'To activate the task use **{task_command}**'
             result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name, server_name=server_name)
+            self.ServerNickName = server_name
 
             if result:
                 success = True
@@ -377,6 +380,7 @@ class SubscriptionTask(Extension):
                 f"An error occurred while attempting to setup the task **{task_name}**. Most likely due to the task already being setup. "
                 f"Please visit the logs for more information.", ephemeral=True)
 
+    @check(is_owner())
     @slash_command(name='remove-task', description="Remove an active task from the task db")
     @slash_option(name='task', description="Active tasks pulled from db.", autocomplete=True, required=True, opt_type=OptionType.STRING)
     async def remove_task_command(self, ctx: SlashContext, task):
