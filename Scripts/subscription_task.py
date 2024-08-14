@@ -346,7 +346,7 @@ class SubscriptionTask(Extension):
                   opt_type=OptionType.STRING)
     @slash_option(opt_type=OptionType.CHANNEL, name="channel", description="select a channel",
                   channel_types=[ChannelType.GUILD_TEXT], required=True)
-    @slash_option(name="server_name", description="Give your Audiobookshelf server a nickname", opt_type=OptionType.STRING, required=True)
+    @slash_option(name="server_name", description="Give your Audiobookshelf server a nickname. This will overwrite the previous name.", opt_type=OptionType.STRING, required=True)
     async def task_setup(self, ctx: SlashContext, task, channel, server_name):
         task_name = ""
         success = False
