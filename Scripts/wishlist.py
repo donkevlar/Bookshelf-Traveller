@@ -25,7 +25,7 @@ wishlist_conn = sqlite3.connect(tasks_db_path)
 wishlist_cursor = wishlist_conn.cursor()
 
 
-def table_create():
+def wishlist_table_create():
     wishlist_cursor.execute('''
 CREATE TABLE IF NOT EXISTS wishlist (
 id INTEGER PRIMARY KEY,
@@ -44,7 +44,7 @@ UNIQUE(title, author)
 
 # Initialize Table
 logger.info("Initializing wishlist table")
-table_create()
+wishlist_table_create()
 
 
 def insert_wishlist_data(title: str, author: str, description: str, cover: str, provider: str, provider_id: str,
@@ -144,14 +144,18 @@ class WishList(Extension):
         self.selectedBook = {}
         self.searchComponents = None
         self.completeAudioLibrary = []
+        self.forceWishlist = False
 
     # Slash Commands --------------------------
 
     @slash_command(name='add-book', description='Add a book to your wishlist. Server wide command.')
     @slash_option(name='title', description='Book Title', opt_type=OptionType.STRING, required=True)
-    @slash_option(name="provider", description="Search provider. Type: 'default' to view your current default provider.", opt_type=OptionType.STRING, autocomplete=True,
+    @slash_option(name="provider",
+                  description="Search provider. Type: 'default' to view your current default provider.",
+                  opt_type=OptionType.STRING, autocomplete=True,
                   required=True)
-    async def add_book_command(self, ctx: SlashContext, title: str, provider: str):
+    @slash_option(name="force", description="Skips library checks, forcefully attempt to add to wishlist.", opt_type=OptionType.BOOLEAN)
+    async def add_book_command(self, ctx: SlashContext, title: str, provider: str, force=False):
         await ctx.defer(ephemeral=True)
         book_search = await c.bookshelf_search_books(title=title, provider=provider)
         title_list = []
@@ -159,6 +163,9 @@ class WishList(Extension):
         options = []
         book_list = []
         valid = False
+
+        if force:
+            self.forceWishlist = True
 
         if DEBUG_MODE == "True":
             print(book_search)
@@ -331,6 +338,22 @@ class WishList(Extension):
         cover = self.selectedBook['cover']
         provider = DEFAULT_PROVIDER
         discord_id = ctx.author_id
+
+        if self.forceWishlist is False:
+            result = await c.bookshelf_title_search(title)
+            if result:
+                for found_ in result:
+                    found_title = found_.get('title')
+                    logger.debug(f"Title Search Result: {found_title}")
+                    if title in found_title:
+                        # Reset Vars
+                        self.searchBookData = None
+                        self.messageString = ''
+                        await ctx.edit_origin(content=f"Title: {title} already exists in your library! "
+                                                      f"use `force: True` option if you still wish to add it to your library", components=component_fail)
+                        return
+        else:
+            logger.warning("Force wishlist is enabled, attempting to add book to wishlist.")
 
         if 'audible' in provider:
             provider_id = self.selectedBook['asin']
