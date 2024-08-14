@@ -144,6 +144,8 @@ class WishList(Extension):
         self.searchComponents = None
         self.completeAudioLibrary = []
 
+    # Slash Commands --------------------------
+
     @slash_command(name='add-book', description='Add a book to your wishlist. Server wide command.')
     @slash_option(name='title', description='Book Title', opt_type=OptionType.STRING, required=True)
     async def add_book_command(self, ctx: SlashContext, title: str):

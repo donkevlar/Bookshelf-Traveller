@@ -41,6 +41,7 @@ id INTEGER PRIMARY KEY,
 discord_id INTEGER NOT NULL,
 channel_id INTEGER NOT NULL,
 task TEXT NOT NULL,
+server_name TEXT NOT NULL,
 UNIQUE(channel_id, task)
 )
                         ''')
@@ -51,11 +52,11 @@ logger.info("Initializing tasks table")
 table_create()
 
 
-def insert_data(discord_id: int, channel_id: int, task):
+def insert_data(discord_id: int, channel_id: int, task, server_name):
     try:
         cursor.execute('''
-        INSERT INTO tasks (discord_id, channel_id, task) VALUES (?, ?, ?)''',
-                       (int(discord_id), int(channel_id), task))
+        INSERT INTO tasks (discord_id, channel_id, task, server_name) VALUES (?, ?, ?, ?)''',
+                       (int(discord_id), int(channel_id), task, server_name))
         conn.commit()
         logger.debug(f"Inserted: {discord_id} with channel_id and task")
         return True
@@ -64,13 +65,19 @@ def insert_data(discord_id: int, channel_id: int, task):
         return False
 
 
-def remove_task_db(task: str, discord_id):
+def remove_task_db(task='', discord_id=0, db_id=0):
     logger.warning(f'Attempting to delete task {task} with discord id {discord_id} from db!')
     try:
-        cursor.execute("DELETE FROM tasks WHERE task = ? AND discord_id = ?", (task, discord_id))
-        conn.commit()
-        logger.info(f"Successfully deleted task {task} with discord id {discord_id} from db!")
-        return True
+        if task != '' and discord_id != 0:
+            cursor.execute("DELETE FROM tasks WHERE task = ? AND discord_id = ?", (task, int(discord_id)))
+            conn.commit()
+            logger.info(f"Successfully deleted task {task} with discord id {discord_id} from db!")
+            return True
+        elif db_id != 0:
+            cursor.execute("DELETE FROM tasks WHERE id = ?", (int(db_id), ))
+            conn.commit()
+            logger.info(f"Successfully deleted task with id {db_id}")
+            return True
     except sqlite3.Error as e:
         logger.error(f"Error while attempting to delete {task}: {e}")
         return False
@@ -95,20 +102,29 @@ def search_task_db(discord_id=0, task='', channel_id=0, override_response='') ->
         ''', (channel_id, task))
         rows = cursor.fetchall()
 
-    elif discord_id != 0 and task == '' and channel_id == 0:
+    elif discord_id != 0 and task != '' and channel_id == 0:
         option = 2
         if not override:
             logger.info(f'OPTION {option}: Searching db using discord ID and task name in tasks table.')
         cursor.execute('''
-                SELECT channel_id FROM tasks WHERE discord_id = ? AND task = ?
+                SELECT channel_id, server_name FROM tasks WHERE discord_id = ? AND task = ?
                 ''', (discord_id, task))
         rows = cursor.fetchone()
 
-    else:
+    elif discord_id != 0 and task == '' and channel_id == 0:
         option = 3
         if not override:
+            logger.info(f'OPTION {option}: Searching db using discord ID in tasks table.')
+        cursor.execute('''
+                        SELECT task, channel_id, id FROM tasks WHERE discord_id = ?
+                        ''', (discord_id, ))
+        rows = cursor.fetchall()
+
+    else:
+        option = 4
+        if not override:
             logger.info(f'OPTION {option}: Searching db using no arguments in tasks table.')
-        cursor.execute('''SELECT discord_id, task, channel_id FROM tasks''')
+        cursor.execute('''SELECT discord_id, task, channel_id, server_name FROM tasks''')
         rows = cursor.fetchall()
 
     if rows:
@@ -172,9 +188,13 @@ class SubscriptionTask(Extension):
 
     async def send_user_wishlist(self, discord_id: int, title: str, author: str, embed: list):
         user = await self.bot.fetch_user(discord_id)
-
+        result = search_task_db(discord_id=discord_id, task='new-book-check')
+        name = ''
+        if result:
+            for channel_id, server_name in result:
+                name = server_name
         await user.send(
-                f"Hello {user}, {title} by author {author} is now available on your Audiobookshelf server: {os.getenv('bookshelfURL')}! ", embeds=embed) # NOQA
+                f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: *{name}*! ", embeds=embed) # NOQA
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
         bookshelfURL = os.environ.get("bookshelfURL")
@@ -324,7 +344,8 @@ class SubscriptionTask(Extension):
                   opt_type=OptionType.STRING)
     @slash_option(opt_type=OptionType.CHANNEL, name="channel", description="select a channel",
                   channel_types=[ChannelType.GUILD_TEXT], required=True)
-    async def task_setup(self, ctx: SlashContext, task, channel):
+    @slash_option(name="server_name", description="Give your Audiobookshelf server a nickname", opt_type=OptionType.STRING, required=True)
+    async def task_setup(self, ctx: SlashContext, task, channel, server_name):
         task_name = ""
         success = False
         task_instruction = ''
@@ -333,19 +354,19 @@ class SubscriptionTask(Extension):
             task_name = 'new-book-check'
             task_command = '`/new-book-check enable_task: True`'
             task_instruction = f'To activate the task use **{task_command}**'
-            result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name)
+            result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name, server_name=server_name)
 
             if result:
                 success = True
 
-        if int(task) == 2:
-            task_name = 'add-book'
-            task_command = '`/add-book`'
-            task_instruction = f'Once a book is added to the wishlist by using {task_command}, the task will start automatically.'
-            result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name)
-
-            if result:
-                success = True
+        # if int(task) == 2:
+        #     task_name = 'add-book'
+        #     task_command = '`/add-book`'
+        #     task_instruction = f'Once a book is added to the wishlist by using {task_command}, the task will start automatically.'
+        #     result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name)
+        #
+        #     if result:
+        #         success = True
 
         if success:
             await ctx.send(
@@ -356,12 +377,33 @@ class SubscriptionTask(Extension):
                 f"An error occurred while attempting to setup the task **{task_name}**. Most likely due to the task already being setup. "
                 f"Please visit the logs for more information.", ephemeral=True)
 
+    @slash_command(name='remove-task', description="Remove an active task from the task db")
+    @slash_option(name='task', description="Active tasks pulled from db.", autocomplete=True, required=True, opt_type=OptionType.STRING)
+    async def remove_task_command(self, ctx: SlashContext, task):
+        result = remove_task_db(db_id=task)
+        if result:
+            await ctx.send("Successfully removed task!", ephemeral=True)
+        else:
+            await ctx.send("Failed to remove task, please visit logs for additional details.", ephemeral=True)
+
     # Autocomplete Functions ---------------------------------------------
     @task_setup.autocomplete('task')
     async def auto_com_task(self, ctx: AutocompleteContext):
         choices = [
             {"name": "new-book-check", "value": "1"}
         ]
+        await ctx.send(choices=choices)
+
+    @remove_task_command.autocomplete('task')
+    async def remove_task_auto_comp(self, ctx: AutocompleteContext):
+        choices = []
+        result = search_task_db(discord_id=ctx.author_id)
+        if result:
+            for task, channel_id, db_id in result:
+                channel = await self.bot.fetch_channel(channel_id)
+                if channel:
+                    response = f"{task} | {channel.name}"
+                    choices.append({"name": response, "value": db_id})
         await ctx.send(choices=choices)
 
     # Auto Start Task if db is populated
