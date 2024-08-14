@@ -69,10 +69,11 @@ def search_wishlist_db(discord_id: int = 0, title=""):
             '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist''')
 
         rows = wishlist_cursor.fetchall()
-    elif discord_id != 0 and title =="":
+    elif discord_id != 0 and title == "":
         logger.debug("Searching wishlist db using discord id!")
         wishlist_cursor.execute(
-            '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist WHERE discord_id = ?''', (discord_id,))
+            '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist WHERE discord_id = ?''',
+            (discord_id,))
 
         rows = wishlist_cursor.fetchall()
 
@@ -83,7 +84,7 @@ def search_wishlist_db(discord_id: int = 0, title=""):
 
         rows = wishlist_cursor.fetchall()
 
-    return rows # NOQA
+    return rows  # NOQA
 
 
 async def wishlist_search_embed(title: str, title_desc: str, author: str, cover: str, additional_info: str, footer=''):
@@ -148,9 +149,11 @@ class WishList(Extension):
 
     @slash_command(name='add-book', description='Add a book to your wishlist. Server wide command.')
     @slash_option(name='title', description='Book Title', opt_type=OptionType.STRING, required=True)
-    async def add_book_command(self, ctx: SlashContext, title: str):
+    @slash_option(name="provider", description="Search provider. Type: 'default' to view your current default provider.", opt_type=OptionType.STRING, autocomplete=True,
+                  required=True)
+    async def add_book_command(self, ctx: SlashContext, title: str, provider: str):
         await ctx.defer(ephemeral=True)
-        book_search = await c.bookshelf_search_books(title=title)
+        book_search = await c.bookshelf_search_books(title=title, provider=provider)
         title_list = []
         count = 0
         options = []
@@ -201,17 +204,20 @@ class WishList(Extension):
 
         except Exception as e:
             logger.error(f"Error occured: {e}")
-            await ctx.send(f"An error occured while trying to search for book title {title}. Normally this occurs if the title has a bad typo or if there are too many results. Visit logs for details.")
+            await ctx.send(
+                f"An error occured while trying to search for book title {title}. Normally this occurs if the title has a bad typo or if there are too many results. Visit logs for details.")
 
     @slash_command(name='remove-book', description="Manually remove a book from your wishlist.")
-    @slash_option(name='book', description='Your wishlist of books. Note: If empty, no books were found.', opt_type=OptionType.STRING, required=True, autocomplete=True)
+    @slash_option(name='book', description='Your wishlist of books. Note: If empty, no books were found.',
+                  opt_type=OptionType.STRING, required=True, autocomplete=True)
     async def remove_book_command(self, ctx: SlashContext, book: str):
         await ctx.defer(ephemeral=True)
         result = remove_book_db(discord_id=ctx.author_id, title=book)
         if result:
             await ctx.send(f"Successfully removed {book} from your wishlist!", ephemeral=True)
         else:
-            await ctx.send(f"Failed to remove {book} from your wishlist, please visit logs for additional details.", ephemeral=True)
+            await ctx.send(f"Failed to remove {book} from your wishlist, please visit logs for additional details.",
+                           ephemeral=True)
 
     @slash_command(name='wishlist', description='View your wishlist')
     async def view_wishlist(self, ctx: SlashContext):
@@ -235,14 +241,18 @@ class WishList(Extension):
 
                 add_info = f"Publisher: **{publisher}**\nYear Published: **{published}**\nProvided by: **{provider}**\nNarrator: **{narrators}**\n"
 
-                embed_message = await wishlist_search_embed(title=title, author=author, cover=cover, additional_info=add_info, title_desc=subtitle, footer=f'Search Provider: {provider}')
+                embed_message = await wishlist_search_embed(title=title, author=author, cover=cover,
+                                                            additional_info=add_info, title_desc=subtitle,
+                                                            footer=f'Search Provider: {provider}')
                 embeds.append(embed_message)
 
             paginator = Paginator.create_from_embeds(self.client, *embeds)
             await paginator.send(ctx, ephemeral=True)
 
         else:
-            await ctx.send("You currently don't have any items in your wishlist. Please use **`/add-book`** to add items to your wishlist.", ephemeral=True)
+            await ctx.send(
+                "You currently don't have any items in your wishlist. Please use **`/add-book`** to add items to your wishlist.",
+                ephemeral=True)
 
     # Autocomplete -------------------------------------------------
     @remove_book_command.autocomplete('book')
@@ -254,6 +264,22 @@ class WishList(Extension):
                 book_data = json5.loads(item[7])
                 title = book_data.get('title')
                 choices.append({"name": title, "value": title})
+        await ctx.send(choices=choices)
+
+    @add_book_command.autocomplete('provider')
+    async def add_book_provider_auto(self, ctx: AutocompleteContext):
+        user_input = ctx.input_text
+        providers = ['google', 'openlibrary', 'itunes', 'audible', 'audible.ca', 'audible.uk', 'audible.au',
+                     'audible.fr',
+                     'audible.it', 'audible.in', 'audible.es', 'fantlab']
+        providers.sort()
+        choices = []
+        for provider in providers:
+            choices.append({"name": provider, "value": provider})
+            if DEFAULT_PROVIDER in provider and DEFAULT_PROVIDER != 'audible' and DEFAULT_PROVIDER in user_input or user_input.lower() == 'default':
+                await ctx.send(choices=[{"name": provider, "value": provider}])
+                return
+
         await ctx.send(choices=choices)
 
     # Component Callbacks -----------------------------------------
@@ -283,9 +309,11 @@ class WishList(Extension):
                 additional_info = f"Narrator(s): {narrator}\nPublished Year: {published}\nLanguage: {language}"
 
                 embed_message = await wishlist_search_embed(title=title, author=author, cover=cover,
-                                                            additional_info=additional_info, title_desc=subtitle, footer=f'Search Provider: {provider}')
+                                                            additional_info=additional_info, title_desc=subtitle,
+                                                            footer=f'Search Provider: {provider}')
 
-                await ctx.edit_origin(content=f"You selected: **{title}**", embed=embed_message, components=component_initial)
+                await ctx.edit_origin(content=f"You selected: **{title}**", embed=embed_message,
+                                      components=component_initial)
                 # Reset Vars
                 self.searchBookData = None
                 self.messageString = ''
@@ -309,11 +337,14 @@ class WishList(Extension):
         else:
             provider_id = self.selectedBook['id']
 
-        result = insert_wishlist_data(title=title, author=author, description=description, cover=cover, provider=provider,
-                                      provider_id=provider_id, discord_id=discord_id, data=str(json.dumps(self.selectedBook)))
+        result = insert_wishlist_data(title=title, author=author, description=description, cover=cover,
+                                      provider=provider,
+                                      provider_id=provider_id, discord_id=discord_id,
+                                      data=str(json.dumps(self.selectedBook)))
         if result:
             logger.info('Successfully added book to wishlist db!')
-            await ctx.edit_origin(content=f"Successfully added title **{title}** to wishlist", components=component_success)
+            await ctx.edit_origin(content=f"Successfully added title **{title}** to wishlist",
+                                  components=component_success)
         else:
             logger.warning('Book title or author already exists, marking as failed!')
             await ctx.edit_origin(content="Request already exists!", components=component_fail)
