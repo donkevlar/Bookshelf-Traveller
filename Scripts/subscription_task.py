@@ -3,7 +3,6 @@ import sqlite3
 import time
 
 import json5
-from scripts.regsetup import description
 
 import bookshelfAPI as c
 import settings as s
