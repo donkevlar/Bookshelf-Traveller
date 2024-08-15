@@ -404,7 +404,7 @@ class SubscriptionTask(Extension):
 
         if success:
             await ctx.send(
-                f"Successfully setup task **{task_name}** with channel **{channel.name}**. Instructions: {task_instruction}",
+                f"Successfully setup task **{task_name}** with channel **{channel.name}**. \nInstructions: {task_instruction}",
                 ephemeral=True)
 
             await self.get_server_name_db(discord_id=ctx.author_id)
