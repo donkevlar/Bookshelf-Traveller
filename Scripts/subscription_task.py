@@ -368,7 +368,7 @@ class SubscriptionTask(Extension):
             logger.info(f'No recent books found.')
 
     @check(is_owner())
-    @slash_command(name='setup-tasks', description="Setup a task")
+    @slash_command(name='setup-tasks', description="Setup a task", dm_permission=False)
     @slash_option(name='task', description='The task you wish to setup', required=True, autocomplete=True,
                   opt_type=OptionType.STRING)
     @slash_option(opt_type=OptionType.CHANNEL, name="channel", description="select a channel",
