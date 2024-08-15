@@ -3,6 +3,7 @@ import sqlite3
 import time
 
 import json5
+from scripts.regsetup import description
 
 import bookshelfAPI as c
 import settings as s
@@ -423,6 +424,37 @@ class SubscriptionTask(Extension):
             await ctx.send("Successfully removed task!", ephemeral=True)
         else:
             await ctx.send("Failed to remove task, please visit logs for additional details.", ephemeral=True)
+
+    @slash_command(name="active-tasks", description="View active tasks related to you.")
+    async def active_tasks_command(self, ctx: SlashContext):
+        embeds = []
+        success = False
+        result = search_task_db()
+        if result:
+            for discord_id, task, channel_id, server_name in result:
+                channel = await self.bot.fetch_channel(channel_id)
+                discord_user = await self.bot.fetch_user(discord_id)
+                if channel and discord_user:
+                    success = True
+                    response = f"Channel: **{channel.name}**\nDiscord User: **{discord_user}**"
+                    embed_message = Embed(
+                        title="Task",
+                        description="All Currently Active Tasks. *Note: this will pull for all channels and users.*",
+                        color=ctx.author.accent_color
+                    )
+                    embed_message.add_field(name="Name", value=task)
+                    embed_message.add_field(name="Discord Related Information", value=response)
+                    embed_message.footer = s.bookshelf_traveller_footer
+
+                    embeds.append(embed_message)
+
+            if success:
+                paginator = Paginator.create_from_embeds(self.client, *embeds)
+                await paginator.send(ctx, ephemeral=True)
+
+        else:
+            await ctx.send("No currently active tasks found.", ephemeral=True)
+
 
     # Autocomplete Functions ---------------------------------------------
     @task_setup.autocomplete('task')
