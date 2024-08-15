@@ -200,6 +200,9 @@ class SubscriptionTask(Extension):
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
         bookshelfURL = os.environ.get("bookshelfURL")
 
+        if self.ServerNickName == '':
+            self.ServerNickName = "Audiobookshelf"
+
         items_added = await newBookList(task_frequency)
 
         if items_added:
@@ -229,7 +232,7 @@ class SubscriptionTask(Extension):
 
                 embed_message = Embed(
                     title=f"Recently Added Book {count}",
-                    description=f"Recently added books for {bookshelfURL}",
+                    description=f"Recently added books for [{self.ServerNickName}]({bookshelfURL})",
                 )
                 embed_message.add_field(name="Title", value=title, inline=False)
                 embed_message.add_field(name="Author", value=author)
@@ -237,7 +240,7 @@ class SubscriptionTask(Extension):
                 embed_message.add_field(name="Additional Information", value=f"Wishlisted: **{wishlisted}**",
                                         inline=False)
                 embed_message.add_image(cover_link)
-
+                embed_message.footer = s.bookshelf_traveller_footer + " | " + self.ServerNickName
                 embeds.append(embed_message)
 
                 if wl_search:
