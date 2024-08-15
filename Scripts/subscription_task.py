@@ -74,7 +74,7 @@ def remove_task_db(task='', discord_id=0, db_id=0):
             logger.info(f"Successfully deleted task {task} with discord id {discord_id} from db!")
             return True
         elif db_id != 0:
-            cursor.execute("DELETE FROM tasks WHERE id = ?", (int(db_id), ))
+            cursor.execute("DELETE FROM tasks WHERE id = ?", (int(db_id),))
             conn.commit()
             logger.info(f"Successfully deleted task with id {db_id}")
             return True
@@ -117,7 +117,7 @@ def search_task_db(discord_id=0, task='', channel_id=0, override_response='') ->
             logger.info(f'OPTION {option}: Searching db using discord ID in tasks table.')
         cursor.execute('''
                         SELECT task, channel_id, id FROM tasks WHERE discord_id = ?
-                        ''', (discord_id, ))
+                        ''', (discord_id,))
         rows = cursor.fetchall()
 
     else:
@@ -187,6 +187,17 @@ class SubscriptionTask(Extension):
         self.newBookCheckChannelID = None
         self.ServerNickName = ''
 
+    async def get_server_name_db(self, discord_id=0, task='new-book-check'):
+        cursor.execute('''
+                SELECT server_name FROM tasks WHERE discord_id = ? OR task = ?
+                ''', (int(discord_id), task))
+        rows = cursor.fetchone()
+        if rows:
+            for row in rows:
+                logger.debug(f'Setting server nickname to {row}')
+                self.ServerNickName = row
+        return rows
+
     async def send_user_wishlist(self, discord_id: int, title: str, author: str, embed: list):
         user = await self.bot.fetch_user(discord_id)
         result = search_task_db(discord_id=discord_id, task='new-book-check')
@@ -195,7 +206,8 @@ class SubscriptionTask(Extension):
             for channel_id, server_name in result:
                 name = server_name
         await user.send(
-                f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: *{name}*! ", embeds=embed) # NOQA
+            f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: *{name}*! ",
+            embeds=embed)  # NOQA
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
         bookshelfURL = os.environ.get("bookshelfURL")
@@ -248,7 +260,8 @@ class SubscriptionTask(Extension):
                         discord_id = user[0]
                         search_title = user[2]
                         if enable_notifications:
-                            await self.send_user_wishlist(discord_id=discord_id, title=title, author=author, embed=embeds)
+                            await self.send_user_wishlist(discord_id=discord_id, title=title, author=author,
+                                                          embed=embeds)
                             remove_book_db(title=search_title, discord_id=discord_id)
 
             return embeds
@@ -259,6 +272,8 @@ class SubscriptionTask(Extension):
         channel_list = []
         search_result = search_task_db()
         if search_result:
+            if self.ServerNickName == '':
+                await self.get_server_name_db()
             logger.debug(f"search result: {search_result}")
             new_titles = await newBookList()
             if new_titles:
@@ -281,6 +296,13 @@ class SubscriptionTask(Extension):
 
             else:
                 logger.info("No new books found, marking task as complete.")
+        # If active but no result, disable task and send owner message.
+        else:
+            logger.warning("Task 'new-book-check' was active, but setup check failed.")
+            owner = self.bot.owner
+            await owner.send(
+                "Task 'new-book-check' was active, but setup check failed. Please setup the task again via `/setup-tasks`.")
+            self.newBookTask.stop()
 
     # Slash Commands ----------------------------------------------------
 
@@ -331,6 +353,8 @@ class SubscriptionTask(Extension):
             await ctx.send(
                 "Invalid option entered, please ensure only one option is entered from this command at a time.")
             return
+        # Set server nickname
+        await self.get_server_name_db(discord_id=ctx.author_id)
 
         await ctx.send(f'Searching for recently added books in given period of {minutes} minutes.', ephemeral=True)
         embeds = await self.NewBookCheckEmbed(task_frequency=minutes, enable_notifications=False)
@@ -349,7 +373,9 @@ class SubscriptionTask(Extension):
                   opt_type=OptionType.STRING)
     @slash_option(opt_type=OptionType.CHANNEL, name="channel", description="select a channel",
                   channel_types=[ChannelType.GUILD_TEXT], required=True)
-    @slash_option(name="server_name", description="Give your Audiobookshelf server a nickname. This will overwrite the previous name.", opt_type=OptionType.STRING, required=True)
+    @slash_option(name="server_name",
+                  description="Give your Audiobookshelf server a nickname. This will overwrite the previous name.",
+                  opt_type=OptionType.STRING, required=True)
     async def task_setup(self, ctx: SlashContext, task, channel, server_name):
         task_name = ""
         success = False
@@ -359,8 +385,8 @@ class SubscriptionTask(Extension):
             task_name = 'new-book-check'
             task_command = '`/new-book-check enable_task: True`'
             task_instruction = f'To activate the task use **{task_command}**'
-            result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name, server_name=server_name)
-            self.ServerNickName = server_name
+            result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
+                                 server_name=server_name)
 
             if result:
                 success = True
@@ -378,6 +404,8 @@ class SubscriptionTask(Extension):
             await ctx.send(
                 f"Successfully setup task **{task_name}** with channel **{channel.name}**. Instructions: {task_instruction}",
                 ephemeral=True)
+
+            await self.get_server_name_db(discord_id=ctx.author_id)
         else:
             await ctx.send(
                 f"An error occurred while attempting to setup the task **{task_name}**. Most likely due to the task already being setup. "
@@ -385,7 +413,8 @@ class SubscriptionTask(Extension):
 
     @check(is_owner())
     @slash_command(name='remove-task', description="Remove an active task from the task db")
-    @slash_option(name='task', description="Active tasks pulled from db.", autocomplete=True, required=True, opt_type=OptionType.STRING)
+    @slash_option(name='task', description="Active tasks pulled from db.", autocomplete=True, required=True,
+                  opt_type=OptionType.STRING)
     async def remove_task_command(self, ctx: SlashContext, task):
         result = remove_task_db(db_id=task)
         if result:
