@@ -383,13 +383,15 @@ class SubscriptionTask(Extension):
 
         if int(task) == 1:
             task_name = 'new-book-check'
-            task_command = '`/new-book-check enable_task: True`'
-            task_instruction = f'To activate the task use **{task_command}**'
+            task_command = '`/new-book-check disable_task: True`'
+            task_instruction = f'Task is now active. To disable, use **{task_command}**'
             result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
                                  server_name=server_name)
 
             if result:
                 success = True
+                if not self.newBookTask.running:
+                    self.newBookTask.start()
 
         # if int(task) == 2:
         #     task_name = 'add-book'
