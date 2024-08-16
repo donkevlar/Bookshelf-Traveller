@@ -340,8 +340,6 @@ async def bookshelf_title_search(display_title: str):
                 if r.status_code == 200:
                     data = r.json()
 
-                    # print(f"returned data: {data}")
-
                     successMSG(endpoint, r.status_code)
                     dataset = data.get('book', [])
                     for book in dataset:
@@ -472,8 +470,11 @@ async def bookshelf_all_library_items(library_id, params=''):
             # Added time is in linux
             addedTime = items['addedAt']
 
-            found_titles.append({'id': item_id, 'title': book_title, 'author': author, 'addedTime': addedTime,
-                                 "mediaType": media_type})
+            try:
+                ebook = items['media']['ebookFormat']
+            except KeyError:
+                found_titles.append({'id': item_id, 'title': book_title, 'author': author, 'addedTime': addedTime,
+                                     "mediaType": media_type})
 
         return found_titles
 
@@ -634,7 +635,7 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
                     'duration': float(duration)  # NOQA
                 }
                 r_session_update = await bookshelf_conn(POST=True, endpoint=sync_endpoint,
-                                                  Data=session_update, Headers=headers)
+                                                        Data=session_update, Headers=headers)
                 if r_session_update.status_code == 200:
                     logger.info(f'session sync successful. {updatedTime}')
                     return updatedTime, duration, serverCurrentTime, finished_book
@@ -750,19 +751,26 @@ async def bookshelf_search_books(title: str, provider=DEFAULT_PROVIDER, author='
             return data
 
 
+async def bookshelf_get_valid_books():
+    libraries = await bookshelf_libraries()
+    # Get libraries
+    found_books = []
+    for name, (library_id, audiobooks_only) in libraries.items():
+        books = await bookshelf_all_library_items(library_id)
+        for book in books:
+            book_title = book.get('title')
+            book_id = book.get('id')
+            found_books.append({"title": book_title, "id": book_id})
+
+    return found_books
+
+
 # Test bookshelf api functions below
 async def main():
     if __name__ == '__main__':
         print("TESTING COMMENCES")
-        bookshelf_test_connection()
-        title = "Eragon"
-        result = await bookshelf_title_search('eragon')
-        if result:
-            for found_ in result:
-                found_title = found_.get('title')
-                if title in found_title:
-                    print("Book Found!")
-                    return
+        books = await bookshelf_get_valid_books()
+        print(len(books), "books")
 
 
 asyncio.run(main())
