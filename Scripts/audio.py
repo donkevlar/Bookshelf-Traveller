@@ -603,8 +603,14 @@ class AudioPlayBack(Extension):
 
                 for sessions in data['recentSessions']:
                     title = sessions.get('displayTitle')
+                    display_author = sessions.get('displayAuthor')
                     bookID = sessions.get('libraryItemId')
-                    formatted_item = {"name": title, "value": bookID}
+                    name = f"{title} | {display_author}"
+                    if len(name) <= 100:
+                        pass
+                    else:
+                        name = title
+                    formatted_item = {"name": name, "value": bookID}
 
                     if formatted_item not in choices:
                         choices.append(formatted_item)
@@ -627,15 +633,30 @@ class AudioPlayBack(Extension):
                     random_book = titles_[random_title_index]
                     book_title = random_book.get('title')
                     book_id = random_book.get('id')
+                    author = random_book.get('author')
+
+                    name = f"{book_title} | {author}"
+                    if len(name) <= 100:
+                        pass
+                    else:
+                        name = book_title
+
                     logger.debug(f'Surprise! {book_title} has been selected as tribute!')
-                    choices.append({"name": f"{book_title}", "value": f"{book_id}"})
+                    choices.append({"name": name, "value": f"{book_id}"})
 
                 else:
                     titles_ = await c.bookshelf_title_search(user_input)
                     for info in titles_:
                         book_title = info["title"]
                         book_id = info["id"]
-                        choices.append({"name": f"{book_title}", "value": f"{book_id}"})
+                        book_author = info["author"]
+                        name = f"{book_title} | {book_author}"
+                        if len(name) <= 100:
+                            pass
+                        else:
+                            name = book_title
+
+                        choices.append({"name": name, "value": book_id})
 
                 await ctx.send(choices=choices)
                 logger.info(choices)
