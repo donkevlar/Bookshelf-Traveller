@@ -13,6 +13,10 @@ on:
   pull_request:
     branches: [ "master" ]
 
+    paths-ignore:
+      - 'README.md'
+      - '.github/workflows/**'
+
 env:
   # Use docker.io for Docker Hub if empty
   REGISTRY: ghcr.io
