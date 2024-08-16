@@ -7,6 +7,7 @@ from settings import TIMEZONE
 import logging
 from datetime import datetime
 from dotenv import load_dotenv
+import random
 
 # Temp hot fix
 from interactions.api.voice.voice_gateway import VoiceGateway, OP, random
@@ -316,7 +317,7 @@ class AudioPlayBack(Extension):
 
     # Main play command, place class variables here since this is required to play audio
     @slash_command(name="play", description="Play audio from ABS server", dm_permission=False)
-    @slash_option(name="book", description="Enter a book title", required=True, opt_type=OptionType.STRING,
+    @slash_option(name="book", description="Enter a book title. type 'random' for a surprise.", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
     async def play_audio(self, ctx, book: str):
         if playback_role != 0:
@@ -617,11 +618,24 @@ class AudioPlayBack(Extension):
 
         else:
             try:
-                titles_ = await c.bookshelf_title_search(user_input)
-                for info in titles_:
-                    book_title = info["title"]
-                    book_id = info["id"]
+                if user_input.lower() in 'random':
+                    logger.debug('User input includes random, time for a surprise! :)')
+                    titles_ = await c.bookshelf_get_valid_books()
+                    titles_count = len(titles_)
+                    logger.debug(f"Total Title Count: {titles_count}")
+                    random_title_index = random.randint(1, titles_count)
+                    random_book = titles_[random_title_index]
+                    book_title = random_book.get('title')
+                    book_id = random_book.get('id')
+                    logger.debug(f'Surprise! {book_title} has been selected as tribute!')
                     choices.append({"name": f"{book_title}", "value": f"{book_id}"})
+
+                else:
+                    titles_ = await c.bookshelf_title_search(user_input)
+                    for info in titles_:
+                        book_title = info["title"]
+                        book_id = info["id"]
+                        choices.append({"name": f"{book_title}", "value": f"{book_id}"})
 
                 await ctx.send(choices=choices)
                 logger.info(choices)
