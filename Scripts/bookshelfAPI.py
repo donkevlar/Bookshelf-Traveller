@@ -343,13 +343,22 @@ async def bookshelf_title_search(display_title: str):
                     successMSG(endpoint, r.status_code)
                     dataset = data.get('book', [])
                     for book in dataset:
+                        authors_list = []
                         title = book['libraryItem']['media']['metadata']['title']
+                        authors_raw = book['libraryItem']['media']['metadata']['authors']
+
+                        for author in authors_raw:
+                            name = author.get('name')
+                            authors_list.append(name)
+
+                        authors = ', '.join(authors_list)
+
                         book_id = book['libraryItem']['id']
                         media_type = book['libraryItem']['mediaType']
                         # Add to dict
                         if media_type in valid_media_types:
                             logger.debug(f'accepted: {title} | media type: {media_type}')
-                            found_titles.append({'id': book_id, 'title': title})
+                            found_titles.append({'id': book_id, 'title': title, 'author': authors})
                         else:
                             logger.warning(f'rejected: {title}, reason: media-type {media_type} rejected')
 
@@ -358,8 +367,8 @@ async def bookshelf_title_search(display_title: str):
                     return found_titles
 
             except Exception as e:
-                print(f'Error occured: {e}')
-                traceback.print_exc()
+                logger.error(f'Error occured: {e}')
+                logger.error(traceback.print_exc())
 
 
 async def bookshelf_get_users(name):
@@ -760,7 +769,8 @@ async def bookshelf_get_valid_books():
         for book in books:
             book_title = book.get('title')
             book_id = book.get('id')
-            found_books.append({"title": book_title, "id": book_id})
+            book_authors = book.get('author')
+            found_books.append({"title": book_title, "author": book_authors, "id": book_id})
 
     return found_books
 
@@ -769,8 +779,6 @@ async def bookshelf_get_valid_books():
 async def main():
     if __name__ == '__main__':
         print("TESTING COMMENCES")
-        books = await bookshelf_get_valid_books()
-        print(len(books), "books")
 
 
 asyncio.run(main())
