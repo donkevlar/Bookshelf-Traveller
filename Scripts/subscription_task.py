@@ -393,15 +393,6 @@ class SubscriptionTask(Extension):
                 if not self.newBookTask.running:
                     self.newBookTask.start()
 
-        # if int(task) == 2:
-        #     task_name = 'add-book'
-        #     task_command = '`/add-book`'
-        #     task_instruction = f'Once a book is added to the wishlist by using {task_command}, the task will start automatically.'
-        #     result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name)
-        #
-        #     if result:
-        #         success = True
-
         if success:
             await ctx.send(
                 f"Successfully setup task **{task_name}** with channel **{channel.name}**. \nInstructions: {task_instruction}",
@@ -453,7 +444,6 @@ class SubscriptionTask(Extension):
 
         else:
             await ctx.send("No currently active tasks found.", ephemeral=True)
-
 
     # Autocomplete Functions ---------------------------------------------
     @task_setup.autocomplete('task')
