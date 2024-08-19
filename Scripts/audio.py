@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 import random
 
 # Temp hot fix
-from interactions.api.voice.voice_gateway import VoiceGateway, OP, random
+from interactions.api.voice.voice_gateway import VoiceGateway, OP, random # NOQA
 
 
 # HOT FIX for voice - Remove once 5.14 has been released.
