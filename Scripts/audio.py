@@ -224,7 +224,7 @@ class AudioPlayBack(Extension):
             current_time=updateFrequency,
             next_time=self.nextTime)  # NOQA
 
-        logger.info(f"Successfully synced session to updated time: {updatedTime}| "
+        logger.info(f"Successfully synced session to updated time: {updatedTime} | "
                     f"Current Playback Time: {round(formatted_time, 2)} {playbackTimeState} | session ID: {self.sessionID}")
 
         current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(self.bookItemID,
