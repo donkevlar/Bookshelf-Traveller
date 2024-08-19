@@ -205,9 +205,16 @@ class SubscriptionTask(Extension):
         if result:
             for channel_id, server_name in result:
                 name = server_name
-        await user.send(
-            f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: *{name}*! ",
-            embeds=embed)  # NOQA
+
+        if len(embed) > 10:
+            for emb in embed:
+                await user.send(
+                    f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: *{name}*! ",
+                    embed=emb)
+        else:
+            await user.send(
+                f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: *{name}*! ",
+                embeds=embed)  # NOQA
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
         bookshelfURL = os.environ.get("bookshelfURL")
@@ -219,9 +226,10 @@ class SubscriptionTask(Extension):
 
         if items_added:
             count = 0
+            total_item_count = len(items_added)
             embeds = []
             wishlist_titles = []
-            logger.info('New books found, executing Task!')
+            logger.info(f'{total_item_count} New books found, executing Task!')
 
             if wishlist_titles:
                 logger.debug(f"Wishlist Titles: {wishlist_titles}")
@@ -260,6 +268,7 @@ class SubscriptionTask(Extension):
                         discord_id = user[0]
                         search_title = user[2]
                         if enable_notifications:
+                            # Note: Function will send embeds individually if count > 10 due to limit
                             await self.send_user_wishlist(discord_id=discord_id, title=title, author=author,
                                                           embed=embeds)
                             remove_book_db(title=search_title, discord_id=discord_id)
@@ -279,6 +288,9 @@ class SubscriptionTask(Extension):
             if new_titles:
                 logger.debug(f"New Titles Found: {new_titles}")
 
+            if len(new_titles) > 10:
+                logger.warning("Found more than 10 titles")
+
             embeds = await self.NewBookCheckEmbed(enable_notifications=True)
             if embeds:
                 for result in search_result:
@@ -290,8 +302,14 @@ class SubscriptionTask(Extension):
                     if channel_query:
                         logger.debug(f"Found Channel: {channelID}")
                         logger.debug(f"Bot will now attempt to send a message to channel id: {channelID}")
-                        await channel_query.send(content="A new book has been added to your library!", embeds=embeds,
-                                                 ephemeral=True)
+
+                        if len(embeds) < 10:
+                            msg = await channel_query.send(content="New books have been added to your library!")
+                            await msg.edit(embeds=embeds)
+                        else:
+                            await channel_query.send(content="New books have been added to your library!")
+                            for embed in embeds:
+                                await channel_query.send(embed=embed)
                         logger.info("Successfully completed new-book-check task!")
 
             else:
