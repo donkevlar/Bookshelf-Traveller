@@ -1,10 +1,10 @@
 # official Python runtime as a base image
-FROM python:3.12.1-bookworm
+FROM python:3.12.1-slim-bookworm
 
 # Set the working directory
 WORKDIR /ABSBOT
 
-# Copy the current directory contents into the container at /app
+# Copy the current directory contents
 COPY Scripts/ /ABSBOT
 
 
@@ -19,8 +19,7 @@ RUN set -ex \
     && apt-get install -y libffi-dev libnacl-dev \
     && apt-get upgrade -y \
     && apt-get autoremove -y \
-    && apt-get clean -y \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean -y
 
 
 

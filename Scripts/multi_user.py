@@ -156,6 +156,10 @@ class MultiUser(Extension):
         abs_user_type = user_info["type"]
         admin_user = False
 
+        if abs_user_type is None or abs_username == "":
+            await modal_ctx.send("Login attempt failed! Please try again.", ephemeral=True)
+            return
+
         if abs_user_type == "admin" or abs_user_type == "root":
             admin_user = True
 
