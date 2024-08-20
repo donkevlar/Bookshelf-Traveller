@@ -356,6 +356,7 @@ class SubscriptionTask(Extension):
                     await ctx.send("Error activating new book task. Please visit logs for more information. "
                                    "Please make sure to setup the task prior to activation by using command **/setup-tasks**",
                                    ephemeral=True)
+                    return
             else:
                 logger.warning('New book check task was already running, ignoring...')
                 await ctx.send('New book check task is already running, ignoring...', ephemeral=True)
