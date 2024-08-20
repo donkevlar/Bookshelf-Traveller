@@ -163,10 +163,7 @@ Here's the list of commands sorted alphabetically:
 | `/volume`          | Adjusts the bot's volume in the currently connected channel.                                               | `volume`: integer between `0 & 100`                | Default volume is set to 50%.                                                                                                                                                                                         |
 
 ### Alternative Packages
-If you only want to manage your instance or have access to instance statistics and don't want the larger audio image, there is also a no-audio image with some of the core modules stripped out. It also removes FFMPEG. 
-
-*Note: This only applies to docker images that are published on github. If you are running the script then you can simply disable the audio-module
-
+Audio-only packages have been deprecated. Please use the environmental variables to modify how you would like your bot to function.
 ### Screenshots
 Below are a few examples of the commands shown above. Note: images are subject to change, or can become outdated as the project is very much active. 
 
