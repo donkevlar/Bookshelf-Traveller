@@ -115,13 +115,13 @@ git clone https://github.com/donkevlar/Bookshelf-Traveller.git
 
 *Windows*
 ```
-pip install discord-py-interactions && pip install discord.py-interactions[voice] && pip install python-dotenv && pip install requests
+pip install discord-py-interactions && pip install discord.py-interactions[voice] && pip install python-dotenv && pip install requests && pip install httpx
 ```
 *Linux Debian/Ubuntu*
 
 For all os options visit [Interactions.py](https://interactions-py.github.io/interactions.py/Guides/23%20Voice/#__tabbed_1_2)
 ```
-pip install discord-py-interactions && pip install discord.py-interactions[voice] && pip install python-dotenv && pip install requests
+pip install discord-py-interactions && pip install discord.py-interactions[voice] && pip install python-dotenv && pip install requests && pip install httpx
 ```
 ```
 sudo apt install ffmpeg libffi-dev libnacl-dev
