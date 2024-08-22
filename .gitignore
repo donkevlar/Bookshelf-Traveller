@@ -4,3 +4,6 @@
 /db/tasks.db
 /db/user_info.db
 /db/wishlist.db
+/Scripts/db/tasks.db
+/Scripts/db/user_info.db
+/Scripts/db/wishlist.db

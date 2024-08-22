@@ -203,17 +203,20 @@ class SubscriptionTask(Extension):
         result = search_task_db(discord_id=discord_id, task='new-book-check')
         name = ''
         if result:
-            for channel_id, server_name in result:
-                name = server_name
+            try:
+                name = result[1]
+            except TypeError as error:
+                logger.error(f"Couldn't assign server name, {error}")
+                name = "Audiobookshelf"
 
         if len(embed) > 10:
             for emb in embed:
                 await user.send(
-                    f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: *{name}*! ",
+                    f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**! ",
                     embed=emb)
         else:
             await user.send(
-                f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: *{name}*! ",
+                f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**! ",
                 embeds=embed)  # NOQA
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
