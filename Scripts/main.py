@@ -1,16 +1,15 @@
 import asyncio
-import traceback
 import os
 import settings
-from config import current_config
 import logging
-from interactions import *
-from interactions.ext.paginators import Paginator
-from interactions.api.events import *
-from datetime import datetime
 import sys
 import pytz
 import time
+
+from config import current_config
+from interactions import *
+from interactions.api.events import *
+from datetime import datetime
 from dotenv import load_dotenv
 
 # File Imports
