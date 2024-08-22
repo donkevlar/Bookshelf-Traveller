@@ -212,11 +212,11 @@ class SubscriptionTask(Extension):
         if len(embed) > 10:
             for emb in embed:
                 await user.send(
-                    f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: *{name}*! ",
+                    f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**! ",
                     embed=emb)
         else:
             await user.send(
-                f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: *{name}*! ",
+                f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**! ",
                 embeds=embed)  # NOQA
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
