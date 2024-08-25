@@ -308,6 +308,9 @@ class PrimaryCommands(Extension):
     @slash_command(name="setup-default-commands", description="Override optional command arguments. Note only affects default commands.")
     @slash_option(name="ephemeral_output", description="force enable/disable ephemeral output for all default commands.", opt_type=OptionType.BOOLEAN)
     async def setup_default_commands(self, ctx: SlashContext, ephemeral_output):
+        if ephemeral_output is None:
+            await ctx.send(f"Ephemeral output currently set to {self.ephemeral_output}")
+            return
         if ephemeral_output and not self.ephemeral_output:
             self.ephemeral_output = True
             success = True
