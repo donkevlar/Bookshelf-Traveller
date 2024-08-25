@@ -270,7 +270,7 @@ class PrimaryCommands(Extension):
         addedDate = book_details['addedDate'] / 1000
 
         converted_added_date = datetime.utcfromtimestamp(addedDate)
-        formatted_addedDate = converted_added_date.strftime('%Y-%m-%d %H:%M')
+        formatted_addedDate = converted_added_date.strftime('%Y-%m-%d')
 
         if duration_seconds >= 3600:
             duration = round(duration_seconds / 3600, 2)
@@ -284,7 +284,7 @@ class PrimaryCommands(Extension):
             duration = str(duration_seconds) + " Seconds"
 
         add_info = f"Genres: *{genre}*\nDuration: *{duration}*\nLanguage: *{language}*"
-        release_info = f"Publisher: *{publisher}*\nPublished Year: *{publishedYear}*\nAdded: *{formatted_addedDate}*"
+        release_info = f"Publisher: *{publisher}*\nPublished Year: *{publishedYear}*\nAdded Date: *{formatted_addedDate}*"
 
         cover = await c.bookshelf_cover_image(book)
 
