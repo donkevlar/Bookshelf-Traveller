@@ -172,12 +172,14 @@ async def bookshelf_get_item_details(book_id):
     _url = f"/items/{book_id}"
     r = await bookshelf_conn(GET=True, endpoint=_url)
     data = r.json()
+    print(data)
 
     title = data['media']['metadata']['title']
     desc = data['media']['metadata']['description']
     language = data['media']['metadata']['language']
     publishedYear = data['media']['metadata']['publishedYear']
     publisher = data['media']['metadata']['publisher']
+    addedDate = data['addedAt']
 
     authors_list = []
     narrators_list = []
@@ -221,6 +223,7 @@ async def bookshelf_get_item_details(book_id):
         'description': desc,
         'language': language,
         'duration': duration_sec,
+        'addedDate': addedDate
     }
 
     return formatted_data
