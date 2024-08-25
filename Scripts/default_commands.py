@@ -190,7 +190,8 @@ class PrimaryCommands(Extension):
 
         except Exception as e:
             await ctx.send("Could not complete this at the moment, please try again later.")
-            logger.warning(f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occured: {e} | Command Name: all-libraries')
+            logger.warning(
+                f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occured: {e} | Command Name: all-libraries')
             print("Error: ", e)
 
     # List the recent sessions, limited to 10 with API. Will merge if books are the same.
@@ -250,6 +251,52 @@ class PrimaryCommands(Extension):
                 f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occurred: {e} | Command Name: recent-sessions')
             print("Error: ", e)
 
+    @slash_command(name="search-book", description="Search for a book in your libraries.")
+    @slash_option(name="book", description="Book Title", autocomplete=True, required=True, opt_type=OptionType.STRING)
+    async def search_book(self, ctx: SlashContext, book):
+        book_details = await c.bookshelf_get_item_details(book)
+
+        title = book_details['title']
+        author = book_details['author']
+        series = book_details['series']
+        narrators = book_details['narrator']
+        duration_seconds = book_details['duration']
+        publisher = book_details['publisher']
+        publishedYear = book_details['publishedYear']
+        genre = book_details['genres']
+        language = book_details['language']
+
+        if duration_seconds >= 3600:
+            duration = round(duration_seconds / 3600, 2)
+            duration = str(duration) + " Hours"
+
+        elif duration_seconds >= 60 < 3600:
+            duration = duration_seconds / 60
+            duration = str(duration) + " Minutes"
+
+        else:
+            duration = str(duration_seconds) + " Seconds"
+
+        add_info = f"Genres: *{genre}*\nDuration: *{duration}*\nLanguage: *{language}*"
+        release_info = f"Publisher: *{publisher}*\nPublished Year: *{publishedYear}*"
+
+        cover = await c.bookshelf_cover_image(book)
+
+        embed_message = Embed(
+            title=title,
+            description=series if series != '' else author
+        )
+
+        if series:
+            embed_message.add_field(name='Author(s)', value=author)
+
+        embed_message.add_field(name='Narrator(s)', value=narrators)
+        embed_message.add_field(name="Release Information", value=release_info)
+        embed_message.add_field(name="Additional Information", value=add_info)
+        embed_message.add_image(cover)
+
+        await ctx.send(content=f"Book details for **{title}**", ephemeral=True, embed=embed_message)
+
     # Autocomplete ----------------------------------------------------------------
 
     # Another Library Name autocomplete
@@ -267,6 +314,7 @@ class PrimaryCommands(Extension):
 
     # Autocomplete function, looks for the book title
     @search_media_progress.autocomplete("book_title")
+    @search_book.autocomplete("book")
     async def search_media_auto_complete(self, ctx: AutocompleteContext):
         user_input = ctx.input_text
         choices = []
