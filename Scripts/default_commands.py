@@ -1,11 +1,13 @@
 import os
-
 import logging
 import traceback
-import bookshelfAPI as c
 
 from interactions.ext.paginators import Paginator
 from interactions import *
+from datetime import datetime
+
+# Local file imports
+import bookshelfAPI as c
 import settings
 
 # Logger Config
@@ -265,6 +267,10 @@ class PrimaryCommands(Extension):
         publishedYear = book_details['publishedYear']
         genre = book_details['genres']
         language = book_details['language']
+        addedDate = book_details['addedDate'] / 1000
+
+        converted_added_date = datetime.utcfromtimestamp(addedDate)
+        formatted_addedDate = converted_added_date.strftime('%Y-%m-%d %H:%M')
 
         if duration_seconds >= 3600:
             duration = round(duration_seconds / 3600, 2)
@@ -278,7 +284,7 @@ class PrimaryCommands(Extension):
             duration = str(duration_seconds) + " Seconds"
 
         add_info = f"Genres: *{genre}*\nDuration: *{duration}*\nLanguage: *{language}*"
-        release_info = f"Publisher: *{publisher}*\nPublished Year: *{publishedYear}*"
+        release_info = f"Publisher: *{publisher}*\nPublished Year: *{publishedYear}*\nAdded: {formatted_addedDate}"
 
         cover = await c.bookshelf_cover_image(book)
 
