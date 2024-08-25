@@ -51,22 +51,22 @@ async def ownership_check(ctx: BaseContext):
 
 class PrimaryCommands(Extension):
     def __init__(self, bot):
-        pass
+        self.ephemeral_output = True
 
     # Slash Commands ----------------------------------------------------
     #
 
     # Pings the server, can ping other servers, why? IDK, cause why not.
-    @slash_command(name="ping", description="Latency of the discord bot server to the discord central shard.")
+    @slash_command(name="ping", description="Latency of the discord bot server to the discord central shard. Default Command.")
     async def ping(self, ctx: SlashContext):
         latency = round(self.bot.latency * 1000)
         message = f'Discord BOT Server Latency: {latency} ms'
-        await ctx.send(message, ephemeral=EPHEMERAL_OUTPUT)
+        await ctx.send(message, ephemeral=self.ephemeral_output)
         logger.debug(f' Successfully sent command: ping')
 
     # Self-explanatory, pulls all a library's items
     @slash_command(name="all-library-items",
-                   description=f"Get all library items from the currently signed in ABS user.")
+                   description=f"Get all library items from the currently signed in ABS user. Default Command.")
     @option_library_name()
     async def all_library_items(self, ctx: SlashContext, library_name: str):
         try:
@@ -84,7 +84,7 @@ class PrimaryCommands(Extension):
 
             paginator = Paginator.create_from_string(self.bot, formatted_info, timeout=120, page_size=2000)
 
-            await paginator.send(ctx, ephemeral=True)
+            await paginator.send(ctx, ephemeral=self.ephemeral_output)
 
         except Exception as e:
             print(e)
@@ -94,7 +94,7 @@ class PrimaryCommands(Extension):
 
     # Retrieves a specific media item and it's progress
     @slash_command(name="media-progress",
-                   description="Searches for the media item's progress")
+                   description="Searches for the media item's progress. Default Command.")
     @slash_option(name="book_title", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
     async def search_media_progress(self, ctx: SlashContext, book_title: str):
@@ -134,18 +134,18 @@ class PrimaryCommands(Extension):
             embed_message.add_image(cover_title)
 
             # Send message
-            await ctx.send(embed=embed_message, ephemeral=EPHEMERAL_OUTPUT)
+            await ctx.send(embed=embed_message, ephemeral=self.ephemeral_output)
             logger.info(f' Successfully sent command: media-progress')
 
         except Exception as e:
             await ctx.send(
                 "Could not complete this at the moment, likely due to no progress found. Please try again later",
-                ephemeral=EPHEMERAL_OUTPUT)
+                ephemeral=self.ephemeral_output)
             logger.warning(
                 f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occured: {e} | Command Name: media-progress')
 
     # Listening Stats, currently pulls the total time listened and converts it to hours
-    @slash_command(name="listening-stats", description="Pulls the current ABS user's total listening time.")
+    @slash_command(name="listening-stats", description="Pulls the current ABS user's total listening time. Default Command")
     async def totalTime(self, ctx: SlashContext):
         try:
             formatted_sessions_string, data = await c.bookshelf_listening_stats()
@@ -155,7 +155,7 @@ class PrimaryCommands(Extension):
                 message = f'Total Listening Time : {total_time} Hours'
             else:
                 message = f'Total Listening Time : {total_time} Minutes'
-            await ctx.send(message, ephemeral=EPHEMERAL_OUTPUT)
+            await ctx.send(message, ephemeral=self.ephemeral_output)
             logger.info(f' Successfully sent command: listening-stats')
 
         except Exception as e:
@@ -165,9 +165,9 @@ class PrimaryCommands(Extension):
                 f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occurred: {e} | Command Name: listening-stats')
 
     # Display a formatted list (embedded) of current libraries
-    @slash_command(name="all-libraries",
-                   description="Display all current libraries with their ID and a boolean ")
     @check(ownership_check)
+    @slash_command(name="all-libraries",
+                   description="Display all current libraries. Default Command")
     async def show_all_libraries(self, ctx: SlashContext):
         try:
             # Get Library Data from API
@@ -187,7 +187,7 @@ class PrimaryCommands(Extension):
 
             embed_message.add_field(name=f"Libraries", value=formatted_data, inline=False)
 
-            await ctx.send(embed=embed_message, ephemeral=EPHEMERAL_OUTPUT)
+            await ctx.send(embed=embed_message, ephemeral=self.ephemeral_output)
             logger.info(f' Successfully sent command: recent-sessions')
 
         except Exception as e:
@@ -197,11 +197,12 @@ class PrimaryCommands(Extension):
             print("Error: ", e)
 
     # List the recent sessions, limited to 10 with API. Will merge if books are the same.
+    @check(ownership_check)
     @slash_command(name="recent-sessions",
-                   description="Display up to 10 recent sessions from the current logged in ABS user.")
+                   description="Display up to 10 recent sessions from the current logged in ABS user. Default Command")
     async def show_recent_sessions(self, ctx: SlashContext):
         try:
-            await ctx.defer(ephemeral=EPHEMERAL_OUTPUT)
+            await ctx.defer(ephemeral=self.ephemeral_output)
             formatted_sessions_string, data = await c.bookshelf_listening_stats()
 
             # Split formatted_sessions_string by newline character to separate individual sessions
@@ -243,7 +244,7 @@ class PrimaryCommands(Extension):
                 embeds.append(embed_message)
 
             paginator = Paginator.create_from_embeds(self.bot, *embeds, timeout=120)
-            await paginator.send(ctx, ephemeral=EPHEMERAL_OUTPUT)
+            await paginator.send(ctx, ephemeral=self.ephemeral_output)
 
             logger.info(f' Successfully sent command: recent-sessions')
 
@@ -253,7 +254,7 @@ class PrimaryCommands(Extension):
                 f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occurred: {e} | Command Name: recent-sessions')
             print("Error: ", e)
 
-    @slash_command(name="search-book", description="Search for a book in your libraries.")
+    @slash_command(name="search-book", description="Search for a book in your libraries. Default Command.")
     @slash_option(name="book", description="Book Title", autocomplete=True, required=True, opt_type=OptionType.STRING)
     async def search_book(self, ctx: SlashContext, book):
         book_details = await c.bookshelf_get_item_details(book)
@@ -290,7 +291,7 @@ class PrimaryCommands(Extension):
 
         embed_message = Embed(
             title=title,
-            description=series if series != '' else author
+            description=series if series != '' else "Author: " + author
         )
 
         if series:
@@ -301,7 +302,31 @@ class PrimaryCommands(Extension):
         embed_message.add_field(name="Additional Information", value=add_info)
         embed_message.add_image(cover)
 
-        await ctx.send(content=f"Book details for **{title}**", ephemeral=True, embed=embed_message)
+        await ctx.send(content=f"Book details for **{title}**", ephemeral=self.ephemeral_output, embed=embed_message)
+
+    @check(ownership_check)
+    @slash_command(name="setup-default-commands", description="Override optional command arguments. Note only affects default commands.")
+    @slash_option(name="ephemeral_output", description="force enable/disable ephemeral output for all default commands.", opt_type=OptionType.BOOLEAN)
+    async def setup_default_commands(self, ctx: SlashContext, ephemeral_output=None):
+        if ephemeral_output is None:
+            await ctx.send(f"Ephemeral output currently set to **{self.ephemeral_output}**", ephemeral=True)
+            return
+        if ephemeral_output and not self.ephemeral_output:
+            self.ephemeral_output = True
+            success = True
+
+        elif not ephemeral_output and self.ephemeral_output:
+            self.ephemeral_output = False
+            success = True
+
+        else:
+            success = False
+
+        if success:
+            result = f"Set ephemeral output to **{self.ephemeral_output}**"
+            await ctx.send(f"Operation successful! {result}")
+        else:
+            await ctx.send(f"Operation failed, output was already set to {ephemeral_output}", ephemeral=True)
 
     # Autocomplete ----------------------------------------------------------------
 
@@ -341,7 +366,7 @@ class PrimaryCommands(Extension):
 
             except Exception as e:
                 await ctx.send(choices=choices)
-                print(e)
+                logger.error(f"Error occured while loading autocomplete: {e}")
 
         else:
             try:
