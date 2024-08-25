@@ -305,9 +305,9 @@ class PrimaryCommands(Extension):
         await ctx.send(content=f"Book details for **{title}**", ephemeral=self.ephemeral_output, embed=embed_message)
 
     @check(ownership_check)
-    @slash_command(name="setup-commands", description="Override optional command arguments. Note only affects default commands.")
+    @slash_command(name="setup-default-commands", description="Override optional command arguments. Note only affects default commands.")
     @slash_option(name="ephemeral_output", description="force enable, disable ephemeral output for all default commands.", opt_type=OptionType.BOOLEAN)
-    async def setup_commands(self, ctx: SlashContext, ephemeral_output):
+    async def setup_default_commands(self, ctx: SlashContext, ephemeral_output):
         if ephemeral_output:
             self.ephemeral_output = True
 
