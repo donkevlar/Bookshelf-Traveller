@@ -57,7 +57,7 @@ class PrimaryCommands(Extension):
     #
 
     # Pings the server, can ping other servers, why? IDK, cause why not.
-    @slash_command(name="ping", description="Latency of the discord bot server to the discord central shard.")
+    @slash_command(name="ping", description="Latency of the discord bot server to the discord central shard. Default Command.")
     async def ping(self, ctx: SlashContext):
         latency = round(self.bot.latency * 1000)
         message = f'Discord BOT Server Latency: {latency} ms'
@@ -66,7 +66,7 @@ class PrimaryCommands(Extension):
 
     # Self-explanatory, pulls all a library's items
     @slash_command(name="all-library-items",
-                   description=f"Get all library items from the currently signed in ABS user.")
+                   description=f"Get all library items from the currently signed in ABS user. Default Command.")
     @option_library_name()
     async def all_library_items(self, ctx: SlashContext, library_name: str):
         try:
@@ -94,7 +94,7 @@ class PrimaryCommands(Extension):
 
     # Retrieves a specific media item and it's progress
     @slash_command(name="media-progress",
-                   description="Searches for the media item's progress")
+                   description="Searches for the media item's progress. Default Command.")
     @slash_option(name="book_title", description="Enter a book title", required=True, opt_type=OptionType.STRING,
                   autocomplete=True)
     async def search_media_progress(self, ctx: SlashContext, book_title: str):
@@ -145,7 +145,7 @@ class PrimaryCommands(Extension):
                 f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occured: {e} | Command Name: media-progress')
 
     # Listening Stats, currently pulls the total time listened and converts it to hours
-    @slash_command(name="listening-stats", description="Pulls the current ABS user's total listening time.")
+    @slash_command(name="listening-stats", description="Pulls the current ABS user's total listening time. Default Command")
     async def totalTime(self, ctx: SlashContext):
         try:
             formatted_sessions_string, data = await c.bookshelf_listening_stats()
@@ -167,7 +167,7 @@ class PrimaryCommands(Extension):
     # Display a formatted list (embedded) of current libraries
     @check(ownership_check)
     @slash_command(name="all-libraries",
-                   description="Display all current libraries with their ID and a boolean ")
+                   description="Display all current libraries. Default Command")
     async def show_all_libraries(self, ctx: SlashContext):
         try:
             # Get Library Data from API
@@ -199,7 +199,7 @@ class PrimaryCommands(Extension):
     # List the recent sessions, limited to 10 with API. Will merge if books are the same.
     @check(ownership_check)
     @slash_command(name="recent-sessions",
-                   description="Display up to 10 recent sessions from the current logged in ABS user.")
+                   description="Display up to 10 recent sessions from the current logged in ABS user. Default Command")
     async def show_recent_sessions(self, ctx: SlashContext):
         try:
             await ctx.defer(ephemeral=self.ephemeral_output)
@@ -254,7 +254,7 @@ class PrimaryCommands(Extension):
                 f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occurred: {e} | Command Name: recent-sessions')
             print("Error: ", e)
 
-    @slash_command(name="search-book", description="Search for a book in your libraries.")
+    @slash_command(name="search-book", description="Search for a book in your libraries. Default Command.")
     @slash_option(name="book", description="Book Title", autocomplete=True, required=True, opt_type=OptionType.STRING)
     async def search_book(self, ctx: SlashContext, book):
         book_details = await c.bookshelf_get_item_details(book)
@@ -306,15 +306,24 @@ class PrimaryCommands(Extension):
 
     @check(ownership_check)
     @slash_command(name="setup-default-commands", description="Override optional command arguments. Note only affects default commands.")
-    @slash_option(name="ephemeral_output", description="force enable, disable ephemeral output for all default commands.", opt_type=OptionType.BOOLEAN)
+    @slash_option(name="ephemeral_output", description="force enable/disable ephemeral output for all default commands.", opt_type=OptionType.BOOLEAN)
     async def setup_default_commands(self, ctx: SlashContext, ephemeral_output):
-        if ephemeral_output:
+        if ephemeral_output and not self.ephemeral_output:
             self.ephemeral_output = True
+            success = True
 
-        elif ephemeral_output:
+        elif not ephemeral_output and self.ephemeral_output:
             self.ephemeral_output = False
+            success = True
 
-        await ctx.send("Operation successful!")
+        else:
+            success = False
+
+        if success:
+            result = f"Set ephemeral output to **{self.ephemeral_output}**"
+            await ctx.send(f"Operation successful! {result}")
+        else:
+            await ctx.send(f"Operation failed, output was already set to {ephemeral_output}", ephemeral=True)
 
     # Autocomplete ----------------------------------------------------------------
 
@@ -354,7 +363,7 @@ class PrimaryCommands(Extension):
 
             except Exception as e:
                 await ctx.send(choices=choices)
-                print(e)
+                logger.error(f"Error occured while loading autocomplete: {e}")
 
         else:
             try:
