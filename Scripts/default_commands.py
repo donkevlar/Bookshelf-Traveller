@@ -290,7 +290,7 @@ class PrimaryCommands(Extension):
 
         embed_message = Embed(
             title=title,
-            description=series if series != '' else author
+            description=series if series != '' else "Author: " + author
         )
 
         if series:
