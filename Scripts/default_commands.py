@@ -284,7 +284,7 @@ class PrimaryCommands(Extension):
             duration = str(duration_seconds) + " Seconds"
 
         add_info = f"Genres: *{genre}*\nDuration: *{duration}*\nLanguage: *{language}*"
-        release_info = f"Publisher: *{publisher}*\nPublished Year: *{publishedYear}*\nAdded: {formatted_addedDate}"
+        release_info = f"Publisher: *{publisher}*\nPublished Year: *{publishedYear}*\nAdded: *{formatted_addedDate}*"
 
         cover = await c.bookshelf_cover_image(book)
 
