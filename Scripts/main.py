@@ -65,9 +65,9 @@ server_status_code = c.bookshelf_test_connection()
 
 # Quit if server does not respond
 if server_status_code != 200:
-    logger.warning(f'\nCurrent Server Status = {server_status_code}')
-    logger.warning("\nIssue with connecting to Audiobookshelf server!")
-    logger.warning("\nQuitting!")
+    logger.warning(f'Current Server Status = {server_status_code}')
+    logger.warning("Issue with connecting to Audiobookshelf server!")
+    logger.warning("Quitting!")
     time.sleep(0.5)
     sys.exit(1)
 

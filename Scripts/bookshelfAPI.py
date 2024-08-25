@@ -1,16 +1,17 @@
 import asyncio
+import csv
+import logging
 import os
 import sys
 import time
+import traceback
 from collections import defaultdict
 from datetime import datetime
-import traceback
-import csv
-import logging
 
 import httpx
-from dotenv import load_dotenv
 import requests
+
+from dotenv import load_dotenv
 from settings import OPT_IMAGE_URL, SERVER_URL, DEFAULT_PROVIDER
 
 # Logger Config
@@ -166,6 +167,68 @@ async def bookshelf_auth_test():
         logger.info("Cleaning up, authentication")
 
 
+async def bookshelf_get_item_details(book_id):
+    # Get Media Title
+    _url = f"/items/{book_id}"
+    r = await bookshelf_conn(GET=True, endpoint=_url)
+    data = r.json()
+    print(data)
+
+    title = data['media']['metadata']['title']
+    desc = data['media']['metadata']['description']
+    language = data['media']['metadata']['language']
+    publishedYear = data['media']['metadata']['publishedYear']
+    publisher = data['media']['metadata']['publisher']
+    addedDate = data['addedAt']
+
+    authors_list = []
+    narrators_list = []
+    duration_sec = 0
+    series = ''
+
+    narrators_raw = data['media']['metadata']['narrators']
+    authors_raw = data['media']['metadata']['authors']
+    series_raw = data['media']['metadata']['series']
+    files_raw = data['media']['audioFiles']
+    genres_raw = data['media']['metadata']['genres']
+
+    for author in authors_raw:
+        name = author.get('name')
+        authors_list.append(name)
+
+    for narrator in narrators_raw:
+        narrators_list.append(narrator)
+
+    for series in series_raw:
+        series_name = series.get('name')
+        series_seq = series.get('sequence')
+        series = f"{series_name}, Book {series_seq}"
+
+    for file in files_raw:
+        file_duration = int(file['duration'])
+        duration_sec += file_duration
+
+    authors = ', '.join(authors_list)
+    narrators = ', '.join(narrators_list)
+    genres = ', '.join(genres_raw)
+
+    formatted_data = {
+        'title': title,
+        'author': authors,
+        'narrator': narrators,
+        'series': series,
+        'publisher': publisher,
+        'genres': genres,
+        'publishedYear': publishedYear,
+        'description': desc,
+        'language': language,
+        'duration': duration_sec,
+        'addedDate': addedDate
+    }
+
+    return formatted_data
+
+
 async def bookshelf_listening_stats():
     bookshelfToken = os.environ.get("bookshelfToken")
     endpoint = "/me/listening-stats"
@@ -296,9 +359,10 @@ async def bookshelf_item_progress(item_id):
         r = await bookshelf_conn(GET=True, endpoint=secondary_url)
         data = r.json()
         title = data['media']['metadata']['title']
+        print(data)
 
         formatted_info = {
-            'title': f'{title}',
+            'title': title,
             'progress': f'{progress}%',
             'finished': f'{isFinished}',
             'currentTime': f'{round(currentTime, 2)}',
@@ -779,6 +843,8 @@ async def bookshelf_get_valid_books():
 async def main():
     if __name__ == '__main__':
         print("TESTING COMMENCES")
+        item = await bookshelf_get_item_details("1917bece-b5b8-4355-8c23-6f0769761785")
+        print(item)
 
 
 asyncio.run(main())
