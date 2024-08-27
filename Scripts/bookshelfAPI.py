@@ -648,7 +648,7 @@ async def bookshelf_audio_obj(item_id: str):
     logger.info(f"Media Type:  {mediaType}, Current Time: {currentTime} Seconds")
 
     onlineURL = f"{defaultAPIURL}/items/{item_id}/file/{ino}{tokenInsert}"
-    logger.info(f'attempting to play: f"{defaultAPIURL}/items/{item_id}/file/{ino}')
+    logger.info(f"attempting to play: {defaultAPIURL}/items/{item_id}/file/{ino}")
 
     return onlineURL, currentTime, session_id, bookTitle
 

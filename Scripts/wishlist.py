@@ -145,6 +145,7 @@ class WishList(Extension):
         self.searchComponents = None
         self.completeAudioLibrary = []
         self.forceWishlist = False
+        self.book_options = []
 
     # Slash Commands --------------------------
 
@@ -166,8 +167,11 @@ class WishList(Extension):
         if force:
             self.forceWishlist = True
 
-        if DEBUG_MODE == "True":
-            print(book_search)
+            logger.debug(book_search)
+
+        # Sort by age
+
+        book_search = sorted(book_search, key=lambda x: x.get('publishedYear') or '')
 
         for books in book_search:
 
@@ -205,6 +209,7 @@ class WishList(Extension):
                                components=components, ephemeral=True)
                 self.messageString = f"Search Result for Title **{title}**, provided by **{DEFAULT_PROVIDER}**"
                 self.searchBookData = book_list
+                self.book_options = options
             else:
                 await ctx.send(f"No results found for title **{title}**", ephemeral=True)
 
@@ -294,13 +299,17 @@ class WishList(Extension):
         selected_value = ctx.values
         extracted_value = ''
 
+        options = self.book_options
+
         for value in selected_value:
             extracted_value = value
+
+        logger.debug(f"Book data used in select menu: {self.searchBookData}")
 
         for book in self.searchBookData:
             internal_id = book.get('internal_id')
             if int(extracted_value) == int(internal_id):
-                print(book)
+                logger.debug(f"Selected Book Data: {book}")
                 self.selectedBook = book
 
                 title = book.get('title')
@@ -311,6 +320,30 @@ class WishList(Extension):
                 published = book.get('publishedYear')
                 cover = book.get('cover')
                 provider = DEFAULT_PROVIDER
+                placeholder = title
+
+                components_: list[ActionRow] = [
+                    ActionRow(
+                        StringSelectMenu(
+                            options,  # NOQA
+                            min_values=1,
+                            max_values=1,
+                            placeholder=placeholder,
+                            custom_id='search_select_menu')
+                    ),
+                    ActionRow(
+                        Button(
+                            style=ButtonStyle.PRIMARY,
+                            label="Request",
+                            custom_id="request_button"
+                        ),
+                        Button(
+                            style=ButtonStyle.RED,
+                            label="Cancel",
+                            custom_id="cancel_button"
+                        )
+                    )
+                ]
 
                 additional_info = f"Narrator(s): {narrator}\nPublished Year: {published}\nLanguage: {language}"
 
@@ -319,14 +352,7 @@ class WishList(Extension):
                                                             footer=f'Search Provider: {provider}')
 
                 await ctx.edit_origin(content=f"You selected: **{title}**", embed=embed_message,
-                                      components=component_initial)
-                # Reset Vars
-                self.searchBookData = None
-                self.messageString = ''
-
-            else:
-                self.searchBookData = None
-                self.messageString = ''
+                                      components=components_)
 
     @component_callback('request_button')
     async def request_button_callback(self, ctx: ComponentContext):
@@ -349,7 +375,7 @@ class WishList(Extension):
                         self.searchBookData = None
                         self.messageString = ''
                         await ctx.edit_origin(content=f"Title: {title} already exists in your library! "
-                                                      f"use `force: True` option if you still wish to add it to your library", components=component_fail)
+                                                      f"use `force: True` option if you want to force it into your wishlist.", components=component_fail)
                         return
         else:
             logger.warning("Force wishlist is enabled, attempting to add book to wishlist.")
@@ -365,36 +391,20 @@ class WishList(Extension):
                                       data=str(json.dumps(self.selectedBook)))
         if result:
             logger.info('Successfully added book to wishlist db!')
-            await ctx.edit_origin(content=f"Successfully added title **{title}** to wishlist",
+            await ctx.edit_origin(content=f"Successfully added title **{title}** to your wishlist!",
                                   components=component_success)
         else:
             logger.warning('Book title or author already exists, marking as failed!')
             await ctx.edit_origin(content="Request already exists!", components=component_fail)
         # Reset Vars
         self.selectedBook = None
+        self.messageString = ''
 
     @component_callback('cancel_button')
     async def cancel_button_callback(self, ctx: ComponentContext):
         await ctx.edit_origin()
         await ctx.delete()
 
-    # @listen()
-    # async def wishlist_on_startup(self, event: Startup):
-    #     result = search_task_db(override_response="Verifying if wishlist task is enabled and setup for startup!")
-    #     task_name = 'add-book'
-    #     task_list = []
-    #     if result:
-    #         for item in result:
-    #             task = item[1]
-    #             task_list.append(task)
-    #
-    #     if task_name in task_list:
-    #         logger.info('Wishlist task setup found! Executing startup task!')
-    #         if not self.wishlist_primary_task.running:
-    #             self.wishlist_primary_task.start()
-    #             owner = event.bot.owner
-    #             if DEBUG_MODE != "True":
-    #                 await owner.send(
-    #                     f"Wishlist Task activated automatically! Refresh rate set to {TASK_FREQUENCY} minutes")
-    #     else:
-    #         logger.info("No wishlist task setup found during startup! Ignoring!")
+        # Reset Class Vars
+        self.selectedBook = None
+        self.messageString = ''
