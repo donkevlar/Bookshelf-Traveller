@@ -375,7 +375,7 @@ class WishList(Extension):
                         self.searchBookData = None
                         self.messageString = ''
                         await ctx.edit_origin(content=f"Title: {title} already exists in your library! "
-                                                      f"use `force: True` option if you still wish to add it to your library", components=component_fail)
+                                                      f"use `force: True` option if you want to force it into your wishlist.", components=component_fail)
                         return
         else:
             logger.warning("Force wishlist is enabled, attempting to add book to wishlist.")
