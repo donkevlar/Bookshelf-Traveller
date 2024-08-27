@@ -13,13 +13,11 @@ import random
 from interactions.api.voice.voice_gateway import VoiceGateway, OP, random # NOQA
 
 
-# HOT FIX for voice - Remove once 5.14 has been released.
-async def new_send_heartbeat(self) -> None:
-    await self.send_json({"op": OP.HEARTBEAT, "d": random.getrandbits(64)})
-    self.logger.debug("❤ Voice Connection is sending Heartbeat")
-
-
-VoiceGateway.send_heartbeat = new_send_heartbeat
+# HOT FIX for voice - Remove once >5.13.1 has been released.
+# async def new_send_heartbeat(self) -> None:
+#     await self.send_json({"op": OP.HEARTBEAT, "d": random.getrandbits(64)})
+#     self.logger.debug("❤ Voice Connection is sending Heartbeat")
+# VoiceGateway.send_heartbeat = new_send_heartbeat
 
 load_dotenv()
 
