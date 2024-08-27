@@ -365,7 +365,7 @@ class WishList(Extension):
                                       data=str(json.dumps(self.selectedBook)))
         if result:
             logger.info('Successfully added book to wishlist db!')
-            await ctx.edit_origin(content=f"Successfully added title **{title}** to wishlist",
+            await ctx.edit_origin(content=f"Successfully added title **{title}** to your wishlist!",
                                   components=component_success)
         else:
             logger.warning('Book title or author already exists, marking as failed!')
