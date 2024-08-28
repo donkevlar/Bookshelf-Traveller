@@ -232,11 +232,6 @@ class AudioPlayBack(Extension):
             logger.info("Current Chapter Sync: " + current_chapter['title'])
             self.currentChapter = current_chapter
 
-    # @Task.create(trigger=IntervalTrigger(minutes=5))
-    # async def terminal_clearer(self):
-    #     os.system('cls' if os.name == 'nt' else 'clear')
-    #     logger.warning('Cleared terminal after 5 minutes of playback!')
-
     # Random Functions ------------------------
     # Change Chapter Function
     async def move_chapter(self, option: str):
@@ -411,7 +406,7 @@ class AudioPlayBack(Extension):
                 # Start Voice Check
                 await ctx.defer(ephemeral=True)
 
-                self.audio_message = await ctx.send(embed=embed_message, ephemeral=True, components=component_rows_initial)
+                self.audio_message = await ctx.send(content="Beginning audio stream!", embed=embed_message, ephemeral=True, components=component_rows_initial)
 
                 logger.info(f"Beginning audio stream")
 
