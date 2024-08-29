@@ -7,8 +7,6 @@
 
 <a href="https://www.buymeacoffee.com/donkevlar" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-green.png" alt="Buy Me A Coffee" style="height: 60px !important;width: 217px !important;" ></a>
 
-**Now in Beta! The commands are feature complete, but you may still encounter errors. If you do please raise an issue.**
-
 A fully featured Audiobookshelf discord bot with playback and administrative functionality. Enjoy your travels! :)
 
 You'll need to create your own discord application in order to do this, this is fairly straight forward, here is a guide:
