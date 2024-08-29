@@ -10,8 +10,7 @@ from dotenv import load_dotenv
 import random
 
 # Temp hot fix
-from interactions.api.voice.voice_gateway import VoiceGateway, OP, random # NOQA
-
+from interactions.api.voice.voice_gateway import VoiceGateway, OP, random  # NOQA
 
 # HOT FIX for voice - Remove once >5.13.1 has been released.
 # async def new_send_heartbeat(self) -> None:
@@ -182,6 +181,7 @@ class AudioPlayBack(Extension):
         self.audioObj = AudioVolume
         self.context_voice_channel = None
         self.current_playback_time = 0
+        self.audio_context = None
         self.bitrate = 128000
         self.volume = 0.0
         self.placeholder = None
@@ -194,6 +194,7 @@ class AudioPlayBack(Extension):
         self.username = ''
         self.user_type = ''
         self.current_channel = None
+        self.active_guild_id = None
 
     # Tasks ---------------------------------
     #
@@ -232,6 +233,29 @@ class AudioPlayBack(Extension):
             logger.info("Current Chapter Sync: " + current_chapter['title'])
             self.currentChapter = current_chapter
 
+    @Task.create(trigger=IntervalTrigger(minutes=5))
+    async def auto_kill_session(self):
+        logger.warning("Auto kill session task active!")
+        if self.play_state == 'paused' and self.audio_message is not None:
+            voice_state = self.bot.get_bot_voice_state(self.active_guild_id)
+            channel = await self.bot.fetch_channel(self.current_channel)
+
+            if channel and voice_state:
+                await channel.send(f'Current playback of **{self.bookTitle}** has been stopped due to inactivity.')
+                await voice_state.stop()
+                await voice_state.disconnect()
+                await c.bookshelf_close_session(self.sessionID)
+                logger.warning("audio session deleted due to timeout.")
+
+                # Reset Vars and close out loops
+                self.current_channel = None
+                self.play_state = 'stopped'
+                self.audio_message = None
+                self.audioObj.cleanup()  # NOQA
+
+            # End loop
+            self.auto_kill_session.stop()
+            
     # Random Functions ------------------------
     # Change Chapter Function
     async def move_chapter(self, option: str):
@@ -310,9 +334,10 @@ class AudioPlayBack(Extension):
 
     # Main play command, place class variables here since this is required to play audio
     @slash_command(name="play", description="Play audio from ABS server", dm_permission=False)
-    @slash_option(name="book", description="Enter a book title. type 'random' for a surprise.", required=True, opt_type=OptionType.STRING,
+    @slash_option(name="book", description="Enter a book title. type 'random' for a surprise.", required=True,
+                  opt_type=OptionType.STRING,
                   autocomplete=True)
-    async def play_audio(self, ctx, book: str):
+    async def play_audio(self, ctx: SlashContext, book: str):
         if playback_role != 0:
             logger.info('PLAYBACK_ROLE is currently active, verifying if user is authorized.')
             if not ctx.author.has_role(playback_role):  # NOQA
@@ -324,7 +349,8 @@ class AudioPlayBack(Extension):
         elif ownership and playback_role == 0:
             if ctx.author.id not in ctx.bot.owners:
                 logger.warning(f'User {ctx.author} attempted to use /play, and OWNER_ONLY is enabled!')
-                await ctx.send(content="Ownership enabled and you are not authorized to use this command. Contact bot owner.")
+                await ctx.send(
+                    content="Ownership enabled and you are not authorized to use this command. Contact bot owner.")
                 return
 
         # Check bot is ready, if not exit command
@@ -378,6 +404,8 @@ class AudioPlayBack(Extension):
         self.audioObj = audio
         self.currentTime = currentTime
         self.current_playback_time = 0
+        self.audio_context = ctx
+        self.active_guild_id = ctx.guild_id
 
         # Chapter Vars
         self.isPodcast = isPodcast
@@ -385,7 +413,7 @@ class AudioPlayBack(Extension):
         self.currentChapterTitle = current_chapter.get('title')
         self.chapterArray = chapter_array
         self.bookFinished = bookFinished
-        self.context_voice_channel = ctx.voice_state
+        self.current_channel = ctx.channel_id
         self.play_state = 'playing'
 
         # Create embedded message
@@ -405,8 +433,12 @@ class AudioPlayBack(Extension):
 
                 # Start Voice Check
                 await ctx.defer(ephemeral=True)
+                # Stop auto kill session task
+                if self.auto_kill_session.running:
+                    self.auto_kill_session.stop()
 
-                self.audio_message = await ctx.send(content="Beginning audio stream!", embed=embed_message, ephemeral=True, components=component_rows_initial)
+                self.audio_message = await ctx.send(content="Beginning audio stream!", embed=embed_message,
+                                                    ephemeral=True, components=component_rows_initial)
 
                 logger.info(f"Beginning audio stream")
 
@@ -467,6 +499,8 @@ class AudioPlayBack(Extension):
             if self.session_update.running:
                 self.session_update.stop()
                 # self.terminal_clearer.stop()
+            # Start auto kill session check
+            self.auto_kill_session.start()
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
@@ -480,6 +514,10 @@ class AudioPlayBack(Extension):
                 # Resume Audio Stream
                 ctx.voice_state.resume()
                 logger.info("Resuming Audio")
+                # Stop auto kill session task
+                if self.auto_kill_session.running:
+                    logger.info("Stopping auto kill session backend task.")
+                    self.auto_kill_session.stop()
                 # Start session
                 self.play_state = 'playing'
                 self.session_update.start()
@@ -499,6 +537,11 @@ class AudioPlayBack(Extension):
                 return
 
             await self.move_chapter(option)
+
+            # Stop auto kill session task
+            if self.auto_kill_session.running:
+                logger.info("Stopping auto kill session backend task.")
+                self.auto_kill_session.stop()
 
             await ctx.send(content=f"Moving to chapter: {self.newChapterTitle}", ephemeral=True)
 
@@ -543,6 +586,11 @@ class AudioPlayBack(Extension):
             await self.client.change_presence(activity=None)
             # Reset current playback time
             self.current_playback_time = 0
+
+            # Stop auto kill session task
+            if self.auto_kill_session.running:
+                logger.info("Stopping auto kill session backend task.")
+                self.auto_kill_session.stop()
 
             if self.session_update.running:
                 self.session_update.stop()
@@ -673,6 +721,8 @@ class AudioPlayBack(Extension):
             self.play_state = 'paused'
             ctx.voice_state.channel.voice_state.pause()
             self.session_update.stop()
+            logger.warning("Auto session kill task running... Checking for inactive session in 5 minutes!")
+            self.auto_kill_session.start()
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
             await ctx.edit_origin(content="Play", components=component_rows_paused, embed=embed_message)
 
@@ -684,6 +734,11 @@ class AudioPlayBack(Extension):
             ctx.voice_state.channel.voice_state.resume()
             self.session_update.start()
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
+
+            # Stop auto kill session task
+            if self.auto_kill_session.running:
+                logger.info("Stopping auto kill session backend task.")
+                self.auto_kill_session.stop()
 
             await ctx.edit_origin(components=component_rows_initial, embed=embed_message)
 
@@ -704,6 +759,11 @@ class AudioPlayBack(Extension):
             await self.move_chapter(option='next')
 
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
+
+            # Stop auto kill session task
+            if self.auto_kill_session.running:
+                logger.info("Stopping auto kill session backend task.")
+                self.auto_kill_session.stop()
 
             if self.found_next_chapter:
                 await ctx.edit(embed=embed_message)
@@ -738,6 +798,12 @@ class AudioPlayBack(Extension):
 
             if self.found_next_chapter:
                 await ctx.edit(embed=embed_message)
+
+                # Stop auto kill session task
+                if self.auto_kill_session.running:
+                    logger.info("Stopping auto kill session backend task.")
+                    self.auto_kill_session.stop()
+
                 # Resetting Variable
                 self.found_next_chapter = False
                 ctx.voice_state.channel.voice_state.player.stop()
@@ -762,6 +828,10 @@ class AudioPlayBack(Extension):
             await self.client.change_presence(activity=None)
             # Cleanup Session
             await c.bookshelf_close_session(self.sessionID)
+            # Stop auto kill session task
+            if self.auto_kill_session.running:
+                logger.info("Stopping auto kill session backend task.")
+                self.auto_kill_session.stop()
 
     @component_callback('volume_up_button')
     async def callback_volume_up_button(self, ctx: ComponentContext):
@@ -827,6 +897,11 @@ class AudioPlayBack(Extension):
         self.session_update.start()
         self.nextTime = None
 
+        # Stop auto kill session task
+        if self.auto_kill_session.running:
+            logger.info("Stopping auto kill session backend task.")
+            self.auto_kill_session.stop()
+
         await ctx.edit_origin()
         await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
 
@@ -856,6 +931,12 @@ class AudioPlayBack(Extension):
         self.audioObj = audio
         self.session_update.start()
         self.nextTime = None
+
+        # Stop auto kill session task
+        if self.auto_kill_session.running:
+            logger.info("Stopping auto kill session backend task.")
+            self.auto_kill_session.stop()
+
         await ctx.edit_origin()
         await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
 
