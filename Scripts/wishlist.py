@@ -168,6 +168,7 @@ class WishList(Extension):
         self.completeAudioLibrary = []
         self.forceWishlist = False
         self.book_options = []
+        self.nudgeOwner = False
 
     # Multi-Use Functions
     async def wishlist_view_embed(self, author_id, search_all=False):
@@ -226,12 +227,15 @@ class WishList(Extension):
 
     @slash_command(name='add-book', description='Add a book to your wishlist. Server wide command.')
     @slash_option(name='title', description='Book Title', opt_type=OptionType.STRING, required=True)
+    @slash_option(name="nudge", description="Let the server owner know that you REALLY want this one.", required=False,
+                  opt_type=OptionType.BOOLEAN)
     @slash_option(name="provider",
                   description="Search provider. Type: 'default' to view your current default provider.",
                   opt_type=OptionType.STRING, autocomplete=True)
     @slash_option(name="force", description="Skips library checks, forcefully attempt to add to wishlist.",
                   opt_type=OptionType.BOOLEAN)
-    async def add_book_command(self, ctx: SlashContext, title: str, provider=DEFAULT_PROVIDER, force=False):
+    async def add_book_command(self, ctx: SlashContext, title: str, provider=DEFAULT_PROVIDER, force=False,
+                               nudge=False):
         await ctx.defer(ephemeral=True)
         book_search = await c.bookshelf_search_books(title=title, provider=provider)
         title_list = []
@@ -244,6 +248,10 @@ class WishList(Extension):
             self.forceWishlist = True
 
             logger.debug(book_search)
+
+        if nudge:
+            self.nudgeOwner = True
+            logger.debug(f"Nudge nudge nudge, {ctx.author} is nudging {ctx.bot.owner}")
 
         # Sort by age
 
@@ -427,7 +435,11 @@ class WishList(Extension):
         title = self.selectedBook['title']
         author = self.selectedBook['author']
         description = self.selectedBook['description']
+        subtitle = self.selectedBook['subtitle']
         cover = self.selectedBook['cover']
+        narrator = self.selectedBook['narrator']
+        published = self.selectedBook['publishedYear']
+        language = self.selectedBook['language']
         provider = DEFAULT_PROVIDER
         discord_id = ctx.author_id
 
@@ -461,6 +473,13 @@ class WishList(Extension):
             logger.info('Successfully added book to wishlist db!')
             await ctx.edit_origin(content=f"Successfully added title **{title}** to your wishlist!",
                                   components=component_success)
+            if self.nudgeOwner:
+                additional_info = f"Narrator(s): {narrator}\nPublished Year: {published}\nLanguage: {language}"
+
+                embed = await wishlist_search_embed(title=title, title_desc=subtitle, author=author,
+                                                    cover=cover, additional_info=additional_info)
+
+                await self.bot.owner.send(f"{ctx.author} has kindly requested {title}.", embed=embed)
         else:
             logger.warning('Book title or author already exists, marking as failed!')
             await ctx.edit_origin(content="Request already exists!", components=component_fail)
