@@ -99,7 +99,7 @@ def updated_wishlist_db(discord_id: int, downloaded: int, title: str):
 
 def search_all_wishlists():
     wishlist_cursor.execute('''
-    SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist'''
+    SELECT title, author, description, cover, provider, provider_id, discord_id, book_data, downloaded FROM wishlist'''
                             )
 
     rows = wishlist_cursor.fetchall()
@@ -197,6 +197,16 @@ class WishList(Extension):
 
                 if search_all:
                     discord_id = item[6]
+
+                    download_status = item[8]
+
+                    if download_status == 1:
+                        download_status = True
+                    else:
+                        download_status = False
+
+                    add_info = f"Downloaded: **{download_status}**\nPublisher: **{publisher}**\nYear Published: **{published}**\nProvided by: **{provider}**\nNarrator: **{narrators}**\n"
+
                     requestor = await self.bot.fetch_user(discord_id)
                     requestor_user = requestor.username
                     embed_message = await wishlist_search_embed(title=title, author=author, cover=cover,
@@ -204,6 +214,7 @@ class WishList(Extension):
                                                                 footer=f'Search Provider: {provider}',
                                                                 requested_by=requestor_user)
                 else:
+                    add_info = f"Publisher: **{publisher}**\nYear Published: **{published}**\nProvided by: **{provider}**\nNarrator: **{narrators}**\n"
                     embed_message = await wishlist_search_embed(title=title, author=author, cover=cover,
                                                                 additional_info=add_info, title_desc=subtitle,
                                                                 footer=f'Search Provider: {provider}')
