@@ -486,6 +486,7 @@ class WishList(Extension):
         # Reset Vars
         self.selectedBook = None
         self.messageString = ''
+        self.nudgeOwner = False
 
     @component_callback('cancel_button')
     async def cancel_button_callback(self, ctx: ComponentContext):
@@ -495,3 +496,4 @@ class WishList(Extension):
         # Reset Class Vars
         self.selectedBook = None
         self.messageString = ''
+        self.nudgeOwner = False
