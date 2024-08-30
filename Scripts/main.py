@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 
 # File Imports
 import bookshelfAPI as c
+import db_additions
 
 # Pulls from bookshelf file
 load_dotenv()
@@ -165,6 +166,16 @@ if __name__ == '__main__':
         bot.load_extension("multi_user")
     else:
         logger.warning("MULTI_USER module disabled!")
+
+    # Check if any db need modifications
+    logger.debug("Altering default database columns")
+
+    try:
+        db_additions.add_downloaded_column_wishlist()
+
+    except Exception as e:
+        logger.error(f"Error occured while attempting to alter original databases")
+        logger.error(e)
 
     # Start Bot
     bot.start(settings.DISCORD_API_SECRET)
