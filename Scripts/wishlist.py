@@ -479,7 +479,7 @@ class WishList(Extension):
                 embed = await wishlist_search_embed(title=title, title_desc=subtitle, author=author,
                                                     cover=cover, additional_info=additional_info)
 
-                await self.bot.owner.send(f"{ctx.author} has kindly requested {title}.", embed=embed)
+                await self.bot.owner.send(f"**{ctx.author}** has kindly requested **{title}**.", embed=embed)
         else:
             logger.warning('Book title or author already exists, marking as failed!')
             await ctx.edit_origin(content="Request already exists!", components=component_fail)
