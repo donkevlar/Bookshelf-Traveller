@@ -227,7 +227,7 @@ class WishList(Extension):
 
     @slash_command(name='add-book', description='Add a book to your wishlist. Server wide command.')
     @slash_option(name='title', description='Book Title', opt_type=OptionType.STRING, required=True)
-    @slash_option(name="nudge", description="Let the server owner know that you REALLY want this one.", required=False,
+    @slash_option(name="nudge", description="Let the server owner know that you REALLY want this one.", required=True,
                   opt_type=OptionType.BOOLEAN)
     @slash_option(name="provider",
                   description="Search provider. Type: 'default' to view your current default provider.",
@@ -252,6 +252,8 @@ class WishList(Extension):
         if nudge:
             self.nudgeOwner = True
             logger.debug(f"Nudge nudge nudge, {ctx.author} is nudging {ctx.bot.owner}")
+        else:
+            self.nudgeOwner = False
 
         # Sort by age
 
@@ -479,7 +481,7 @@ class WishList(Extension):
                 embed = await wishlist_search_embed(title=title, title_desc=subtitle, author=author,
                                                     cover=cover, additional_info=additional_info)
 
-                await self.bot.owner.send(f"{ctx.author} has kindly requested {title}.", embed=embed)
+                await self.bot.owner.send(f"**{ctx.author}** has kindly requested **{title}**.", embed=embed)
         else:
             logger.warning('Book title or author already exists, marking as failed!')
             await ctx.edit_origin(content="Request already exists!", components=component_fail)
