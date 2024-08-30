@@ -97,46 +97,17 @@ def search_all_wishlists():
     return rows
 
 
-async def wishlist_search_embed(title: str, title_desc: str, author: str, cover: str, additional_info: str, footer=''):
+async def wishlist_search_embed(title: str, title_desc: str, author: str, cover: str, additional_info: str, footer='',
+                                requested_by=''):
     embed_message = Embed(title=title, description=title_desc)
+    if requested_by != '':
+        embed_message.add_field(name='Requested By:', value=requested_by)
     embed_message.add_field(name='Author', value=author)
     embed_message.add_field(name='Additional Information', value=additional_info, inline=False)
     embed_message.add_image(cover)
     embed_message.footer = bookshelf_traveller_footer + " | " + footer
 
     return embed_message
-
-
-async def wishlist_view_embed(author_id, search_all=False):
-    if search_all:
-        result = search_all_wishlists()
-    else:
-        result = search_wishlist_db(author_id)
-    embeds = []
-    count = 0
-    if result:
-        for item in result:
-            count += 1
-            logger.debug(f"Wishlist DB Result {count}: {item[7]}")
-            book_dict = json5.loads(item[7])
-
-            title = book_dict.get('title')
-            subtitle = book_dict.get('subtitle')
-            author = book_dict.get('author')
-            narrators = book_dict.get('narrator')
-            cover = book_dict.get('cover')
-            publisher = book_dict.get('publisher')
-            provider = DEFAULT_PROVIDER
-            published = book_dict.get('publishedYear')
-
-            add_info = f"Publisher: **{publisher}**\nYear Published: **{published}**\nProvided by: **{provider}**\nNarrator: **{narrators}**\n"
-
-            embed_message = await wishlist_search_embed(title=title, author=author, cover=cover,
-                                                        additional_info=add_info, title_desc=subtitle,
-                                                        footer=f'Search Provider: {provider}')
-            embeds.append(embed_message)
-
-        return embeds
 
 
 def remove_book_db(title: str, discord_id: int):
@@ -188,6 +159,47 @@ class WishList(Extension):
         self.completeAudioLibrary = []
         self.forceWishlist = False
         self.book_options = []
+
+    # Multi-Use Functions
+    async def wishlist_view_embed(self, author_id, search_all=False):
+        if search_all:
+            result = search_all_wishlists()
+            logger.debug(f"View All Result: {result}")
+        else:
+            result = search_wishlist_db(author_id)
+        embeds = []
+        count = 0
+        if result:
+            for item in result:
+                count += 1
+                logger.debug(f"Wishlist DB Result {count}: {item[7]}")
+                book_dict = json5.loads(item[7])
+
+                title = book_dict.get('title')
+                subtitle = book_dict.get('subtitle')
+                author = book_dict.get('author')
+                narrators = book_dict.get('narrator')
+                cover = book_dict.get('cover')
+                publisher = book_dict.get('publisher')
+                provider = DEFAULT_PROVIDER
+                published = book_dict.get('publishedYear')
+
+                add_info = f"Publisher: **{publisher}**\nYear Published: **{published}**\nProvided by: **{provider}**\nNarrator: **{narrators}**\n"
+
+                if search_all:
+                    discord_id = item[6]
+                    requestor = await self.bot.fetch_user(discord_id)
+                    requestor_user = requestor.username
+                    embed_message = await wishlist_search_embed(title=title, author=author, cover=cover,
+                                                                additional_info=add_info, title_desc=subtitle,
+                                                                footer=f'Search Provider: {provider}', requested_by=requestor_user)
+                else:
+                    embed_message = await wishlist_search_embed(title=title, author=author, cover=cover,
+                                                                additional_info=add_info, title_desc=subtitle,
+                                                                footer=f'Search Provider: {provider}')
+                embeds.append(embed_message)
+
+            return embeds
 
     # Slash Commands --------------------------
 
@@ -275,7 +287,7 @@ class WishList(Extension):
 
     @slash_command(name='wishlist', description='View your wishlist')
     async def view_wishlist(self, ctx: SlashContext):
-        embeds = await wishlist_view_embed(ctx.author_id)
+        embeds = await self.wishlist_view_embed(ctx.author_id)
         if embeds:
             paginator = Paginator.create_from_embeds(self.client, *embeds)
             await paginator.send(ctx, ephemeral=True)
@@ -288,7 +300,7 @@ class WishList(Extension):
     @check(is_owner())
     @slash_command(name='view-all-wishlists', description="Admin command, view all wishlists.")
     async def view_all_wishlists(self, ctx: SlashContext):
-        embeds = await wishlist_view_embed(ctx.author_id, search_all=True)
+        embeds = await self.wishlist_view_embed(ctx.author_id, search_all=True)
 
         if embeds:
             paginator = Paginator.create_from_embeds(self.client, *embeds)
