@@ -285,6 +285,7 @@ class WishList(Extension):
                 "You currently don't have any items in your wishlist. Please use **`/add-book`** to add items to your wishlist.",
                 ephemeral=True)
 
+    @check(is_owner())
     @slash_command(name='view-all-wishlists', description="Admin command, view all wishlists.")
     async def view_all_wishlists(self, ctx: SlashContext):
         embeds = await wishlist_view_embed(ctx.author_id)
