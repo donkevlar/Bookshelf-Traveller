@@ -11,9 +11,11 @@ from interactions import *
 from interactions.api.events import *
 from datetime import datetime
 from dotenv import load_dotenv
+from wishlist import wishlist_conn
 
 # File Imports
 import bookshelfAPI as c
+import db_additions
 
 # Pulls from bookshelf file
 load_dotenv()
@@ -165,6 +167,20 @@ if __name__ == '__main__':
         bot.load_extension("multi_user")
     else:
         logger.warning("MULTI_USER module disabled!")
+
+    # Check if any db need modifications
+    logger.debug("Altering default database columns")
+
+    try:
+        secondary_command = '''
+            UPDATE wishlist
+            SET downloaded = 0
+            WHERE downloaded IS NULL'''
+        db_additions.add_column_to_db(db_connection=wishlist_conn,table_name='wishlist', column_name='downloaded', secondary_execute=secondary_command)
+
+    except Exception as e:
+        logger.error(f"Error occured while attempting to alter original databases")
+        logger.error(e)
 
     # Start Bot
     bot.start(settings.DISCORD_API_SECRET)

@@ -37,6 +37,7 @@ provider TEXT NOT NULL,
 provider_id TEXT NOT NULL, 
 discord_id INTEGER NOT NULL,
 book_data TEXT NOT NULL,
+downloaded INTEGER NOT NULL DEFAULT 0,
 UNIQUE(title, author)
 )
                         ''')
@@ -66,25 +67,34 @@ def search_wishlist_db(discord_id: int = 0, title=""):
     logger.debug('Searching for books in wishlist db!')
     if discord_id == 0 and title == "":
         wishlist_cursor.execute(
-            '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist''')
+            '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist AND downloaded = 0''')
 
         rows = wishlist_cursor.fetchall()
     elif discord_id != 0 and title == "":
         logger.debug("Searching wishlist db using discord id!")
         wishlist_cursor.execute(
-            '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist WHERE discord_id = ?''',
+            '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist WHERE discord_id = ? AND downloaded = 0''',
             (discord_id,))
 
         rows = wishlist_cursor.fetchall()
 
     elif title != "" and discord_id == 0:
         wishlist_cursor.execute(
-            '''SELECT discord_id, book_data, title FROM wishlist WHERE title LIKE ?''',
+            '''SELECT discord_id, book_data, title FROM wishlist WHERE title LIKE ? AND downloaded = 0''',
             (title,))
 
         rows = wishlist_cursor.fetchall()
 
     return rows  # NOQA
+
+
+def updated_wishlist_db(discord_id: int, downloaded: int, title: str):
+    wishlist_cursor.execute(
+        '''
+        UPDATE wishlist set downloaded = ? Where title = ? AND discord_id = ?
+        ''', (downloaded, title, discord_id)
+    )
+    wishlist_conn.commit()
 
 
 def search_all_wishlists():
@@ -192,7 +202,8 @@ class WishList(Extension):
                     requestor_user = requestor.username
                     embed_message = await wishlist_search_embed(title=title, author=author, cover=cover,
                                                                 additional_info=add_info, title_desc=subtitle,
-                                                                footer=f'Search Provider: {provider}', requested_by=requestor_user)
+                                                                footer=f'Search Provider: {provider}',
+                                                                requested_by=requestor_user)
                 else:
                     embed_message = await wishlist_search_embed(title=title, author=author, cover=cover,
                                                                 additional_info=add_info, title_desc=subtitle,
