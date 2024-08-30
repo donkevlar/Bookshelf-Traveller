@@ -288,7 +288,7 @@ class WishList(Extension):
     @check(is_owner())
     @slash_command(name='view-all-wishlists', description="Admin command, view all wishlists.")
     async def view_all_wishlists(self, ctx: SlashContext):
-        embeds = await wishlist_view_embed(ctx.author_id)
+        embeds = await wishlist_view_embed(ctx.author_id, search_all=True)
 
         if embeds:
             paginator = Paginator.create_from_embeds(self.client, *embeds)
