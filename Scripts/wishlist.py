@@ -87,6 +87,16 @@ def search_wishlist_db(discord_id: int = 0, title=""):
     return rows  # NOQA
 
 
+def search_all_wishlists():
+    wishlist_cursor.execute('''
+    SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist'''
+                            )
+
+    rows = wishlist_cursor.fetchall()
+
+    return rows
+
+
 async def wishlist_search_embed(title: str, title_desc: str, author: str, cover: str, additional_info: str, footer=''):
     embed_message = Embed(title=title, description=title_desc)
     embed_message.add_field(name='Author', value=author)
@@ -95,6 +105,38 @@ async def wishlist_search_embed(title: str, title_desc: str, author: str, cover:
     embed_message.footer = bookshelf_traveller_footer + " | " + footer
 
     return embed_message
+
+
+async def wishlist_view_embed(author_id, search_all=False):
+    if search_all:
+        result = search_all_wishlists()
+    else:
+        result = search_wishlist_db(author_id)
+    embeds = []
+    count = 0
+    if result:
+        for item in result:
+            count += 1
+            logger.debug(f"Wishlist DB Result {count}: {item[7]}")
+            book_dict = json5.loads(item[7])
+
+            title = book_dict.get('title')
+            subtitle = book_dict.get('subtitle')
+            author = book_dict.get('author')
+            narrators = book_dict.get('narrator')
+            cover = book_dict.get('cover')
+            publisher = book_dict.get('publisher')
+            provider = DEFAULT_PROVIDER
+            published = book_dict.get('publishedYear')
+
+            add_info = f"Publisher: **{publisher}**\nYear Published: **{published}**\nProvided by: **{provider}**\nNarrator: **{narrators}**\n"
+
+            embed_message = await wishlist_search_embed(title=title, author=author, cover=cover,
+                                                        additional_info=add_info, title_desc=subtitle,
+                                                        footer=f'Search Provider: {provider}')
+            embeds.append(embed_message)
+
+        return embeds
 
 
 def remove_book_db(title: str, discord_id: int):
@@ -154,7 +196,8 @@ class WishList(Extension):
     @slash_option(name="provider",
                   description="Search provider. Type: 'default' to view your current default provider.",
                   opt_type=OptionType.STRING, autocomplete=True)
-    @slash_option(name="force", description="Skips library checks, forcefully attempt to add to wishlist.", opt_type=OptionType.BOOLEAN)
+    @slash_option(name="force", description="Skips library checks, forcefully attempt to add to wishlist.",
+                  opt_type=OptionType.BOOLEAN)
     async def add_book_command(self, ctx: SlashContext, title: str, provider=DEFAULT_PROVIDER, force=False):
         await ctx.defer(ephemeral=True)
         book_search = await c.bookshelf_search_books(title=title, provider=provider)
@@ -232,37 +275,28 @@ class WishList(Extension):
 
     @slash_command(name='wishlist', description='View your wishlist')
     async def view_wishlist(self, ctx: SlashContext):
-        result = search_wishlist_db(ctx.author_id)
-        embeds = []
-        count = 0
-        if result:
-            for item in result:
-                count += 1
-                logger.debug(f"Wishlist DB Result {count}: {item[7]}")
-                book_dict = json5.loads(item[7])
-
-                title = book_dict.get('title')
-                subtitle = book_dict.get('subtitle')
-                author = book_dict.get('author')
-                narrators = book_dict.get('narrator')
-                cover = book_dict.get('cover')
-                publisher = book_dict.get('publisher')
-                provider = DEFAULT_PROVIDER
-                published = book_dict.get('publishedYear')
-
-                add_info = f"Publisher: **{publisher}**\nYear Published: **{published}**\nProvided by: **{provider}**\nNarrator: **{narrators}**\n"
-
-                embed_message = await wishlist_search_embed(title=title, author=author, cover=cover,
-                                                            additional_info=add_info, title_desc=subtitle,
-                                                            footer=f'Search Provider: {provider}')
-                embeds.append(embed_message)
-
+        embeds = await wishlist_view_embed(ctx.author_id)
+        if embeds:
             paginator = Paginator.create_from_embeds(self.client, *embeds)
             await paginator.send(ctx, ephemeral=True)
 
         else:
             await ctx.send(
                 "You currently don't have any items in your wishlist. Please use **`/add-book`** to add items to your wishlist.",
+                ephemeral=True)
+
+    @check(is_owner())
+    @slash_command(name='view-all-wishlists', description="Admin command, view all wishlists.")
+    async def view_all_wishlists(self, ctx: SlashContext):
+        embeds = await wishlist_view_embed(ctx.author_id)
+
+        if embeds:
+            paginator = Paginator.create_from_embeds(self.client, *embeds)
+            await paginator.send(ctx, ephemeral=True)
+
+        else:
+            await ctx.send(
+                "You currently don't have any items in your wishlist db. Please use **`/add-book`** to add items to your wishlist.",
                 ephemeral=True)
 
     # Autocomplete -------------------------------------------------
@@ -375,7 +409,8 @@ class WishList(Extension):
                         self.searchBookData = None
                         self.messageString = ''
                         await ctx.edit_origin(content=f"Title: {title} already exists in your library! "
-                                                      f"use `force: True` option if you want to force it into your wishlist.", components=component_fail)
+                                                      f"use `force: True` option if you want to force it into your wishlist.",
+                                              components=component_fail)
                         return
         else:
             logger.warning("Force wishlist is enabled, attempting to add book to wishlist.")
