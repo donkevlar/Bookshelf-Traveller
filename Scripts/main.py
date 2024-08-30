@@ -176,7 +176,7 @@ if __name__ == '__main__':
             UPDATE wishlist
             SET downloaded = 0
             WHERE downloaded IS NULL'''
-        db_additions.add_column_to_db(db_connection=wishlist_conn,table_name='wishlist', column_name='downloaded', secondary_execute=secondary_command)
+        db_additions.add_column_to_db(db_connection=wishlist_conn, table_name='wishlist', column_name='downloaded', secondary_execute=secondary_command)
 
     except Exception as e:
         logger.debug(f"Error occured while attempting to alter original databases")
