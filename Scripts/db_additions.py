@@ -1,5 +1,5 @@
 import sqlite3
-from wishlist import wishlist_conn, wishlist_cursor
+from wishlist import wishlist_conn
 from subscription_task import conn as task_conn
 from subscription_task import cursor as task_cursor
 
