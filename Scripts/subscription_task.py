@@ -13,7 +13,7 @@ from interactions.api.events import Startup
 from datetime import datetime, timedelta
 from interactions.ext.paginators import Paginator
 from dotenv import load_dotenv
-from wishlist import search_wishlist_db, remove_book_db, updated_wishlist_db
+from wishlist import search_wishlist_db, mark_book_as_downloaded, updated_wishlist_db
 
 # Enable dot env outside of docker
 load_dotenv()
@@ -274,7 +274,7 @@ class SubscriptionTask(Extension):
                             # Note: Function will send embeds individually if count > 10 due to limit
                             await self.send_user_wishlist(discord_id=discord_id, title=title, author=author,
                                                           embed=embeds)
-                            updated_wishlist_db(discord_id=discord_id, title=search_title, downloaded=1)
+                            mark_book_as_downloaded(discord_id=discord_id, title=search_title)
                             # remove_book_db(title=search_title, discord_id=discord_id)
 
             return embeds

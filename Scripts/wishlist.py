@@ -120,11 +120,10 @@ async def wishlist_search_embed(title: str, title_desc: str, author: str, cover:
     return embed_message
 
 
-def remove_book_db(title: str, discord_id: int):
+def mark_book_as_downloaded(title: str, discord_id: int):
     logger.warning(f'Attempting to delete user {title} from db!')
     try:
-        wishlist_cursor.execute("DELETE FROM wishlist WHERE title = ? AND discord_id = ?", (title, int(discord_id)))
-        wishlist_conn.commit()
+        updated_wishlist_db(discord_id=discord_id, downloaded=1, title=title)
         logger.info(f"Successfully deleted title {title} from db!")
         return True
     except sqlite3.Error as e:
@@ -289,7 +288,7 @@ class WishList(Extension):
                   opt_type=OptionType.STRING, required=True, autocomplete=True)
     async def remove_book_command(self, ctx: SlashContext, book: str):
         await ctx.defer(ephemeral=True)
-        result = remove_book_db(discord_id=ctx.author_id, title=book)
+        result = mark_book_as_downloaded(discord_id=ctx.author_id, title=book)
         if result:
             await ctx.send(f"Successfully removed {book} from your wishlist!", ephemeral=True)
         else:
