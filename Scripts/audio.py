@@ -1,3 +1,5 @@
+import asyncio
+
 import pytz
 from interactions import *
 from interactions.api.voice.audio import AudioVolume
@@ -233,15 +235,18 @@ class AudioPlayBack(Extension):
             logger.info("Current Chapter Sync: " + current_chapter['title'])
             self.currentChapter = current_chapter
 
-    @Task.create(trigger=IntervalTrigger(minutes=5))
+    @Task.create(trigger=IntervalTrigger(minutes=4))
     async def auto_kill_session(self):
         logger.warning("Auto kill session task active!")
         if self.play_state == 'paused' and self.audio_message is not None:
             voice_state = self.bot.get_bot_voice_state(self.active_guild_id)
             channel = await self.bot.fetch_channel(self.current_channel)
 
-            if channel and voice_state:
-                await channel.send(f'Current playback of **{self.bookTitle}** has been stopped due to inactivity.')
+            chan_msg = await channel.send(f"Current playback of **{self.bookTitle}** will be stopped in **60 seconds** if no activity occurs.")
+            await asyncio.sleep(60)
+
+            if channel and voice_state and self.play_state == 'paused':
+                await chan_msg.edit(content=f'Current playback of **{self.bookTitle}** has been stopped due to inactivity.')
                 await voice_state.stop()
                 await voice_state.disconnect()
                 await c.bookshelf_close_session(self.sessionID)
@@ -253,8 +258,15 @@ class AudioPlayBack(Extension):
                 self.audio_message = None
                 self.audioObj.cleanup()  # NOQA
 
-            # End loop
-            self.auto_kill_session.stop()
+                if self.session_update.running:
+                    self.session_update.stop()
+
+            else:
+                logger.debug("Session resumed, aborting task and deleting message!")
+                await chan_msg.delete()
+
+        # End loop
+        self.auto_kill_session.stop()
             
     # Random Functions ------------------------
     # Change Chapter Function
