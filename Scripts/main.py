@@ -11,7 +11,6 @@ from interactions import *
 from interactions.api.events import *
 from datetime import datetime
 from dotenv import load_dotenv
-from wishlist import wishlist_conn
 
 # File Imports
 import bookshelfAPI as c
@@ -172,6 +171,7 @@ if __name__ == '__main__':
     logger.debug("Altering default database columns")
 
     try:
+        from wishlist import wishlist_conn
         secondary_command = '''
             UPDATE wishlist
             SET downloaded = 0
