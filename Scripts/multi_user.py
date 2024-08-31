@@ -296,21 +296,21 @@ class MultiUser(Extension):
         else:
             await ctx.send(f'Failed to delete user {user} from database!', ephemeral=True)
 
-    @slash_command(name='user', description="display the currently logged in ABS user", dm_permission=False)
+    @slash_command(name='user', description="Display the currently logged in ABS user", dm_permission=False)
     async def user_check(self, ctx: SlashContext):
         abs_stored_token = os.getenv('bookshelfToken')
         discord_id = ctx.author.id
         result = search_user_db(token=abs_stored_token)
         if result:
             username = result[0]
-            await ctx.send(content=f"user {username} is currently logged in.", ephemeral=True)
+            await ctx.send(content=f"user **{username}** is currently logged in.", ephemeral=True)
         else:
             user_call = c.bookshelf_user_login(token=abs_stored_token)
             username = user_call['username']
             if username != '':
                 user_insert = insert_data(discord_id=discord_id, token=abs_stored_token, user=username)
                 if user_insert:
-                    await ctx.send(content=f"user {username} is currently logged in.", ephemeral=True)
+                    await ctx.send(content=f"user **{username}** is currently logged in.", ephemeral=True)
             else:
                 await ctx.send(content=f"Error occured, please visit logs for details and try again later.",
                                ephemeral=True)
