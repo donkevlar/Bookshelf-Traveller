@@ -2,6 +2,7 @@ on:
   push:
     paths-ignore:
       - 'README.md' # Specify the path to your README file
+      - '.github/' # Ignore github flows and templates
 
 jobs:
   login:
