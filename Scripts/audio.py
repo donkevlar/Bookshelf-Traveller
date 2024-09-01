@@ -349,7 +349,8 @@ class AudioPlayBack(Extension):
     @slash_option(name="book", description="Enter a book title. type 'random' for a surprise.", required=True,
                   opt_type=OptionType.STRING,
                   autocomplete=True)
-    async def play_audio(self, ctx: SlashContext, book: str):
+    @slash_option(name="force", description="Force start an item which might of already been marked as finished. IMPORTANT: THIS CAN FAIL!", opt_type=OptionType.BOOLEAN)
+    async def play_audio(self, ctx: SlashContext, book: str, force=False):
         if playback_role != 0:
             logger.info('PLAYBACK_ROLE is currently active, verifying if user is authorized.')
             if not ctx.author.has_role(playback_role):  # NOQA
@@ -375,7 +376,7 @@ class AudioPlayBack(Extension):
 
         current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(item_id=book)
 
-        if bookFinished:
+        if bookFinished and force is False:
             await ctx.send(content="Book finished, please mark it as unfinished in UI. Aborting.", ephemeral=True)
             return
 
@@ -484,7 +485,7 @@ class AudioPlayBack(Extension):
                 await ctx.voice_state.stop()
                 await ctx.author.voice.channel.disconnect()
                 await self.client.change_presence(activity=None)
-                await ctx.author.channel.send(f'Issue with playback: {e}')
+                await ctx.author.channel.send(f'Issue with playback: {e}') # NOQA
                 logger.error(f"Error occured during execution of /play : \n {e}")
                 logger.error(e)
 
@@ -634,6 +635,12 @@ class AudioPlayBack(Extension):
     @slash_command(name='refresh', description='re-sends your current playback card.')
     async def refresh_play_card(self, ctx: SlashContext):
         if ctx.voice_state:
+            try:
+                current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(self.bookItemID)
+                self.currentChapterTitle = current_chapter.get('title')
+            except Exception as e:
+                logger.error(f"Error trying to fetch chapter title. {e}")
+
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
             if self.play_state == "playing":
                 await ctx.send(embed=embed_message, components=component_rows_initial, ephemeral=True)
@@ -676,6 +683,7 @@ class AudioPlayBack(Extension):
                 print(e)
 
         else:
+            ctx.deferred = True
             try:
                 if user_input.lower() in 'random':
                     logger.debug('User input includes random, time for a surprise! :)')
