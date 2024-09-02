@@ -63,7 +63,7 @@ def insert_wishlist_data(title: str, author: str, description: str, cover: str, 
         return False
 
 
-def search_wishlist_db(discord_id: int = 0, title=""):
+def search_wishlist_db(discord_id: int = 0, title="", provider_id=""):
     logger.debug('Searching for books in wishlist db!')
     if discord_id == 0 and title == "":
         wishlist_cursor.execute(
@@ -78,10 +78,10 @@ def search_wishlist_db(discord_id: int = 0, title=""):
 
         rows = wishlist_cursor.fetchall()
 
-    elif title != "" and discord_id == 0:
+    elif title != "" and discord_id == 0 or provider_id != '':
         wishlist_cursor.execute(
-            '''SELECT discord_id, book_data, title FROM wishlist WHERE title LIKE ? AND downloaded = 0''',
-            (title,))
+            '''SELECT discord_id, book_data, title FROM wishlist WHERE title LIKE ? AND downloaded = 0 OR provider_id = ? AND downloaded = 0''',
+            (title, provider_id))
 
         rows = wishlist_cursor.fetchall()
 

@@ -641,6 +641,7 @@ async def bookshelf_audio_obj(item_id: str):
     currentTime = data['currentTime']
     session_id = data['id']
     bookTitle = data['mediaMetadata']['title']
+    bookDuration = data.get('duration')
 
     for file in audiofiles:
         ino = file['ino']
@@ -650,7 +651,7 @@ async def bookshelf_audio_obj(item_id: str):
     onlineURL = f"{defaultAPIURL}/items/{item_id}/file/{ino}{tokenInsert}"
     logger.info(f"attempting to play: {defaultAPIURL}/items/{item_id}/file/{ino}")
 
-    return onlineURL, currentTime, session_id, bookTitle
+    return onlineURL, currentTime, session_id, bookTitle, bookDuration
 
 
 async def bookshelf_session_update(session_id: str, item_id: str, current_time: float, next_time=None):
