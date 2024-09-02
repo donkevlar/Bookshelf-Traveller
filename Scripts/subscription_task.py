@@ -142,12 +142,10 @@ async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
     logger.debug("Initializing NewBookList function")
     items_added = []
     current_time = datetime.now()
-    library_count = 0
 
     libraries = await c.bookshelf_libraries()
 
-    for library in libraries:
-        library_count += 1
+    library_count = len(libraries)
 
     logger.debug(f'Found {library_count} libraries')
 
@@ -163,6 +161,12 @@ async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
             latest_item_type = item.get('mediaType')
             latest_item_author = item.get('author')
             latest_item_bookID = item.get('id')
+            try:
+                latest_item_provider_id = item.get('asin')
+            except Exception as e:
+                latest_item_provider_id = ''
+                logger.debug("Couldn't fetch asin from item. Likely was not set with metadata.")
+                logger.debug(f"Error: {e}")
 
             if "(Abridged)" in latest_item_title:
                 latest_item_title = latest_item_title.replace("(Abridged)", '').strip()
@@ -175,7 +179,7 @@ async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
 
             if latest_item_time_added >= timestamp_minus_delta and latest_item_type == 'book':
                 items_added.append({"title": latest_item_title, "addedTime": formatted_time,
-                                    "author": latest_item_author, "id": latest_item_bookID})
+                                    "author": latest_item_author, "id": latest_item_bookID, "provider_id": latest_item_provider_id})
 
         return items_added
 
