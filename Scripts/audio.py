@@ -170,6 +170,7 @@ class AudioPlayBack(Extension):
         self.sessionID = ''
         self.bookItemID = ''
         self.bookTitle = ''
+        self.bookDuration = None
         self.currentTime = 0.0
         # Chapter VARS
         self.currentChapter = None
@@ -296,9 +297,10 @@ class AudioPlayBack(Extension):
 
                     logger.info(f"Selected Chapter: {self.newChapterTitle}, Starting at: {chapterStart}")
 
-                    audio_obj, currentTime, sessionID, bookTitle = await c.bookshelf_audio_obj(self.bookItemID)
+                    audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(self.bookItemID)
                     self.sessionID = sessionID
                     self.currentTime = currentTime
+                    self.bookDuration = bookDuration
 
                     audio = AudioVolume(audio_obj)
                     audio.ffmpeg_before_args = f"-ss {chapterStart}"
@@ -327,12 +329,26 @@ class AudioPlayBack(Extension):
             color=color,
         )
 
+        # Convert book duration into appropriate times
+        duration = self.bookDuration
+        TimeState = 'Seconds'
+        _time = duration
+        if self.bookDuration >= 60 and self.bookDuration < 3600:
+            _time = round(duration / 60, 2)
+            TimeState = 'Minutes'
+        elif self.bookDuration >= 3600:
+            _time = round(duration / 3600, 2)
+            TimeState = 'Hours'
+
+        formatted_duration = f"{_time} {TimeState}"
+
         # Add ABS user info
         user_info = f"Username: **{self.username}**\nUser Type: **{self.user_type}**"
         embed_message.add_field(name='ABS Information', value=user_info)
 
         embed_message.add_field(name='Playback Information', value=f"Current State: **{self.play_state.upper()}**"
                                                                    f"\nCurrent Chapter: **{chapter}**"
+                                                                   f"\nBook Duration: **{formatted_duration}**"
                                                                    f"\nCurrent volume: **{round(self.volume * 100)}%**")  # NOQA
 
         # Add media image (If using HTTPS)
@@ -386,7 +402,7 @@ class AudioPlayBack(Extension):
             return
 
         # Get Bookshelf Playback URI, Starts new session
-        audio_obj, currentTime, sessionID, bookTitle = await c.bookshelf_audio_obj(book)
+        audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(book)
 
         # Get Book Cover URL
         cover_image = await c.bookshelf_cover_image(book)
@@ -419,6 +435,7 @@ class AudioPlayBack(Extension):
         self.current_playback_time = 0
         self.audio_context = ctx
         self.active_guild_id = ctx.guild_id
+        self.bookDuration = bookDuration
 
         # Chapter Vars
         self.isPodcast = isPodcast
@@ -894,7 +911,7 @@ class AudioPlayBack(Extension):
         await c.bookshelf_close_session(self.sessionID)
         self.audioObj.cleanup()  # NOQA
 
-        audio_obj, currentTime, sessionID, bookTitle = await c.bookshelf_audio_obj(self.bookItemID)
+        audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(self.bookItemID)
 
         self.sessionID = sessionID
         self.currentTime = currentTime
@@ -932,7 +949,7 @@ class AudioPlayBack(Extension):
         ctx.voice_state.channel.voice_state.player.stop()
         await c.bookshelf_close_session(self.sessionID)
         self.audioObj.cleanup()  # NOQA
-        audio_obj, currentTime, sessionID, bookTitle = await c.bookshelf_audio_obj(self.bookItemID)
+        audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(self.bookItemID)
 
         self.currentTime = currentTime
         self.sessionID = sessionID
