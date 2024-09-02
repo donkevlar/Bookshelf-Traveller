@@ -2,8 +2,6 @@ import os
 import sqlite3
 import time
 
-import json5
-
 import bookshelfAPI as c
 import settings as s
 import logging
@@ -13,7 +11,7 @@ from interactions.api.events import Startup
 from datetime import datetime, timedelta
 from interactions.ext.paginators import Paginator
 from dotenv import load_dotenv
-from wishlist import search_wishlist_db, mark_book_as_downloaded, updated_wishlist_db
+from wishlist import search_wishlist_db, mark_book_as_downloaded
 
 # Enable dot env outside of docker
 load_dotenv()
