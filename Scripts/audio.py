@@ -11,8 +11,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 import random
 
-# Temp hot fix
-from interactions.api.voice.voice_gateway import VoiceGateway, OP, random  # NOQA
+# # Temp hot fix
+# from interactions.api.voice.voice_gateway import VoiceGateway, OP, random  # NOQA
 
 # HOT FIX for voice - Remove once >5.13.1 has been released.
 # async def new_send_heartbeat(self) -> None:
@@ -238,8 +238,8 @@ class AudioPlayBack(Extension):
 
     @Task.create(trigger=IntervalTrigger(minutes=4))
     async def auto_kill_session(self):
-        logger.warning("Auto kill session task active!")
         if self.play_state == 'paused' and self.audio_message is not None:
+            logger.warning("Auto kill session task active! Playback was paused, verifying if session should be active.")
             voice_state = self.bot.get_bot_voice_state(self.active_guild_id)
             channel = await self.bot.fetch_channel(self.current_channel)
 
@@ -266,9 +266,14 @@ class AudioPlayBack(Extension):
                 logger.debug("Session resumed, aborting task and deleting message!")
                 await chan_msg.delete()
 
-        # End loop
-        self.auto_kill_session.stop()
-            
+            # End loop
+            self.auto_kill_session.stop()
+
+        # elif self.play_state == 'playing':
+        #     logger.info('Verifying if session should be active')
+        #     if self.current_channel is not None:
+        #         channel = self.bot.fetch_channel(self.current_channel)
+
     # Random Functions ------------------------
     # Change Chapter Function
     async def move_chapter(self, option: str):
