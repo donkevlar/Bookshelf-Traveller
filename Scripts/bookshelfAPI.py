@@ -32,6 +32,16 @@ def successMSG(endpoint, status):
 
 async def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET=False,
                          POST=False, params=None):
+    """
+    :param endpoint:
+    :param Headers:
+    :param Data:
+    :param Token:
+    :param GET:
+    :param POST:
+    :param params:
+    :return: r -> requests or httpx object if status 200.
+    """
     bookshelfURL = SERVER_URL
     API_URL = bookshelfURL + "/api"
     bookshelfToken = os.environ.get("bookshelfToken")
@@ -104,6 +114,12 @@ def bookshelf_test_connection():
 
 # Used to retrieve the token for the user logging in
 def bookshelf_user_login(username='', password='', token=''):
+    """
+    :param username:
+    :param password:
+    :param token:
+    :return: user_info(dict) -> keys: username, token, type
+    """
     endpoint = "/login"
     token_endpoint = f"/api/authorize?token={token}"
     bookshelfURL = os.environ.get("bookshelfURL")
@@ -167,7 +183,21 @@ async def bookshelf_auth_test():
         logger.info("Cleaning up, authentication")
 
 
-async def bookshelf_get_item_details(book_id):
+async def bookshelf_get_item_details(book_id) -> dict:
+    """
+    :param book_id:
+    :return: formatted_data(dict) -> keys: title,
+        author,
+        narrator,
+        series,
+        publisher,
+        genres,
+        publishedYear,
+        description,
+        language,
+        duration,
+        addedDate
+    """
     # Get Media Title
     _url = f"/items/{book_id}"
     r = await bookshelf_conn(GET=True, endpoint=_url)
@@ -373,7 +403,11 @@ async def bookshelf_item_progress(item_id):
         return formatted_info
 
 
-async def bookshelf_title_search(display_title: str):
+async def bookshelf_title_search(display_title: str) -> list:
+    """
+    :param display_title:
+    :return: found_titles(list)
+    """
     libraries = await bookshelf_libraries()
     valid_media_types = ['book']
 
@@ -507,6 +541,10 @@ async def bookshelf_library_csv(library_id: str, file_name='books.csv'):
 
 
 async def bookshelf_cover_image(item_id: str):
+    """
+    :param item_id:
+    :return: cover link
+    """
     if optional_image_url != '':
         bookshelfURL = optional_image_url
     else:
@@ -566,6 +604,11 @@ async def bookshelf_list_backup():
 
 
 async def bookshelf_get_current_chapter(item_id: str, current_time=0):
+    """
+    :param item_id:
+    :param current_time:
+    :return: foundChapter, chapter_array, book_finished, isPodcast
+    """
     try:
         progress_endpoint = f"/me/progress/{item_id}"
         endpoint = f"/items/{item_id}"
@@ -619,6 +662,10 @@ async def bookshelf_get_current_chapter(item_id: str, current_time=0):
 
 
 async def bookshelf_audio_obj(item_id: str):
+    """
+    :param item_id:
+    :return: onlineURL, currentTime, session_id, bookTitle, bookDuration
+    """
     endpoint = f"/items/{item_id}/play"
     headers = {'Content-Type': 'application/json'}
     data = {"deviceInfo": {"clientName": "Bookshelf-Traveller", "deviceId": "Bookshelf-Traveller"},
@@ -655,6 +702,13 @@ async def bookshelf_audio_obj(item_id: str):
 
 
 async def bookshelf_session_update(session_id: str, item_id: str, current_time: float, next_time=None):
+    """
+    :param session_id:
+    :param item_id:
+    :param current_time:
+    :param next_time:
+    :return: if successful: updatedTime, duration, serverCurrentTime, finished_book
+    """
     get_session_endpoint = f"/session/{session_id}"
     sync_endpoint = f"/session/{session_id}/sync"
 
@@ -726,6 +780,10 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
 
 # Need to  revisit this at some point
 async def bookshelf_close_session(session_id: str):
+    """
+    :param session_id
+    :return: None
+    """
     endpoint = f"/session/{session_id}/close"
     try:
         r = await bookshelf_conn(endpoint=endpoint, POST=True)
@@ -787,6 +845,12 @@ async def bookshelf_close_all_sessions(items: int):
 
 
 async def bookshelf_search_books(title: str, provider=DEFAULT_PROVIDER, author='') -> list:
+    """
+    :param title:
+    :param provider:
+    :param author:
+    :returns: data -> item object from ABS api.
+    """
     endpoint = '/search/books'
     bookshelfToken = os.environ.get("bookshelfToken")
     bookshelfURL = os.getenv('bookshelfURL')
@@ -825,7 +889,10 @@ async def bookshelf_search_books(title: str, provider=DEFAULT_PROVIDER, author='
             return data
 
 
-async def bookshelf_get_valid_books():
+async def bookshelf_get_valid_books() -> list:
+    """
+    :returns: found_books -> a list of all library items which is in a valid audio format.
+    """
     libraries = await bookshelf_libraries()
     # Get libraries
     found_books = []
