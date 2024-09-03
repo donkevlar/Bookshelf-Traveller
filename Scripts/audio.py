@@ -14,7 +14,6 @@ from datetime import datetime
 from dotenv import load_dotenv
 from utilities import time_converter
 
-
 # # Temp hot fix
 # from interactions.api.voice.voice_gateway import VoiceGateway, OP, random  # NOQA
 
@@ -160,26 +159,58 @@ CREATE TABLE IF NOT EXISTS session (
 session_id TEXT NOT NULL,
 item_id TEXT NOT NULL,
 book_title TEXT NOT NULL,
-update_time INTEGER NOT NULL DEFAULT 5,
-next_time INTEGER NOT NULL,
+current_time INTEGER NOT NULL DEFAULT 5,
+update_time INTEGER NOT NULL,
 discord_id INTEGER NOT NULL,
 UNIQUE(session_id, discord_id)
 )
                         ''')
 
+
 # Create table
 table_create()
 
-def insert_session(session, item_id, book_title, discord_id, update_time, current_time=5):
+
+async def insert_session_db(session, item_id, book_title, discord_id, update_time, current_time=5):
     try:
         cursor.execute('''
         INSERT INTO session (session_id, item_id, current_time, update_time, discord_id, book_title) VALUES (?,?,?,?,?,?)
-        ''',(session, item_id, current_time, update_time, discord_id, book_title))
+        ''', (session, item_id, current_time, update_time, discord_id, book_title))
         conn.commit()
         logger.debug(f"Successfully inserted session {session}")
         return True
     except sqlite3.IntegrityError as e:
         logger.warning(f"Failed to insert {session}, error to follow. {e}")
+        return False
+
+
+async def get_current_session_db(session):
+    cursor.execute('''SELECT * from session WHERE session_id = ?''', (session,))
+    row = cursor.fetchone()
+    logger.debug(f"found session row: {row}")
+    return row
+
+
+async def get_sessions_from_discordID(discord_id):
+    cursor.execute('''SELECT * from session WHERE discord_id = ?''', (discord_id,))
+    row = cursor.fetchall()
+    logger.debug(f"found session rows: {row}")
+    return row
+
+
+async def update_session(session, update_time: int):
+    cursor.execute('''
+    UPDATE session SET update_time = ? WHERE session_id = ? ''', (update_time, session))
+
+
+async def delete_session(session):
+    try:
+        cursor.execute('''DELETE FROM session WHERE session_id = ?''', (session,))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError as e:
+        logger.warning(
+            f"Couldn't delete {session} from session.db as an error occured. Likely this session no longer exists.")
         return False
 
 
@@ -504,11 +535,10 @@ class AudioPlayBack(Extension):
 
                 # Create session
                 logger.info(f"Initializing session {self.sessionID}")
-                try:
-                    insert_session(session=self.sessionID, item_id=self.bookItemID,
-                               book_title=self.bookTitle, update_time=self.currentTime, discord_id=ctx.author.id)
-                except Exception as e:
-                    logger.error(e)
+
+                await insert_session_db(session=self.sessionID, item_id=self.bookItemID,
+                                        book_title=self.bookTitle, update_time=self.currentTime,
+                                        discord_id=ctx.author.id)
 
                 self.audio_message = await ctx.send(content="Beginning audio stream!", embed=embed_message,
                                                     ephemeral=True, components=component_rows_initial)
