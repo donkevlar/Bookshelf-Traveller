@@ -596,6 +596,11 @@ async def bookshelf_list_backup():
 
 
 async def bookshelf_get_current_chapter(item_id: str, current_time=0):
+    """
+    :param item_id:
+    :param current_time:
+    :return: foundChapter, chapter_array, book_finished, isPodcast
+    """
     try:
         progress_endpoint = f"/me/progress/{item_id}"
         endpoint = f"/items/{item_id}"
