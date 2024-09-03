@@ -96,7 +96,7 @@ class ABSAdmin(Extension):
     @slash_option(name="email", description="enter a valid email address", required=False, opt_type=OptionType.STRING)
     async def add_user(self, ctx: SlashContext, name: str, password: str, user_type="user", email=None):
         try:
-            user_id, c_username = c.bookshelf_create_user(name, password, user_type, email=email)
+            user_id, c_username = await c.bookshelf_create_user(name, password, user_type, email=email)
             await ctx.send(f"Successfully Created User: {c_username} with ID: {user_id}", ephemeral=True)
             # Send transaction to owner.
             await ctx.bot.owner.send(f'User Created: {c_username}, with ID: {user_id}. Command issued by {ctx.author}')
@@ -106,6 +106,7 @@ class ABSAdmin(Extension):
             await ctx.send("Could not complete this at the moment, please try again later.", ephemeral=True)
             logger.warning(
                 f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occurred: {e} | Command Name: add-user')
+            logger.error(f"Unexpected error occured while attempting to create user: {e}")
 
     # Pulls the complete list of items in a library in csv
     @slash_command(name="book-list-csv",
