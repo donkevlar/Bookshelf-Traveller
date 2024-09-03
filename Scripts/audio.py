@@ -162,6 +162,26 @@ async def ownership_check(ctx: BaseContext):  # NOQA
         return True
 
 
+async def time_converter(time_sec: int) -> str:
+    """
+    :param time_sec:
+    :return: a formatted string w/ time_sec + time_format(H,M,S)
+    """
+    formatted_time = time_sec
+    playbackTimeState = 'Seconds'
+
+    if time_sec >= 60 and time_sec < 3600:
+        formatted_time = round(time_sec / 60, 2)
+        playbackTimeState = 'Minutes'
+    elif time_sec >= 3600:
+        formatted_time = round(time_sec / 3600, 2)
+        playbackTimeState = 'Hours'
+
+    formatted_string = f"{formatted_time} {playbackTimeState}"
+
+    return formatted_string
+
+
 class AudioPlayBack(Extension):
     def __init__(self, bot):
         # ABS Vars
@@ -204,21 +224,11 @@ class AudioPlayBack(Extension):
 
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
-        playbackTimeState = ''
-        formatted_time = None
         logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
 
         self.current_playback_time = self.current_playback_time + updateFrequency
 
-        if self.current_playback_time < 60:
-            formatted_time = self.current_playback_time
-            playbackTimeState = 'Seconds'
-        elif self.current_playback_time >= 60:
-            formatted_time = self.current_playback_time / 60
-            playbackTimeState = 'Minutes'
-        elif self.current_playback_time >= 3600:
-            formatted_time = self.current_playback_time / 3600
-            playbackTimeState = 'Hours'
+        formatted_time = await time_converter(self.current_playback_time)
 
         updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
             item_id=self.bookItemID,
@@ -227,7 +237,7 @@ class AudioPlayBack(Extension):
             next_time=self.nextTime)  # NOQA
 
         logger.info(f"Successfully synced session to updated time: {updatedTime} | "
-                    f"Current Playback Time: {round(formatted_time, 2)} {playbackTimeState} | session ID: {self.sessionID}")
+                    f"Current Playback Time: {formatted_time} | session ID: {self.sessionID}")
 
         current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(self.bookItemID,
                                                                                                         updatedTime)
@@ -243,11 +253,13 @@ class AudioPlayBack(Extension):
             voice_state = self.bot.get_bot_voice_state(self.active_guild_id)
             channel = await self.bot.fetch_channel(self.current_channel)
 
-            chan_msg = await channel.send(f"Current playback of **{self.bookTitle}** will be stopped in **60 seconds** if no activity occurs.")
+            chan_msg = await channel.send(
+                f"Current playback of **{self.bookTitle}** will be stopped in **60 seconds** if no activity occurs.")
             await asyncio.sleep(60)
 
             if channel and voice_state and self.play_state == 'paused':
-                await chan_msg.edit(content=f'Current playback of **{self.bookTitle}** has been stopped due to inactivity.')
+                await chan_msg.edit(
+                    content=f'Current playback of **{self.bookTitle}** has been stopped due to inactivity.')
                 await voice_state.stop()
                 await voice_state.disconnect()
                 await c.bookshelf_close_session(self.sessionID)
@@ -302,7 +314,8 @@ class AudioPlayBack(Extension):
 
                     logger.info(f"Selected Chapter: {self.newChapterTitle}, Starting at: {chapterStart}")
 
-                    audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(self.bookItemID)
+                    audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(
+                        self.bookItemID)
                     self.sessionID = sessionID
                     self.currentTime = currentTime
                     self.bookDuration = bookDuration
@@ -370,7 +383,9 @@ class AudioPlayBack(Extension):
     @slash_option(name="book", description="Enter a book title. type 'random' for a surprise.", required=True,
                   opt_type=OptionType.STRING,
                   autocomplete=True)
-    @slash_option(name="force", description="Force start an item which might of already been marked as finished. IMPORTANT: THIS CAN FAIL!", opt_type=OptionType.BOOLEAN)
+    @slash_option(name="force",
+                  description="Force start an item which might of already been marked as finished. IMPORTANT: THIS CAN FAIL!",
+                  opt_type=OptionType.BOOLEAN)
     async def play_audio(self, ctx: SlashContext, book: str, force=False):
         if playback_role != 0:
             logger.info('PLAYBACK_ROLE is currently active, verifying if user is authorized.')
@@ -507,7 +522,7 @@ class AudioPlayBack(Extension):
                 await ctx.voice_state.stop()
                 await ctx.author.voice.channel.disconnect()
                 await self.client.change_presence(activity=None)
-                await ctx.author.channel.send(f'Issue with playback: {e}') # NOQA
+                await ctx.author.channel.send(f'Issue with playback: {e}')  # NOQA
                 logger.error(f"Error occured during execution of /play : \n {e}")
                 logger.error(e)
 
@@ -658,7 +673,8 @@ class AudioPlayBack(Extension):
     async def refresh_play_card(self, ctx: SlashContext):
         if ctx.voice_state:
             try:
-                current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(self.bookItemID)
+                current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(
+                    self.bookItemID)
                 self.currentChapterTitle = current_chapter.get('title')
             except Exception as e:
                 logger.error(f"Error trying to fetch chapter title. {e}")
