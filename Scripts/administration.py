@@ -174,7 +174,7 @@ class ABSAdmin(Extension):
         user_input = ctx.input_text
         isFound, username, user_id, last_seen, isActive = await c.bookshelf_get_users(user_input)
         choice = []
-        if user_input.lower() == username.lower():
+        if user_input.lower() == username.lower() or user_input.lower() in username.lower():
             choice = [{"name": f"{username}", "value": f"{username}"}]
 
         await ctx.send(choices=choice)
