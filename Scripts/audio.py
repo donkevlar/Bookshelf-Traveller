@@ -3,6 +3,8 @@ import random
 import os
 import sqlite3
 import pytz
+from interactions.api.events import Startup
+
 import bookshelfAPI as c
 import settings as s
 import logging
@@ -191,16 +193,20 @@ async def get_current_session_db(session):
     return row
 
 
-async def get_sessions_from_discordID(discord_id):
-    cursor.execute('''SELECT * from session WHERE discord_id = ?''', (discord_id,))
-    row = cursor.fetchall()
+async def get_sessions(discord_id=0):
+    if discord_id != 0:
+        cursor.execute('''SELECT * from session WHERE discord_id = ?''', (discord_id,))
+        row = cursor.fetchall()
+    else:
+        cursor.execute('''SELECT * from session''')
+        row = cursor.fetchall()
     logger.debug(f"found session rows: {row}")
     return row
 
 
 async def update_session(session, update_time: int):
     cursor.execute('''
-    UPDATE session SET update_time = ? WHERE session_id = ? ''', (update_time, session))
+    UPDATE session SET update_time = ? WHERE session_id = ? ''', (int(update_time), session))
 
 
 async def delete_session(session):
@@ -280,25 +286,37 @@ class AudioPlayBack(Extension):
     async def session_update(self):
         logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
 
-        self.current_playback_time = self.current_playback_time + updateFrequency
+        sessions = await get_sessions()
 
-        formatted_time = time_converter(self.current_playback_time)
+        session_count = len(sessions)
+        logger.debug(f"Found {session_count} sessions in db...")
 
-        updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
-            item_id=self.bookItemID,
-            session_id=self.sessionID,
-            current_time=updateFrequency,
-            next_time=self.nextTime)  # NOQA
+        if session_count > 1:
+            for session_id, item_id, title, time_spent, update_time, discord_id in sessions:
+                pass
 
-        logger.info(f"Successfully synced session to updated time: {updatedTime} | "
-                    f"Current Playback Time: {formatted_time} | session ID: {self.sessionID}")
 
-        current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(self.bookItemID,
-                                                                                                        updatedTime)
+        else:
+            logger.debug("Skipping session manager as only 1 active session is playing...")
+            self.current_playback_time = self.current_playback_time + updateFrequency
 
-        if not isPodcast:
-            logger.info("Current Chapter Sync: " + current_chapter['title'])
-            self.currentChapter = current_chapter
+            formatted_time = time_converter(self.current_playback_time)
+
+            updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
+                item_id=self.bookItemID,
+                session_id=self.sessionID,
+                current_time=updateFrequency,
+                next_time=self.nextTime)  # NOQA
+
+            logger.info(f"Successfully synced session to updated time: {updatedTime} | "
+                        f"Current Playback Time: {formatted_time} | session ID: {self.sessionID}")
+
+            current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(self.bookItemID,
+                                                                                                            updatedTime)
+
+            if not isPodcast:
+                logger.info("Current Chapter Sync: " + current_chapter['title'])
+                self.currentChapter = current_chapter
 
     @Task.create(trigger=IntervalTrigger(minutes=4))
     async def auto_kill_session(self):
@@ -1048,6 +1066,19 @@ class AudioPlayBack(Extension):
 
         await ctx.edit_origin()
         await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
+
+    # Startup Function --------------------------------
+    @listen()
+    async def audio_startup(self, event: Startup):
+        cursor.execute("SELECT COUNT(*) FROM session")
+        rowcount = cursor.fetchone()[0]
+        if rowcount >= 1:
+            print(rowcount)
+            logger.debug("Remnant rows found in session, attempting to delete...")
+            cursor.execute('''DELETE FROM session''')
+            conn.commit()
+            count = cursor.rowcount
+            logger.debug(f"deleted a total of {count} rows from session.db")
 
     # ----------------------------
     # Other non discord related functions
