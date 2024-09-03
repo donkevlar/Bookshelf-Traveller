@@ -172,7 +172,7 @@ class ABSAdmin(Extension):
     @search_user.autocomplete("name")
     async def user_search_autocomplete(self, ctx: AutocompleteContext):
         user_input = ctx.input_text
-        isFound, username, user_id, last_seen, isActive = c.bookshelf_get_users(user_input)
+        isFound, username, user_id, last_seen, isActive = await c.bookshelf_get_users(user_input)
         choice = []
         if user_input.lower() == username.lower():
             choice = [{"name": f"{username}", "value": f"{username}"}]
