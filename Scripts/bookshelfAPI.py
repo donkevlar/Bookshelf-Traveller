@@ -403,7 +403,11 @@ async def bookshelf_item_progress(item_id):
         return formatted_info
 
 
-async def bookshelf_title_search(display_title: str):
+async def bookshelf_title_search(display_title: str) -> list:
+    """
+    :param display_title:
+    :return: found_titles(list)
+    """
     libraries = await bookshelf_libraries()
     valid_media_types = ['book']
 
@@ -537,6 +541,10 @@ async def bookshelf_library_csv(library_id: str, file_name='books.csv'):
 
 
 async def bookshelf_cover_image(item_id: str):
+    """
+    :param item_id:
+    :return: cover link
+    """
     if optional_image_url != '':
         bookshelfURL = optional_image_url
     else:
