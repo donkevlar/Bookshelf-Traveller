@@ -23,6 +23,7 @@ id INTEGER PRIMARY KEY,
 user TEXT NOT NULL,
 token TEXT NOT NULL UNIQUE,
 discord_id INTEGER NOT NULL,
+guild_id INTEGER NOT NULL,
 UNIQUE(user, token)
 )
                         ''')
