@@ -1,15 +1,19 @@
 import asyncio
-
+import random
+import os
+import sqlite3
 import pytz
-from interactions import *
-from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
 import settings as s
-from settings import TIMEZONE
 import logging
+
+from interactions import *
+from interactions.api.voice.audio import AudioVolume
+from settings import TIMEZONE
 from datetime import datetime
 from dotenv import load_dotenv
-import random
+from utilities import time_converter
+
 
 # # Temp hot fix
 # from interactions.api.voice.voice_gateway import VoiceGateway, OP, random  # NOQA
@@ -139,6 +143,45 @@ component_rows_paused: list[ActionRow] = [
         )
     )]
 
+# Create new relative path
+db_path = 'db/session.db'
+os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+# Initialize sqlite3 connection
+
+conn = sqlite3.connect(db_path)
+cursor = conn.cursor()
+
+
+def table_create():
+    logger.debug("Attempting to create session db...")
+    cursor.execute('''
+CREATE TABLE IF NOT EXISTS session (
+session_id TEXT NOT NULL,
+item_id TEXT NOT NULL,
+book_title TEXT NOT NULL,
+update_time INTEGER NOT NULL DEFAULT 5,
+next_time INTEGER NOT NULL,
+discord_id INTEGER NOT NULL,
+UNIQUE(session_id, discord_id)
+)
+                        ''')
+
+# Create table
+table_create()
+
+def insert_session(session, item_id, book_title, discord_id, update_time, current_time=5):
+    try:
+        cursor.execute('''
+        INSERT INTO session (session_id, item_id, current_time, update_time, discord_id, book_title) VALUES (?,?,?,?,?,?)
+        ''',(session, item_id, current_time, update_time, discord_id, book_title))
+        conn.commit()
+        logger.debug(f"Successfully inserted session {session}")
+        return True
+    except sqlite3.IntegrityError as e:
+        logger.warning(f"Failed to insert {session}, error to follow. {e}")
+        return False
+
 
 # Voice Status Check
 
@@ -160,26 +203,6 @@ async def ownership_check(ctx: BaseContext):  # NOQA
     else:
         logger.info('ownership is disabled! skipping!')
         return True
-
-
-async def time_converter(time_sec: int) -> str:
-    """
-    :param time_sec:
-    :return: a formatted string w/ time_sec + time_format(H,M,S)
-    """
-    formatted_time = time_sec
-    playbackTimeState = 'Seconds'
-
-    if time_sec >= 60 and time_sec < 3600:
-        formatted_time = round(time_sec / 60, 2)
-        playbackTimeState = 'Minutes'
-    elif time_sec >= 3600:
-        formatted_time = round(time_sec / 3600, 2)
-        playbackTimeState = 'Hours'
-
-    formatted_string = f"{formatted_time} {playbackTimeState}"
-
-    return formatted_string
 
 
 class AudioPlayBack(Extension):
@@ -228,7 +251,7 @@ class AudioPlayBack(Extension):
 
         self.current_playback_time = self.current_playback_time + updateFrequency
 
-        formatted_time = await time_converter(self.current_playback_time)
+        formatted_time = time_converter(self.current_playback_time)
 
         updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
             item_id=self.bookItemID,
@@ -349,16 +372,8 @@ class AudioPlayBack(Extension):
 
         # Convert book duration into appropriate times
         duration = self.bookDuration
-        TimeState = 'Seconds'
-        _time = duration
-        if self.bookDuration >= 60 and self.bookDuration < 3600:
-            _time = round(duration / 60, 2)
-            TimeState = 'Minutes'
-        elif self.bookDuration >= 3600:
-            _time = round(duration / 3600, 2)
-            TimeState = 'Hours'
 
-        formatted_duration = f"{_time} {TimeState}"
+        formatted_duration = time_converter(duration)
 
         # Add ABS user info
         user_info = f"Username: **{self.username}**\nUser Type: **{self.user_type}**"
@@ -386,7 +401,7 @@ class AudioPlayBack(Extension):
     @slash_option(name="force",
                   description="Force start an item which might of already been marked as finished. IMPORTANT: THIS CAN FAIL!",
                   opt_type=OptionType.BOOLEAN)
-    async def play_audio(self, ctx: SlashContext, book: str, force=False):
+    async def play_audio(self, ctx, book: str, force=False):
         if playback_role != 0:
             logger.info('PLAYBACK_ROLE is currently active, verifying if user is authorized.')
             if not ctx.author.has_role(playback_role):  # NOQA
@@ -487,6 +502,14 @@ class AudioPlayBack(Extension):
                 if self.auto_kill_session.running:
                     self.auto_kill_session.stop()
 
+                # Create session
+                logger.info(f"Initializing session {self.sessionID}")
+                try:
+                    insert_session(session=self.sessionID, item_id=self.bookItemID,
+                               book_title=self.bookTitle, update_time=self.currentTime, discord_id=ctx.author.id)
+                except Exception as e:
+                    logger.error(e)
+
                 self.audio_message = await ctx.send(content="Beginning audio stream!", embed=embed_message,
                                                     ephemeral=True, components=component_rows_initial)
 
@@ -507,8 +530,6 @@ class AudioPlayBack(Extension):
                 # Cleanup discord interactions
                 await ctx.author.voice.channel.disconnect()
                 audio.cleanup()  # NOQA
-
-                print(e)
 
         # Play Audio, skip channel connection
         else:
