@@ -766,6 +766,7 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
                                                         Data=session_update, Headers=headers)
                 if r_session_update.status_code == 200:
                     logger.info(f'session sync successful. {updatedTime}')
+
                     return updatedTime, duration, serverCurrentTime, finished_book
             else:
                 print(f"Session sync failed, sync status: {sessionOK}")

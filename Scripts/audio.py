@@ -207,17 +207,28 @@ async def get_sessions(discord_id=0):
 async def update_session(session, update_time: int):
     cursor.execute('''
     UPDATE session SET update_time = ? WHERE session_id = ? ''', (int(update_time), session))
+    conn.commit()
 
 
-async def delete_session(session):
-    try:
-        cursor.execute('''DELETE FROM session WHERE session_id = ?''', (session,))
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError as e:
-        logger.warning(
-            f"Couldn't delete {session} from session.db as an error occured. Likely this session no longer exists.")
-        return False
+async def delete_session(session='', discord_id=0):
+    if session != '':
+        try:
+            cursor.execute('''DELETE FROM session WHERE session_id = ?''', (session,))
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError as e:
+            logger.warning(
+                f"Couldn't delete {session} from session.db as an error occured. Likely this session no longer exists.")
+            return False
+    elif discord_id != 0:
+        try:
+            cursor.execute('''DELETE FROM session WHERE discord_id = ?''', (discord_id,))
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError as e:
+            logger.warning(
+                f"Couldn't deleted active session from discord id {discord_id} from session.db as an error occured. Likely this session no longer exists.")
+            return False
 
 
 # Voice Status Check
@@ -247,6 +258,7 @@ class AudioPlayBack(Extension):
         # ABS Vars
         self.cover_image = ''
         # Session VARS
+        self.session_manager = False
         self.sessionID = ''
         self.bookItemID = ''
         self.bookTitle = ''
@@ -291,10 +303,35 @@ class AudioPlayBack(Extension):
         session_count = len(sessions)
         logger.debug(f"Found {session_count} sessions in db...")
 
-        if session_count > 1:
+        if session_count > 1 or self.session_manager:
+            self.session_manager = True
+            count = 0
             for session_id, item_id, title, time_spent, update_time, discord_id in sessions:
-                pass
+                # add 5 seconds to the current location
+                update_time += time_spent
+                count += 1
 
+                logger.debug(
+                    f"Session Info(db): {session_id}, {item_id}, {title}, {time_spent}, {update_time}, {discord_id}")
+
+                formatted_time = time_converter(update_time)
+
+                try:
+                    updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
+                        item_id=item_id,
+                        session_id=session_id,
+                        current_time=time_spent,
+                        next_time=update_time)  # NOQA
+
+                    logger.info(f"Session: {count} | Successfully synced session to updated time: {updatedTime} | "
+                                f"Current Playback Time: {formatted_time} | session ID: {self.sessionID}")
+
+                    result = await update_session(session=session_id, update_time=update_time)
+                    if result:
+                        logger.info(f"Completed session {count} with session id {session_id} and title: {title}")
+                except TypeError:
+                    logger.error(f"Couldn't update session, disabling update for failed session {session_id}...")
+                    await delete_session(session=session_id)
 
         else:
             logger.debug("Skipping session manager as only 1 active session is playing...")
@@ -311,8 +348,9 @@ class AudioPlayBack(Extension):
             logger.info(f"Successfully synced session to updated time: {updatedTime} | "
                         f"Current Playback Time: {formatted_time} | session ID: {self.sessionID}")
 
-            current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(self.bookItemID,
-                                                                                                            updatedTime)
+            current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(
+                self.bookItemID,
+                updatedTime)
 
             if not isPodcast:
                 logger.info("Current Chapter Sync: " + current_chapter['title'])
@@ -360,7 +398,7 @@ class AudioPlayBack(Extension):
 
     # Random Functions ------------------------
     # Change Chapter Function
-    async def move_chapter(self, option: str):
+    async def move_chapter(self, option: str, discord_id=0):
         logger.info(f"executing command /next-chapter")
         CurrentChapter = self.currentChapter
         ChapterArray = self.chapterArray
@@ -381,6 +419,7 @@ class AudioPlayBack(Extension):
                     self.session_update.stop()
                     # self.terminal_clearer.stop()
                     await c.bookshelf_close_session(self.sessionID)
+                    await delete_session(self.sessionID)
                     chapterStart = float(chapter.get('start'))
                     self.newChapterTitle = chapter.get('title')
 
@@ -401,8 +440,15 @@ class AudioPlayBack(Extension):
                     self.nextTime = chapterStart
 
                     # Send manual next chapter sync
-                    await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
-                                                     current_time=updateFrequency - 0.5, next_time=self.nextTime)
+                    if discord_id == 0:
+                        await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
+                                                         current_time=updateFrequency, next_time=self.nextTime)
+                    else:
+                        await insert_session_db(item_id=self.bookItemID, session=self.sessionID,
+                                                current_time=updateFrequency, update_time=self.nextTime,
+                                                discord_id=discord_id, book_title=self.bookTitle)
+                        await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
+                                                         current_time=updateFrequency, next_time=self.nextTime)
                     # Reset Next Time to None before starting task again
                     self.nextTime = None
                     self.session_update.start()
@@ -716,11 +762,10 @@ class AudioPlayBack(Extension):
                 # self.terminal_clearer.stop()
                 self.play_state = 'stopped'
                 await c.bookshelf_close_session(self.sessionID)
-                await c.bookshelf_close_all_sessions(10)
+                await delete_session(discord_id=ctx.author_id)
 
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
-            await c.bookshelf_close_all_sessions(10)
 
     @check(ownership_check)
     @slash_command(name="close-all-sessions",
@@ -883,7 +928,7 @@ class AudioPlayBack(Extension):
                 ctx.voice_state.channel.voice_state.player.stop()
 
             # Find next chapter
-            await self.move_chapter(option='next')
+            await self.move_chapter(option='next', discord_id=ctx.author_id)
 
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
 
@@ -918,8 +963,8 @@ class AudioPlayBack(Extension):
                                ephemeral=True)
                 return
 
-            # Find previous chapter
-            await self.move_chapter(option='previous')
+            # Find previous chapter, delete session from db is in function
+            await self.move_chapter(option='previous', discord_id=ctx.author_id)
 
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
 
@@ -955,6 +1000,7 @@ class AudioPlayBack(Extension):
             await self.client.change_presence(activity=None)
             # Cleanup Session
             await c.bookshelf_close_session(self.sessionID)
+            await delete_session(discord_id=ctx.author_id)
             # Stop auto kill session task
             if self.auto_kill_session.running:
                 logger.info("Stopping auto kill session backend task.")
@@ -998,7 +1044,9 @@ class AudioPlayBack(Extension):
         await ctx.defer(edit_origin=True)
         self.session_update.stop()
         ctx.voice_state.channel.voice_state.player.stop()
+        # Close out session
         await c.bookshelf_close_session(self.sessionID)
+        await delete_session(self.sessionID)
         self.audioObj.cleanup()  # NOQA
 
         audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(self.bookItemID)
@@ -1018,7 +1066,10 @@ class AudioPlayBack(Extension):
 
         # Send manual next chapter sync
         await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
-                                         current_time=updateFrequency - 0.5, next_time=self.nextTime)
+                                         current_time=updateFrequency, next_time=self.nextTime)
+
+        await insert_session_db(session=sessionID, update_time=self.nextTime,
+                                item_id=self.bookItemID, discord_id=ctx.author_id, book_title=self.bookTitle)
 
         self.audioObj = audio
         self.session_update.start()
@@ -1038,6 +1089,12 @@ class AudioPlayBack(Extension):
         self.session_update.stop()
         ctx.voice_state.channel.voice_state.player.stop()
         await c.bookshelf_close_session(self.sessionID)
+        try:
+            await delete_session(self.sessionID)
+        except Exception as e:
+            logger.warning("Couldn't delete session using session id, falling back to discord_id")
+            await delete_session(discord_id=ctx.author_id)
+
         self.audioObj.cleanup()  # NOQA
         audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(self.bookItemID)
 
@@ -1053,7 +1110,10 @@ class AudioPlayBack(Extension):
 
         # Send manual next chapter sync
         await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
-                                         current_time=updateFrequency - 0.5, next_time=self.nextTime)
+                                         current_time=updateFrequency, next_time=self.nextTime)
+
+        await insert_session_db(session=sessionID, update_time=self.nextTime,
+                                item_id=self.bookItemID, discord_id=ctx.author_id, book_title=self.bookTitle)
 
         self.audioObj = audio
         self.session_update.start()
