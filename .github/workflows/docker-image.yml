@@ -21,5 +21,5 @@ jobs:
       with:
         context: .
         push: true
-        tags: donkevlar/bookshelf-traveller:latest, donkevlar/bookshelf-traveller:${{ github.run_number }}
+        tags: donkevlar/bookshelf-traveller:unstable, donkevlar/bookshelf-traveller:${{ github.run_number }}
 
