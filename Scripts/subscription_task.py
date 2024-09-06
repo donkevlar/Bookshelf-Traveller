@@ -177,7 +177,8 @@ async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
 
             if latest_item_time_added >= timestamp_minus_delta and latest_item_type == 'book':
                 items_added.append({"title": latest_item_title, "addedTime": formatted_time,
-                                    "author": latest_item_author, "id": latest_item_bookID, "provider_id": latest_item_provider_id})
+                                    "author": latest_item_author, "id": latest_item_bookID,
+                                    "provider_id": latest_item_provider_id})
 
         return items_added
 
@@ -188,6 +189,7 @@ class SubscriptionTask(Extension):
         self.newBookCheckChannel = None
         self.newBookCheckChannelID = None
         self.ServerNickName = ''
+        self.embedColor = None
 
     async def get_server_name_db(self, discord_id=0, task='new-book-check'):
         cursor.execute('''
@@ -259,11 +261,17 @@ class SubscriptionTask(Extension):
                     title=f"Recently Added Book {count}",
                     description=f"Recently added books for [{self.ServerNickName}]({bookshelfURL})",
                 )
+                if self.embedColor:
+                    embed_message.color = self.embedColor
+                else:
+                    embed_message.color = FlatUIColors.ORANGE
+
                 embed_message.add_field(name="Title", value=title, inline=False)
                 embed_message.add_field(name="Author", value=author)
                 embed_message.add_field(name="Added Time", value=addedTime)
                 embed_message.add_field(name="Additional Information", value=f"Wishlisted: **{wishlisted}**",
                                         inline=False)
+                embed_message.url = f"{os.getenv('bookshelfURL')}/item/{bookID}"
                 embed_message.add_image(cover_link)
                 embed_message.footer = s.bookshelf_traveller_footer + " | " + self.ServerNickName
                 embeds.append(embed_message)
@@ -280,6 +288,30 @@ class SubscriptionTask(Extension):
                             # remove_book_db(title=search_title, discord_id=discord_id)
 
             return embeds
+
+    async def embed_color_selector(self, color=0):
+        color = int(color)
+        selected_color = FlatUIColors.CARROT
+        # Yellow
+        if color == 1:
+            selected_color = FlatUIColors.SUNFLOWER
+        # Orange
+        elif color == 2:
+            selected_color = FlatUIColors.CARROT
+        # Purple
+        elif color == 3:
+            selected_color = FlatUIColors.AMETHYST
+        # Turquoise
+        elif color == 4:
+            selected_color = FlatUIColors.TURQUOISE
+        # Red
+        elif color == 5:
+            selected_color = FlatUIColors.ALIZARIN
+        # Green
+        elif color == 6:
+            selected_color = FlatUIColors.EMERLAND
+
+        return selected_color
 
     @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def newBookTask(self):
@@ -336,12 +368,17 @@ class SubscriptionTask(Extension):
     @slash_option(name="minutes", description=f"Lookback period, in minutes. "
                                               f"Defaults to {TASK_FREQUENCY} minutes. DOES NOT AFFECT TASK.",
                   opt_type=OptionType.INTEGER)
+    @slash_option(name="color", description="Will override the new book check embed color.", opt_type=OptionType.STRING, autocomplete=True)
     @slash_option(name="enable_task", description="If set to true will enable recurring task.",
                   opt_type=OptionType.BOOLEAN)
     @slash_option(name="disable_task", description="If set to true, this will disable the task.",
                   opt_type=OptionType.BOOLEAN)
     async def newBookCheck(self, ctx: InteractionContext, minutes=TASK_FREQUENCY, enable_task=False,
-                           disable_task=False):
+                           disable_task=False, color=None):
+        if color and minutes == TASK_FREQUENCY:
+            self.embedColor = await self.embed_color_selector(color)
+            await ctx.send("Successfully updated color!", ephemeral=True)
+            return
         if enable_task and not disable_task:
             logger.info('Activating New Book Task! A message will follow.')
             if not self.newBookTask.running:
@@ -352,6 +389,9 @@ class SubscriptionTask(Extension):
                     operationSuccess = True
 
                 if operationSuccess:
+                    if color:
+                        self.embedColor = await self.embed_color_selector(color)
+
                     await ctx.send(
                         f"Activating New Book Task! This task will automatically refresh every *{TASK_FREQUENCY} minutes*!",
                         ephemeral=True)
@@ -369,6 +409,8 @@ class SubscriptionTask(Extension):
                 return
         elif disable_task and not enable_task:
             if self.newBookTask.running:
+                if color:
+                    self.embedColor = await self.embed_color_selector(color)
                 await ctx.send("Disabled Task: *Recently Added Books*", ephemeral=True)
                 self.newBookTask.stop()
                 return
@@ -382,6 +424,8 @@ class SubscriptionTask(Extension):
         await self.get_server_name_db(discord_id=ctx.author_id)
 
         await ctx.send(f'Searching for recently added books in given period of {minutes} minutes.', ephemeral=True)
+        if color:
+            self.embedColor = await self.embed_color_selector(color)
         embeds = await self.NewBookCheckEmbed(task_frequency=minutes, enable_notifications=False)
         if embeds:
             logger.info(f'Recent books found in given search period of {minutes} minutes!')
@@ -401,7 +445,9 @@ class SubscriptionTask(Extension):
     @slash_option(name="server_name",
                   description="Give your Audiobookshelf server a nickname. This will overwrite the previous name.",
                   opt_type=OptionType.STRING, required=True)
-    async def task_setup(self, ctx: SlashContext, task, channel, server_name):
+    @slash_option(name='color', description='Embed message optional accent color, overrides default author color.',
+                  opt_type=OptionType.STRING)
+    async def task_setup(self, ctx: SlashContext, task, channel, server_name, color=None):
         task_name = ""
         success = False
         task_instruction = ''
@@ -419,6 +465,8 @@ class SubscriptionTask(Extension):
                     self.newBookTask.start()
 
         if success:
+            if color:
+                self.embedColor = self.embed_color_selector(int(color))
             await ctx.send(
                 f"Successfully setup task **{task_name}** with channel **{channel.name}**. \nInstructions: {task_instruction}",
                 ephemeral=True)
@@ -488,6 +536,19 @@ class SubscriptionTask(Extension):
                 if channel:
                     response = f"{task} | {channel.name}"
                     choices.append({"name": response, "value": db_id})
+        await ctx.send(choices=choices)
+
+    @task_setup.autocomplete('color')
+    @newBookCheck.autocomplete('color')
+    async def color_embed_bookcheck(self, ctx: AutocompleteContext):
+        choices = []
+        count = 0
+        colors = ['Default', 'Yellow', 'Orange', 'Purple', 'Turquoise', 'Red', 'Green']
+
+        for color in colors:
+            choices.append({"name": color, "value": str(count)})
+            count += 1
+
         await ctx.send(choices=choices)
 
     # Auto Start Task if db is populated
