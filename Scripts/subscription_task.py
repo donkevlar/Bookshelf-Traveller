@@ -189,6 +189,7 @@ class SubscriptionTask(Extension):
         self.newBookCheckChannel = None
         self.newBookCheckChannelID = None
         self.ServerNickName = ''
+        self.embedColor = None
 
     async def get_server_name_db(self, discord_id=0, task='new-book-check'):
         cursor.execute('''
@@ -260,12 +261,17 @@ class SubscriptionTask(Extension):
                     title=f"Recently Added Book {count}",
                     description=f"Recently added books for [{self.ServerNickName}]({bookshelfURL})",
                 )
+                if self.embedColor:
+                    embed_message.color = self.embedColor
+                else:
+                    embed_message.color = FlatUIColors.ORANGE
+
                 embed_message.add_field(name="Title", value=title, inline=False)
                 embed_message.add_field(name="Author", value=author)
                 embed_message.add_field(name="Added Time", value=addedTime)
                 embed_message.add_field(name="Additional Information", value=f"Wishlisted: **{wishlisted}**",
                                         inline=False)
-                embed_message.url = f"{os.getenv('bookshelfURL')}/item/{bookID}  "
+                embed_message.url = f"{os.getenv('bookshelfURL')}/item/{bookID}"
                 embed_message.add_image(cover_link)
                 embed_message.footer = s.bookshelf_traveller_footer + " | " + self.ServerNickName
                 embeds.append(embed_message)
@@ -282,6 +288,29 @@ class SubscriptionTask(Extension):
                             # remove_book_db(title=search_title, discord_id=discord_id)
 
             return embeds
+
+    async def embed_color_selector(self, color=0):
+        selected_color = self.bot.author.accent_color
+        # Yellow
+        if color == 1:
+            selected_color = FlatUIColors.SUNFLOWER
+        # Orange
+        elif color == 2:
+            selected_color = FlatUIColors.CARROT
+        # Purple
+        elif color == 3:
+            selected_color = FlatUIColors.AMETHYST
+        # Turquoise
+        elif color == 4:
+            selected_color = FlatUIColors.TURQUOISE
+        # Red
+        elif color == 5:
+            selected_color = FlatUIColors.ALIZARIN
+        # Green
+        elif color == 6:
+            selected_color = FlatUIColors.EMERLAND
+
+        return selected_color
 
     @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def newBookTask(self):
@@ -403,8 +432,8 @@ class SubscriptionTask(Extension):
     @slash_option(name="server_name",
                   description="Give your Audiobookshelf server a nickname. This will overwrite the previous name.",
                   opt_type=OptionType.STRING, required=True)
-    # @slash_option(name='color', description='Embed message optional accent color, overrides default author color.',
-    #               opt_type=OptionType.STRING)
+    @slash_option(name='color', description='Embed message optional accent color, overrides default author color.',
+                  opt_type=OptionType.STRING)
     async def task_setup(self, ctx: SlashContext, task, channel, server_name, color=None):
         task_name = ""
         success = False
@@ -423,6 +452,8 @@ class SubscriptionTask(Extension):
                     self.newBookTask.start()
 
         if success:
+            if color:
+                self.embedColor = self.embed_color_selector(int(color))
             await ctx.send(
                 f"Successfully setup task **{task_name}** with channel **{channel.name}**. \nInstructions: {task_instruction}",
                 ephemeral=True)
@@ -492,6 +523,17 @@ class SubscriptionTask(Extension):
                 if channel:
                     response = f"{task} | {channel.name}"
                     choices.append({"name": response, "value": db_id})
+        await ctx.send(choices=choices)
+
+    @task_setup.autocomplete('color')
+    async def color_embed_bookcheck(self, ctx: AutocompleteContext):
+        choices = []
+        count = 0
+        colors = ['Default', 'Yellow', 'Orange', 'Purple', 'Turquoise', 'Red', 'Green']
+
+        for color in colors:
+            choices.append({"name": color, "value": count})
+
         await ctx.send(choices=choices)
 
     # Auto Start Task if db is populated
