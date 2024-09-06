@@ -466,7 +466,7 @@ class SubscriptionTask(Extension):
 
         if success:
             if color:
-                self.embedColor = self.embed_color_selector(int(color))
+                self.embedColor = await self.embed_color_selector(int(color))
             await ctx.send(
                 f"Successfully setup task **{task_name}** with channel **{channel.name}**. \nInstructions: {task_instruction}",
                 ephemeral=True)
