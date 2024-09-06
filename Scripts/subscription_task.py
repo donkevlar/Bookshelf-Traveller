@@ -290,7 +290,8 @@ class SubscriptionTask(Extension):
             return embeds
 
     async def embed_color_selector(self, color=0):
-        selected_color = self.bot.author.accent_color
+        color = int(color)
+        selected_color = FlatUIColors.CARROT
         # Yellow
         if color == 1:
             selected_color = FlatUIColors.SUNFLOWER
@@ -367,12 +368,17 @@ class SubscriptionTask(Extension):
     @slash_option(name="minutes", description=f"Lookback period, in minutes. "
                                               f"Defaults to {TASK_FREQUENCY} minutes. DOES NOT AFFECT TASK.",
                   opt_type=OptionType.INTEGER)
+    @slash_option(name="color", description="Will override the new book check embed color.", opt_type=OptionType.STRING, autocomplete=True)
     @slash_option(name="enable_task", description="If set to true will enable recurring task.",
                   opt_type=OptionType.BOOLEAN)
     @slash_option(name="disable_task", description="If set to true, this will disable the task.",
                   opt_type=OptionType.BOOLEAN)
     async def newBookCheck(self, ctx: InteractionContext, minutes=TASK_FREQUENCY, enable_task=False,
-                           disable_task=False):
+                           disable_task=False, color=None):
+        if color and minutes == TASK_FREQUENCY:
+            self.embedColor = await self.embed_color_selector(color)
+            await ctx.send("Successfully updated color!", ephemeral=True)
+            return
         if enable_task and not disable_task:
             logger.info('Activating New Book Task! A message will follow.')
             if not self.newBookTask.running:
@@ -383,6 +389,9 @@ class SubscriptionTask(Extension):
                     operationSuccess = True
 
                 if operationSuccess:
+                    if color:
+                        self.embedColor = await self.embed_color_selector(color)
+
                     await ctx.send(
                         f"Activating New Book Task! This task will automatically refresh every *{TASK_FREQUENCY} minutes*!",
                         ephemeral=True)
@@ -400,6 +409,8 @@ class SubscriptionTask(Extension):
                 return
         elif disable_task and not enable_task:
             if self.newBookTask.running:
+                if color:
+                    self.embedColor = await self.embed_color_selector(color)
                 await ctx.send("Disabled Task: *Recently Added Books*", ephemeral=True)
                 self.newBookTask.stop()
                 return
@@ -413,6 +424,8 @@ class SubscriptionTask(Extension):
         await self.get_server_name_db(discord_id=ctx.author_id)
 
         await ctx.send(f'Searching for recently added books in given period of {minutes} minutes.', ephemeral=True)
+        if color:
+            self.embedColor = await self.embed_color_selector(color)
         embeds = await self.NewBookCheckEmbed(task_frequency=minutes, enable_notifications=False)
         if embeds:
             logger.info(f'Recent books found in given search period of {minutes} minutes!')
@@ -526,13 +539,15 @@ class SubscriptionTask(Extension):
         await ctx.send(choices=choices)
 
     @task_setup.autocomplete('color')
+    @newBookCheck.autocomplete('color')
     async def color_embed_bookcheck(self, ctx: AutocompleteContext):
         choices = []
         count = 0
         colors = ['Default', 'Yellow', 'Orange', 'Purple', 'Turquoise', 'Red', 'Green']
 
         for color in colors:
-            choices.append({"name": color, "value": count})
+            choices.append({"name": color, "value": str(count)})
+            count += 1
 
         await ctx.send(choices=choices)
 
