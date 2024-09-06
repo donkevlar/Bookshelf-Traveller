@@ -177,7 +177,8 @@ async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
 
             if latest_item_time_added >= timestamp_minus_delta and latest_item_type == 'book':
                 items_added.append({"title": latest_item_title, "addedTime": formatted_time,
-                                    "author": latest_item_author, "id": latest_item_bookID, "provider_id": latest_item_provider_id})
+                                    "author": latest_item_author, "id": latest_item_bookID,
+                                    "provider_id": latest_item_provider_id})
 
         return items_added
 
@@ -264,6 +265,7 @@ class SubscriptionTask(Extension):
                 embed_message.add_field(name="Added Time", value=addedTime)
                 embed_message.add_field(name="Additional Information", value=f"Wishlisted: **{wishlisted}**",
                                         inline=False)
+                embed_message.url = f"{os.getenv('bookshelfURL')}/item/{bookID}  "
                 embed_message.add_image(cover_link)
                 embed_message.footer = s.bookshelf_traveller_footer + " | " + self.ServerNickName
                 embeds.append(embed_message)
@@ -401,7 +403,9 @@ class SubscriptionTask(Extension):
     @slash_option(name="server_name",
                   description="Give your Audiobookshelf server a nickname. This will overwrite the previous name.",
                   opt_type=OptionType.STRING, required=True)
-    async def task_setup(self, ctx: SlashContext, task, channel, server_name):
+    # @slash_option(name='color', description='Embed message optional accent color, overrides default author color.',
+    #               opt_type=OptionType.STRING)
+    async def task_setup(self, ctx: SlashContext, task, channel, server_name, color=None):
         task_name = ""
         success = False
         task_instruction = ''
