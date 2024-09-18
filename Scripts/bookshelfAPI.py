@@ -911,8 +911,6 @@ async def bookshelf_get_valid_books() -> list:
 async def main():
     if __name__ == '__main__':
         print("TESTING COMMENCES")
-        item = await bookshelf_get_item_details("1917bece-b5b8-4355-8c23-6f0769761785")
-        print(item)
 
 
 asyncio.run(main())

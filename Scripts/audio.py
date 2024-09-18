@@ -700,14 +700,25 @@ class AudioPlayBack(Extension):
                 formatted_sessions_string, data = await c.bookshelf_listening_stats()
 
                 for sessions in data['recentSessions']:
+                    mediaMetadata = sessions['mediaMetadata']
                     title = sessions.get('displayTitle')
+                    subtitle = mediaMetadata.get('subtitle')
                     display_author = sessions.get('displayAuthor')
                     bookID = sessions.get('libraryItemId')
                     name = f"{title} | {display_author}"
                     if len(name) <= 100:
                         pass
-                    else:
+                    elif len(title) <= 100:
                         name = title
+                    else:
+                        logger.debug(f"Title and Full name were longer than 100 characters, attempting subtitle.")
+                        name = f"{subtitle} | {display_author}"
+
+                        if len(name) <= 100:
+                            pass
+                        else:
+                            name = "Recent Book Title Too Long :("
+
                     formatted_item = {"name": name, "value": bookID}
 
                     if formatted_item not in choices:
@@ -723,6 +734,7 @@ class AudioPlayBack(Extension):
         else:
             ctx.deferred = True
             try:
+                # Random - Sometimes a little surprise is noice!
                 if user_input.lower() in 'random':
                     logger.debug('User input includes random, time for a surprise! :)')
                     titles_ = await c.bookshelf_get_valid_books()

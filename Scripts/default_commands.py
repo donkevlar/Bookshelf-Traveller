@@ -124,14 +124,14 @@ class PrimaryCommands(Extension):
 
             # Create Embed Message
             embed_message = Embed(
-                title=f"{title} | Media Progress",
-                description=f"Media Progress for {title}",
+                title=f"{title}",
+                description=f"Fun media progress stats :)",
                 color=ctx.author.accent_color
             )
-            embed_message.add_field(name="Title", value=title, inline=False)
             embed_message.add_field(name="Media Progress", value=media_progress, inline=False)
             embed_message.add_field(name="Media Status", value=media_status, inline=False)
             embed_message.add_image(cover_title)
+            embed_message.url = f"{os.getenv('bookshelfURL')}/item/{book_title}"
 
             # Send message
             await ctx.send(embed=embed_message, ephemeral=self.ephemeral_output)
@@ -212,12 +212,6 @@ class PrimaryCommands(Extension):
             # Add each session as a separate field in the embed
             for session_info in sessions_list:
                 count = count + 1
-                # Create Embed Message
-                embed_message = Embed(
-                    title=f"Session {count}",
-                    description=f"Recent Session Info",
-                    color=ctx.author.accent_color
-                )
                 # Split session info into lines
                 session_lines = session_info.strip().split('\n')
                 # Extract display title from the first line
@@ -231,15 +225,22 @@ class PrimaryCommands(Extension):
                 cover_link = await c.bookshelf_cover_image(library_ID)
                 logger.info(f"cover url: {cover_link}")
 
+                # Create Embed Message
+                embed_message = Embed(
+                    title=f"Session {count} | {display_title}",
+                    description=f"Recent Session Info",
+                    color=ctx.author.accent_color
+                )
+
                 # Use display title as the name for the field
-                embed_message.add_field(name='Title', value=display_title, inline=False)
                 embed_message.add_field(name='Author', value=author, inline=False)
                 embed_message.add_field(name='Book Length', value=duration, inline=False)
                 embed_message.add_field(name='Aggregate Session Time', value=aggregate_time, inline=False)
                 embed_message.add_field(name='Number of Times a Session was Played', value=f'Play Count: {play_count}',
                                         inline=False)
-                embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
+                # embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
                 embed_message.add_image(cover_link)
+                embed_message.url = f"{os.getenv('bookshelfURL')}/item/{library_ID}"
 
                 embeds.append(embed_message)
 
@@ -353,11 +354,33 @@ class PrimaryCommands(Extension):
         if user_input == "":
             try:
                 formatted_sessions_string, data = await c.bookshelf_listening_stats()
+                count = 0
 
                 for sessions in data['recentSessions']:
+                    count += 1
+                    mediaMetadata = sessions['mediaMetadata']
                     title = sessions.get('displayTitle')
+                    subtitle = mediaMetadata.get('subtitle')
+                    display_author = sessions.get('displayAuthor')
                     bookID = sessions.get('libraryItemId')
-                    formatted_item = {"name": title, "value": bookID}
+
+                    name = f"{title} | {display_author}"
+
+                    if len(name) <= 100:
+                        pass
+                    elif len(title) <= 100:
+                        name = title
+                    else:
+                        logger.debug(f"Recent Session {count}: Title and Full name were longer than 100 characters, attempting subtitle.")
+                        name = f"{subtitle} | {display_author}"
+
+                        if len(name) <= 100:
+                            pass
+                        else:
+                            logger.debug("Recent Session {count}: Subtitle was too long, falling back to recent session")
+                            name = f"Recent Session {count}"
+
+                    formatted_item = {"name": name, "value": bookID}
 
                     if formatted_item not in choices:
                         choices.append(formatted_item)
