@@ -124,11 +124,10 @@ class PrimaryCommands(Extension):
 
             # Create Embed Message
             embed_message = Embed(
-                title=f"{title} | Media Progress",
-                description=f"Media Progress for {title}",
+                title=f"{title}",
+                description=f"Fun media progress stats :)",
                 color=ctx.author.accent_color
             )
-            embed_message.add_field(name="Title", value=title, inline=False)
             embed_message.add_field(name="Media Progress", value=media_progress, inline=False)
             embed_message.add_field(name="Media Status", value=media_status, inline=False)
             embed_message.add_image(cover_title)
