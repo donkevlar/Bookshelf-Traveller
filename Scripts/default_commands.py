@@ -131,6 +131,7 @@ class PrimaryCommands(Extension):
             embed_message.add_field(name="Media Progress", value=media_progress, inline=False)
             embed_message.add_field(name="Media Status", value=media_status, inline=False)
             embed_message.add_image(cover_title)
+            embed_message.url = f"{os.getenv('bookshelfURL')}/item/{book_title}"
 
             # Send message
             await ctx.send(embed=embed_message, ephemeral=self.ephemeral_output)
