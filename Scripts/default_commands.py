@@ -212,12 +212,6 @@ class PrimaryCommands(Extension):
             # Add each session as a separate field in the embed
             for session_info in sessions_list:
                 count = count + 1
-                # Create Embed Message
-                embed_message = Embed(
-                    title=f"Session {count}",
-                    description=f"Recent Session Info",
-                    color=ctx.author.accent_color
-                )
                 # Split session info into lines
                 session_lines = session_info.strip().split('\n')
                 # Extract display title from the first line
@@ -231,15 +225,22 @@ class PrimaryCommands(Extension):
                 cover_link = await c.bookshelf_cover_image(library_ID)
                 logger.info(f"cover url: {cover_link}")
 
+                # Create Embed Message
+                embed_message = Embed(
+                    title=f"Session {count} | {display_title}",
+                    description=f"Recent Session Info",
+                    color=ctx.author.accent_color
+                )
+
                 # Use display title as the name for the field
-                embed_message.add_field(name='Title', value=display_title, inline=False)
                 embed_message.add_field(name='Author', value=author, inline=False)
                 embed_message.add_field(name='Book Length', value=duration, inline=False)
                 embed_message.add_field(name='Aggregate Session Time', value=aggregate_time, inline=False)
                 embed_message.add_field(name='Number of Times a Session was Played', value=f'Play Count: {play_count}',
                                         inline=False)
-                embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
+                # embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
                 embed_message.add_image(cover_link)
+                embed_message.url = f"{os.getenv('bookshelfURL')}/item/{library_ID}"
 
                 embeds.append(embed_message)
 
