@@ -353,11 +353,33 @@ class PrimaryCommands(Extension):
         if user_input == "":
             try:
                 formatted_sessions_string, data = await c.bookshelf_listening_stats()
+                count = 0
 
                 for sessions in data['recentSessions']:
+                    count += 1
+                    mediaMetadata = sessions['mediaMetadata']
                     title = sessions.get('displayTitle')
+                    subtitle = mediaMetadata.get('subtitle')
+                    display_author = sessions.get('displayAuthor')
                     bookID = sessions.get('libraryItemId')
-                    formatted_item = {"name": title, "value": bookID}
+
+                    name = f"{title} | {display_author}"
+
+                    if len(name) <= 100:
+                        pass
+                    elif len(title) <= 100:
+                        name = title
+                    else:
+                        logger.debug(f"Recent Session {count}: Title and Full name were longer than 100 characters, attempting subtitle.")
+                        name = f"{subtitle} | {display_author}"
+
+                        if len(name) <= 100:
+                            pass
+                        else:
+                            logger.debug("Recent Session {count}: Subtitle was too long, falling back to recent session")
+                            name = f"Recent Session {count}"
+
+                    formatted_item = {"name": name, "value": bookID}
 
                     if formatted_item not in choices:
                         choices.append(formatted_item)
