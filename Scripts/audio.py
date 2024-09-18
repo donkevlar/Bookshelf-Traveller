@@ -709,7 +709,6 @@ class AudioPlayBack(Extension):
                     if len(name) <= 100:
                         pass
                     elif len(title) <= 100:
-                        logger.debug(f"Option 2:Title less than 100 characters, but full name was too long.")
                         name = title
                     else:
                         logger.debug(f"Title and Full name were longer than 100 characters, attempting subtitle.")
