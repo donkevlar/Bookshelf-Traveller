@@ -103,11 +103,25 @@ bot = Client(intents=Intents.DEFAULT, logger=logger)
 # Event listener
 @listen()
 async def on_startup(event: Startup):
+    # Client ID is available in the OAuth2 tab under client information.
+    client_id = settings.CLIENT_ID
+    # Startup Sequence
     print(f'Bot is ready. Logged in as {bot.user}')
+
+    if client_id != '':
+        print(
+            '------------------------------------------------------------------------------------------------------------------------------------------')
+        print(
+            f'Bot invite link: https://discord.com/oauth2/authorize?client_id={client_id}&permissions=277062405120&integration_type=0&scope=bot')
+        print(
+            '------------------------------------------------------------------------------------------------------------------------------------------')
+
     owner = event.client.owner
     owner_id = owner.id
+
     if settings.EXPERIMENTAL:
         logger.warning(f'EXPERIMENTAL FEATURES ENABLED!')
+
     if MULTI_USER:
         import multi_user as mu
         user_token = os.getenv('bookshelfToken')
