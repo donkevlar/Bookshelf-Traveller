@@ -49,6 +49,12 @@ timeZone = pytz.timezone(TIMEZONE)
 current_time = datetime.now(timeZone)
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
 
+# Client ID is available in the OAuth2 tab under client information.
+client_id = settings.CLIENT_ID
+if client_id != '':
+    logger.info(
+        f'Bot invite link: https://discord.com/oauth2/authorize?client_id={client_id}&permissions=277062405120&integration_type=0&scope=bot')
+
 # Get Discord Token from ENV
 token = os.environ.get("DISCORD_TOKEN")
 
@@ -103,18 +109,8 @@ bot = Client(intents=Intents.DEFAULT, logger=logger)
 # Event listener
 @listen()
 async def on_startup(event: Startup):
-    # Client ID is available in the OAuth2 tab under client information.
-    client_id = settings.CLIENT_ID
     # Startup Sequence
     print(f'Bot is ready. Logged in as {bot.user}')
-
-    if client_id != '':
-        logger.info(
-            '------------------------------------------------------------------------------------------------------------------------------------------')
-        logger.info(
-            f'Bot invite link: https://discord.com/oauth2/authorize?client_id={client_id}&permissions=277062405120&integration_type=0&scope=bot')
-        logger.info(
-            '------------------------------------------------------------------------------------------------------------------------------------------')
 
     owner = event.client.owner
     owner_id = owner.id
