@@ -15,7 +15,7 @@ You'll need to create your own discord application in order to do this, this is 
 
 Make sure that you select all intents when setting up your bot and that you have created a url to add it to your desired discord server.
 
-**If you provide the `CLIENT_ID` environement variable, an invite link will be generated when the bot starts up for you. :)**
+**If you provide the `CLIENT_ID` environment variable, an invite link will be generated when the bot starts up for you. :)**
 
 ### Known Limitations
 **Podcast playback is currently not supported due to the many differences in pulling the audio sources.**
