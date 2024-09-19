@@ -109,11 +109,11 @@ async def on_startup(event: Startup):
     print(f'Bot is ready. Logged in as {bot.user}')
 
     if client_id != '':
-        print(
+        logger.info(
             '------------------------------------------------------------------------------------------------------------------------------------------')
-        print(
+        logger.info(
             f'Bot invite link: https://discord.com/oauth2/authorize?client_id={client_id}&permissions=277062405120&integration_type=0&scope=bot')
-        print(
+        logger.info(
             '------------------------------------------------------------------------------------------------------------------------------------------')
 
     owner = event.client.owner
