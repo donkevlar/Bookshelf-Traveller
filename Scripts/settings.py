@@ -18,6 +18,9 @@ SERVER_URL = os.environ.get("bookshelfURL")
 
 OPT_IMAGE_URL = os.getenv('OPT_IMAGE_URL', '')
 
+# Client ID
+CLIENT_ID = os.getenv('CLIENT_ID', '')
+
 # Time Zone
 TIMEZONE = os.getenv("TIMEZONE", "America/Toronto")
 
