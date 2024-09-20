@@ -21,6 +21,9 @@ load_dotenv()
 
 # Logger Config
 logger = logging.getLogger("bot")
+handler = logging.StreamHandler()
+console_handler = logger.handlers[0]
+original_formatter = console_handler.formatter
 
 # Experimental Imports
 # enables experimental features and modules
@@ -47,18 +50,24 @@ timeZone = pytz.timezone(TIMEZONE)
 
 # Print Startup Time
 current_time = datetime.now(timeZone)
+
+# Remove the formatter temporarily to log without any format
+console_handler.setFormatter(None)
 logger.info(f'Bot is Starting Up! | Startup Time: {current_time}')
 
-# Client ID is available in the OAuth2 tab under client information.
-client_id = settings.CLIENT_ID
-if client_id != '':
-    logger.info(
-        f'Bot invite link: https://discord.com/oauth2/authorize?client_id={client_id}&permissions=277062405120&integration_type=0&scope=bot')
+if settings.CLIENT_ID:
+    CLIENT_ID = settings.CLIENT_ID
+    invite_url = f"Bot Invite Link: https://discord.com/oauth2/authorize?client_id={CLIENT_ID}&permissions=277062405120&integration_type=0&scope=bot"
+    logger.info(invite_url)
+
+logger.info(settings.bookshelf_startup_msg)
 
 # Get Discord Token from ENV
 token = os.environ.get("DISCORD_TOKEN")
 
-logger.info(f'Starting up bookshelf traveller v.{settings.versionNumber}')
+# Restore original Formatting
+console_handler.setFormatter(original_formatter)
+logger.info(f'Starting up bookshelf traveller {settings.versionNumber}')
 logger.warning('Please wait for this process to finish prior to use, you have been warned!')
 
 # Print current config if value is present
