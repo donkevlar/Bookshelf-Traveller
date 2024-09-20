@@ -1,7 +1,7 @@
 import os
+import platform
 from logging.config import dictConfig
 from dotenv import load_dotenv
-
 
 load_dotenv(override=True)
 
@@ -9,6 +9,9 @@ load_dotenv(override=True)
 versionNumber = 'V1.2.8b'
 
 COMMAND_COUNT = 0
+
+# Determine Platform
+current_platform = platform.system()
 
 # Debug Mode
 DEBUG_MODE = os.environ.get('DEBUG_MODE', True)
@@ -60,14 +63,32 @@ OWNER_ONLY = os.getenv('OWNER_ONLY', True)
 # Used for embed footers
 bookshelf_traveller_footer = f'Powered by Bookshelf Traveller 🕮 | {versionNumber}'
 
+bookshelf_startup_msg = f'''
+    =============================================================
+    |                                                           |
+    |        WELCOME TO BOOKSHELF-TRAVELLER                     |
+    |-----------------------------------------------------------|
+    |        Discover your next literary adventure!             |
+    |                                                           |
+    |        Version: {versionNumber}                                   |
+    |        Author: DonKevlar                                  |
+    |-----------------------------------------------------------|
+    =============================================================
+    
+    '''
+
 LOGGING_CONFIG = {
     "version": 1,
-    "disabled_existing_loggers": False,
+    "disable_existing_loggers": False,  # Fixed typo: disabled_existing_loggers should be disable_existing_loggers
     "formatters": {
         "verbose": {
-            "format": "%(levelname)-5s - %(asctime)s - %(module)-5s : %(message)s"
+            "format": "%(levelname)-5s - %(asctime)s - %(module)-5s : %(message)s",
+            "datefmt": "%H:%M:%S",  # Apply datefmt here for verbose formatter
         },
-        "standard": {"format": "%(levelname)-5s - %(asctime)s : %(message)s"},
+        "standard": {
+            "format": "%(levelname)-5s - %(asctime)s : %(message)s",
+            "datefmt": "%H:%M:%S",  # Apply datefmt here for standard formatter
+        },
     },
     "handlers": {
         "console": {
@@ -90,5 +111,6 @@ LOGGING_CONFIG = {
         },
     },
 }
+
 
 dictConfig(LOGGING_CONFIG)
