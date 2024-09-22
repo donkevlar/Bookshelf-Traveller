@@ -169,8 +169,6 @@ Here's the list of commands sorted alphabetically:
 
 ### Alternative Packages
 Audio-only packages have been deprecated. Please use the environmental variables to modify how you would like your bot to function.
-### Screenshots
-Below are a few examples of the commands shown above. Note: images are subject to change, or can become outdated as the project is very much active. 
 
 ## Features
 
