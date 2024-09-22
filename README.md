@@ -35,9 +35,9 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 | `DISCORD_TOKEN`    | Discord API Token                                                                                                                                          | *String*  | **YES**   |
 | `bookshelfToken`   | Bookshelf User Token (All user types work, but some will limit your interaction options.)                                                                  | *String*  | **YES**   |
 | `bookshelfURL`     | Bookshelf url with protocol and port, ex: http://localhost:80                                                                                              | *String*  | **YES**   |
-| `PLAYBACK_ROLE`    | A discord role id, used if you want other users to have access to playback.                                                                                | *Integer* | **NO**    |
+| `PLAYBACK_ROLE`*   | A discord role id, used if you want other users to have access to playback. *NO LONGER SUPPORTED                                                           | *Integer* | **NO**    |
 | `OWNER_ONLY`       | By default set to `True`. Only allow bot owner to use bot.                                                                                                 | *Boolean* | **NO**    |
-| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you)                                                                          | *Boolean* | **NO**    |
+| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you). * Note: This has been transitioned to a command, it only affects the default commands module.| *Boolean* | **NO**    |
 | `MULTI_USER`       | By default set to `True`, disable this to re-enable admin controls (Conditional on the user logged in.) and to remove the /login and /select options       | *Boolean* | **NO**    |
 | `AUDIO_ENABLED`    | By default set to `True`, disable if you want to remove the ability for audio playback.                                                                    | *Boolean* | **NO**    |
 | `OPT_IMAGE_URL`    | Optional HTTPS URL for generating cover images and sending them to the discord API. This is primarily if you experience similar issues as mentioned above. | *String*  | **NO**    |
@@ -68,6 +68,10 @@ docker run -d \
 -e DISCORD_TOKEN="INSERT_TOKEN" \
 -e bookshelfToken="INSERT_TOKEN" \
 -e bookshelfURL="http://myurl.domain.com" \
+-e CLIENT_ID="CLIENTID" \
+-e AUDIO_ENABLED="True" \
+-e MULTI_USER="True" \
+
 donkevlar/bookshelf-traveller:latest
 ```
 
