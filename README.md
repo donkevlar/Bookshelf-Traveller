@@ -172,13 +172,30 @@ Audio-only packages have been deprecated. Please use the environmental variables
 ### Screenshots
 Below are a few examples of the commands shown above. Note: images are subject to change, or can become outdated as the project is very much active. 
 
-#### /recent-sessions
-![img.png](images/img.png)
+## Features
 
 #### /play
+Play any of your audiobooks directly in discord! This also works with Xbox or Mobile clients. The bot will automatically sync your progress to your ABS server, and allow you to use multiple users from one place!
+
 ![image](https://github.com/user-attachments/assets/9a74535e-b81a-480d-adb9-b84953c7e4ce)
 
+#### Multi-Channel Notifications (/setup-task)
+Monitor and track what is added to your ABS server by utilizing the book check tasks. Select which channels you want the notifications to be subscribed, multiple channel notifications are supported! 
+
+#### /wishlist
+Create a customized wishlist, with direct messages so that your other server members can subscribe to see when something they wishlisted gets added. 
+
+![image](https://github.com/user-attachments/assets/7e2ae50f-2606-4af5-8478-85189419ff40)
+
+
+#### /recent-sessions
+List your most recent-sessions.
+
+![img.png](images/img.png)
+
 #### /mediaprogress
+View all of your media's progress at a glance.
+
 ![img.png](images/mediaprogress.png)
 
 #### Other examples
