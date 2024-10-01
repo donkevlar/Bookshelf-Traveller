@@ -394,10 +394,22 @@ class PrimaryCommands(Extension):
         else:
             try:
                 titles_ = await c.bookshelf_title_search(user_input)
+
                 for info in titles_:
+                    logger.debug(f'Search results: {info}')
                     book_title = info["title"]
                     book_id = info["id"]
-                    choices.append({"name": f"{book_title}", "value": f"{book_id}"})
+                    if len(book_title) <= 100:
+                        choices.append({"name": f"{book_title}", "value": f"{book_id}"})
+                    else:
+                        logger.debug(f'title length is too long, attempting to use subtitle for id: {book_id}.')
+                        book_details = await c.bookshelf_get_item_details(book_id)
+                        subtitle = book_details.get('subtitle')
+                        logger.debug(f"result for subtitle: {subtitle}")
+                        if subtitle is not None:
+                            logger.debug(f'Subtitle found: {subtitle} with length {len(subtitle)}.')
+                            if len(subtitle) <= 100:
+                                choices.append({"name": f"{subtitle}", "value": f"{book_id}"})
 
                 await ctx.send(choices=choices)
 

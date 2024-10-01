@@ -202,7 +202,7 @@ async def bookshelf_get_item_details(book_id) -> dict:
     _url = f"/items/{book_id}"
     r = await bookshelf_conn(GET=True, endpoint=_url)
     data = r.json()
-    print(data)
+    logger.debug(data)
 
     title = data['media']['metadata']['title']
     desc = data['media']['metadata']['description']

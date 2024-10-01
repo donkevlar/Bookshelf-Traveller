@@ -23,6 +23,7 @@ id INTEGER PRIMARY KEY,
 user TEXT NOT NULL,
 token TEXT NOT NULL UNIQUE,
 discord_id INTEGER NOT NULL,
+default_user INTEGER,
 UNIQUE(user, token)
 )
                         ''')
@@ -52,7 +53,7 @@ def search_user_db(discord_id=0, user='', token=''):
     if discord_id != 0 and user == '':
         logger.info('Searching db using discord ID')
         cursor.execute('''
-        SELECT token, user FROM users WHERE discord_id = ?
+        SELECT token, user, default_user FROM users WHERE discord_id = ?
         ''', (discord_id,))
         rows = cursor.fetchall()
         option = 1
@@ -80,7 +81,7 @@ def search_user_db(discord_id=0, user='', token=''):
 
     else:
         logger.info('Searching db for user and token using no arguments')
-        cursor.execute('''SELECT user, token FROM users''')
+        cursor.execute('''SELECT user, token, default_user FROM users''')
 
         rows = cursor.fetchall()
         option = 5
