@@ -21,6 +21,9 @@ RUN set -ex \
     && apt-get autoremove -y \
     && apt-get clean -y
 
+# Health check
+HEALTHCHECK --interval=1m --timeout=10s --retries=1 \
+  CMD python3 healthcheck.py
 
 
 CMD ["python", "main.py"]
