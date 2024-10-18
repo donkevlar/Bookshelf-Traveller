@@ -192,6 +192,8 @@ class AudioPlayBack(Extension):
         self.bookTitle = ''
         self.bookDuration = None
         self.currentTime = 0.0
+        self.activeSessions = 0
+        self.sessionOwner = None
         # Chapter VARS
         self.currentChapter = None
         self.chapterArray = None
@@ -421,6 +423,10 @@ class AudioPlayBack(Extension):
                            ephemeral=True)
             return
 
+        if self.activeSessions >= 1:
+            await ctx.send(content=f"Bot can only play one session at a time, please stop your other active session and try again! Current session owner: {self.sessionOwner}", ephemeral=True)
+            return
+
         # Get Bookshelf Playback URI, Starts new session
         audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(book)
 
@@ -448,6 +454,7 @@ class AudioPlayBack(Extension):
 
         # Session Vars
         self.sessionID = sessionID
+        self.sessionOwner = ctx.author.username
         self.bookItemID = book
         self.bookTitle = bookTitle
         self.audioObj = audio
@@ -492,6 +499,8 @@ class AudioPlayBack(Extension):
 
                 logger.info(f"Beginning audio stream")
 
+                self.activeSessions += 1
+
                 await self.client.change_presence(activity=Activity.create(name=f"{self.bookTitle}",
                                                                            type=ActivityType.LISTENING))
 
@@ -509,32 +518,6 @@ class AudioPlayBack(Extension):
                 audio.cleanup()  # NOQA
 
                 print(e)
-
-        # Play Audio, skip channel connection
-        else:
-            try:
-                logger.info("Voice already connected, playing new audio selection.")
-
-                await ctx.voice_state.play(audio)
-
-            except Exception as e:
-
-                await ctx.voice_state.stop()
-                await ctx.author.voice.channel.disconnect()
-                await self.client.change_presence(activity=None)
-                await ctx.author.channel.send(f'Issue with playback: {e}')  # NOQA
-                logger.error(f"Error occured during execution of /play : \n {e}")
-                logger.error(e)
-
-        # Check if bot is playing something
-        if not ctx.voice_state:
-            # Stop any running tasks
-            if self.session_update.running:
-                self.session_update.stop()
-                # self.terminal_clearer.stop()
-            # close ABS session
-            await c.bookshelf_close_session(sessionID)
-            return
 
     # Pause audio, stops tasks, keeps session active.
     @slash_command(name="pause", description="pause audio", dm_permission=False)
@@ -636,6 +619,8 @@ class AudioPlayBack(Extension):
             await self.client.change_presence(activity=None)
             # Reset current playback time
             self.current_playback_time = 0
+            self.activeSessions -= 1
+            self.sessionOwner = None
 
             # Stop auto kill session task
             if self.auto_kill_session.running:
@@ -893,6 +878,8 @@ class AudioPlayBack(Extension):
             self.audioObj.cleanup()  # NOQA
             self.session_update.stop()
             self.current_playback_time = 0
+            self.activeSessions -= 1
+            self.sessionOwner = None
             self.play_state = 'stopped'
             await ctx.voice_state.channel.disconnect()
             await self.client.change_presence(activity=None)
