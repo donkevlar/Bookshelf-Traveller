@@ -81,34 +81,41 @@ def bookshelf_test_connection():
     bookshelfURL = os.environ.get("bookshelfURL")
     logger.info("Testing Server Connection")
     connected = False
-    count = 0
+    errorCount = 0
+    maxCount = 10
 
     while not connected:
-        count += 1
+
         try:
             # Using /healthcheck to avoid domain mismatch, since this is an api endpoint in bookshelf
-            r = requests.get(f'{bookshelfURL}/healthcheck')
+            r = requests.get(f'{bookshelfURL}/healthcheck', timeout=5)
             status = r.status_code
             if status == 200:
                 connected = True
                 logger.info("Connection Established!")
                 return status
 
-            elif status != 200 and count >= 11:
-                logger.error("Connection could not be established, Quitting!")
-                time.sleep(1)
-                sys.exit(1)
+        except requests.exceptions.ConnectTimeout:
+            errorCount += 1
+            if errorCount <= maxCount:
+                logger.warning(f"Attempt {errorCount}: Connection time out occured!, attempting to reconnect in 5 seconds...")
+                time.sleep(5)
 
             else:
-                print("\nConnection Error, retrying in 5 seconds!")
-                time.sleep(5)
-                print(f"Retrying! Attempt: {count}")
+                logger.error("Max reconnect retries reached, aborting!")
+                sys.exit('Connection Timed Out')
 
-        except requests.RequestException as e:
-            logger.warning("Error occured while testing server connection: ", e, "\n")
+        except requests.RequestException:
+            errorCount += 1
+            if errorCount <= maxCount:
+                logger.error(f"Attempt {errorCount}: Error occured while testing server connection, attempting to reconnect in 5 seconds...")
+                time.sleep(5)
+            else:
+                logger.error("Max reconnect retries reached, aborting!")
+                sys.exit('Request Exception')
 
         except UnboundLocalError:
-            logger.error("No URL PROVIDED!\n")
+            logger.error("No URL PROVIDED!")
             sys.exit(1)
 
 
@@ -168,19 +175,15 @@ async def bookshelf_auth_test():
             user_type = data.get('type', "user")
             user_locked = data.get('isLocked', False)
 
-            time.sleep(0.5)
+            logger.info("Cleaning up, authentication")
             return username, user_type, user_locked
         else:
-            print("Error: Could not connect to /me endpoint \n")
-            print("Quitting!")
-            time.sleep(0.5)
+            logger.info("Error: Could not connect to /me endpoint")
+            logger.info("Quitting!")
             sys.exit(1)
 
     except requests.RequestException as e:
         logger.warning("Could not establish connection: ", e)
-
-    finally:
-        logger.info("Cleaning up, authentication")
 
 
 async def bookshelf_get_item_details(book_id) -> dict:
