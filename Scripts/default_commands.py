@@ -357,12 +357,12 @@ class PrimaryCommands(Extension):
                 count = 0
 
                 for sessions in data['recentSessions']:
-                    count += 1
+                    bookID = sessions['bookId']
                     mediaMetadata = sessions['mediaMetadata']
                     title = sessions.get('displayTitle')
                     subtitle = mediaMetadata.get('subtitle')
                     display_author = sessions.get('displayAuthor')
-                    bookID = sessions.get('libraryItemId')
+                    itemID = sessions.get('libraryItemId')
 
                     name = f"{title} | {display_author}"
 
@@ -380,9 +380,10 @@ class PrimaryCommands(Extension):
                             logger.debug("Recent Session {count}: Subtitle was too long, falling back to recent session")
                             name = f"Recent Session {count}"
 
-                    formatted_item = {"name": name, "value": bookID}
+                    formatted_item = {"name": name, "value": itemID}
 
-                    if formatted_item not in choices:
+                    if formatted_item not in choices and bookID is not None:
+                        count += 1
                         choices.append(formatted_item)
 
                 await ctx.send(choices=choices)
