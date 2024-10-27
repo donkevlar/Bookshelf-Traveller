@@ -263,6 +263,10 @@ async def bookshelf_get_item_details(book_id) -> dict:
 
 
 async def bookshelf_listening_stats():
+    """
+    Gets the 10 most recent sessions for the logged in ABS user.
+    :return: formatted_session_info, data
+    """
     bookshelfToken = os.environ.get("bookshelfToken")
     endpoint = "/me/listening-stats"
     formatted_sessions = []
@@ -914,6 +918,10 @@ async def bookshelf_get_valid_books() -> list:
 async def main():
     if __name__ == '__main__':
         print("TESTING COMMENCES")
+        response, data = await bookshelf_listening_stats()
+        count = 0
+        for items in data['recentSessions']:
+            print(items.get('bookId'))
 
 
 asyncio.run(main())

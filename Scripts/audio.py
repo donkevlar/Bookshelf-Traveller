@@ -685,12 +685,14 @@ class AudioPlayBack(Extension):
                 formatted_sessions_string, data = await c.bookshelf_listening_stats()
 
                 for sessions in data['recentSessions']:
+                    bookID = sessions['bookId']
                     mediaMetadata = sessions['mediaMetadata']
                     title = sessions.get('displayTitle')
                     subtitle = mediaMetadata.get('subtitle')
                     display_author = sessions.get('displayAuthor')
-                    bookID = sessions.get('libraryItemId')
+                    itemID = sessions.get('libraryItemId')
                     name = f"{title} | {display_author}"
+
                     if len(name) <= 100:
                         pass
                     elif len(title) <= 100:
@@ -704,9 +706,9 @@ class AudioPlayBack(Extension):
                         else:
                             name = "Recent Book Title Too Long :("
 
-                    formatted_item = {"name": name, "value": bookID}
+                    formatted_item = {"name": name, "value": itemID}
 
-                    if formatted_item not in choices:
+                    if formatted_item not in choices and bookID is not None:
                         choices.append(formatted_item)
 
                 await ctx.send(choices=choices)
