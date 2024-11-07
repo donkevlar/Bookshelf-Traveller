@@ -273,6 +273,7 @@ class AudioPlayBack(Extension):
                 self.play_state = 'stopped'
                 self.audio_message = None
                 self.activeSessions -= 1
+                self.sessionOwner = None
                 self.audioObj.cleanup()  # NOQA
 
                 if self.session_update.running:
