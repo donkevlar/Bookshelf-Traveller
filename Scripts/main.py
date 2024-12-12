@@ -33,6 +33,8 @@ original_formatter = console_handler.formatter
 MULTI_USER = eval(settings.MULTI_USER)
 AUDIO_ENABLED = eval(settings.AUDIO_ENABLED)
 DEBUG_MODE = settings.DEBUG_MODE
+INITIALIZED_MSG = bool(settings.INITIALIZED_MSG)
+
 
 # TEMP
 if DEBUG_MODE == "True":
@@ -72,6 +74,8 @@ logger.warning('Please wait for this process to finish prior to use, you have be
 
 # Print current config if value is present
 logger.info("Current config to follow!")
+# Should initial msg be sent
+logger.info(f"Initialization MSGs Enabled: {INITIALIZED_MSG}")
 for key, value in current_config.items():
     if value != '' and value is not None:
         logger.info(f"{key}: {value}")
@@ -135,14 +139,17 @@ async def on_startup(event: Startup):
         if username != '':
             mu.insert_data(discord_id=owner_id, user=username, token=user_token)
             logger.info(f'Registered initial user {username} successfully')
-            if not DEBUG_MODE:
+            if not DEBUG_MODE and INITIALIZED_MSG:
                 await owner.send(f'Bot is ready. Logged in as {bot.user}. ABS user: {username} signed in.')
+                # Set env to true
+                os.putenv('INITIALIZED_MSG', "False")
         else:
             logger.warning("No initial user registered, please use '/login' to register a user.")
             await owner.send("No initial user registered, please use '/login' to register a user.")
     else:
-        if not DEBUG_MODE:
+        if not DEBUG_MODE and INITIALIZED_MSG:
             await owner.send(f'Bot is ready. Logged in as {bot.user}.')
+            os.putenv('INITIALIZED_MSG', "False")
 
     logger.info('Bot has finished loading, it is now safe to use! :)')
 
@@ -191,11 +198,13 @@ if __name__ == '__main__':
 
     try:
         from wishlist import wishlist_conn
+
         secondary_command = '''
             UPDATE wishlist
             SET downloaded = 0
             WHERE downloaded IS NULL'''
-        db_additions.add_column_to_db(db_connection=wishlist_conn, table_name='wishlist', column_name='downloaded', secondary_execute=secondary_command)
+        db_additions.add_column_to_db(db_connection=wishlist_conn, table_name='wishlist', column_name='downloaded',
+                                      secondary_execute=secondary_command)
 
     except Exception as e:
         logger.debug(f"Error occured while attempting to alter original databases")
