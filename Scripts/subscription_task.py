@@ -554,6 +554,7 @@ class SubscriptionTask(Extension):
     # Auto Start Task if db is populated
     @listen()
     async def tasks_startup(self, event: Startup):
+        init_msg = bool(os.getenv('INITIALIZED_MSG', False))
         result = search_task_db(
             override_response="Initialized subscription task module, verifying if any tasks are enabled...")
         task_name = "new-book-check"
@@ -572,6 +573,6 @@ class SubscriptionTask(Extension):
                 logger.info(
                     f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
                 # Debug Stuff
-                if s.DEBUG_MODE != "True":
+                if s.DEBUG_MODE != "True" and s.INITIALIZED_MSG == "True":
                     await owner.send(
                         f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")

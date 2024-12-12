@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # Version Info
-versionNumber = 'V1.3.0'
+versionNumber = 'V1.3.1'
 
 COMMAND_COUNT = 0
 
@@ -59,6 +59,9 @@ PLAYBACK_ROLE = os.getenv('PLAYBACK_ROLE', 0)
 
 # Ownership check
 OWNER_ONLY = os.getenv('OWNER_ONLY', True)
+
+# Initial MSG when not in debug mode
+INITIALIZED_MSG = os.getenv('INITIALIZED_MSG', True)
 
 # Used for embed footers
 bookshelf_traveller_footer = f'Powered by Bookshelf Traveller 🕮 | {versionNumber}'
