@@ -106,8 +106,6 @@ Requirements: **Python 3.10 or above**.
 
 you'll also need an '.env' file for loading the above [ENV Variables](https://github.com/donkevlar/Bookshelf-Traveller/blob/master/README.md#environmental-variables)
 
-*Disclaimer: When installing via git clone, I assume that you are knowledgeable enough to execute the script. I suggest you use a virtual environment when doing so.*
-
 #### Step 1: Navigate to Directory
 Open your terminal and navigate to your desired folder. 
 
