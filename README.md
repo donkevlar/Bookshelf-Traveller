@@ -25,7 +25,10 @@ Make sure that you select all intents when setting up your bot and that you have
 **When using commands that use images, i.e. `/media_progress` or `/recent_sessions`, 
 the server must use an `HTTPS` connection due to a requirement from discord's API. If not, no image will be generated.**
 
-**Important note regarding `HTTPS` connections. I've experienced a lot of issues when streaming audio from my server to discord using a https connection as the source. I have yet to confirm if this is a double NAT issue, a reverse proxy issue or otherwise. I suggest you utilize a direct connection to your server i.e. `http://127.0.0.1:13378` if you intend to listen to an audiobook for more than 15 minutes at a time. As a workaround for including images, I've added the `OPT_IMAGE_URL` env variable. If this is utilized (With an https connection) the bot will use this link for all images instead of the initial server url.**  
+**Important note regarding `HTTPS` connections. I've experienced a lot of issues when streaming audio from my server to discord using a https connection as the source. I have yet to confirm if this is a double NAT issue, a reverse proxy issue or otherwise. I suggest you utilize a direct connection to your server i.e. `http://127.0.0.1:13378` if you intend to listen to an audiobook for more than 15 minutes at a time. As a workaround for including images, I've added the `OPT_IMAGE_URL` env variable. If this is utilized (With an https connection) the bot will use this link for all images instead of the initial server url.**
+
+### Troubleshooting
+**Before reporting an issue, please make sure that you enable `DEBUG_MODE=True`. You can use this when reporting an issue as it will describe all backend services and any script-related problems.**
 
 ### Environmental Variables
 
@@ -43,6 +46,7 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 | `OPT_IMAGE_URL`    | Optional HTTPS URL for generating cover images and sending them to the discord API. This is primarily if you experience similar issues as mentioned above. | *String*  | **NO**    |
 | `TIMEZONE`         | Default set to `America/Toronto`                                                                                                                           | *String*  | **NO**    |
 | `DEFAULT_PROVIDER` | Experimental, set the default search provider for certain commands.                                                                                        | *String*  | **NO**    |
+| `DEBUG_MODE`       | By default, set to `False`. It enables verbose logs and also disables all notifications.                                                                   | *String*  | **NO**    |
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**
