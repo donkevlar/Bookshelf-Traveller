@@ -82,7 +82,7 @@ def bookshelf_test_connection():
     logger.info("Testing Server Connection")
     connected = False
     errorCount = 0
-    maxCount = 10
+    maxCount = int(os.getenv('MAX_CONN_ATTEMPT', 10))
 
     while not connected:
 
@@ -98,7 +98,8 @@ def bookshelf_test_connection():
         except requests.exceptions.ConnectTimeout:
             errorCount += 1
             if errorCount <= maxCount:
-                logger.warning(f"Attempt {errorCount}: Connection time out occured!, attempting to reconnect in 5 seconds...")
+                logger.warning(
+                    f"Attempt {errorCount}: Connection time out occured!, attempting to reconnect in 5 seconds...")
                 time.sleep(5)
 
             else:
@@ -108,7 +109,8 @@ def bookshelf_test_connection():
         except requests.RequestException:
             errorCount += 1
             if errorCount <= maxCount:
-                logger.error(f"Attempt {errorCount}: Error occured while testing server connection, attempting to reconnect in 5 seconds...")
+                logger.error(
+                    f"Attempt {errorCount}: Error occured while testing server connection, attempting to reconnect in 5 seconds...")
                 time.sleep(5)
             else:
                 logger.error("Max reconnect retries reached, aborting!")
@@ -668,42 +670,74 @@ async def bookshelf_get_current_chapter(item_id: str, current_time=0):
         print("Could not retrieve item", e)
 
 
-async def bookshelf_audio_obj(item_id: str):
+async def bookshelf_audio_obj(item_id: str, index_id: int = 1):
     """
-    :param item_id:
-    :return: onlineURL, currentTime, session_id, bookTitle, bookDuration
+    Fetches audio playback details for a given book item.
+
+    :param item_id: Book item ID.
+    :param index_id: The file number index.
+    :return: Tuple containing (onlineURL, currentTime, session_id, bookTitle, bookDuration)
     """
+
     endpoint = f"/items/{item_id}/play"
     headers = {'Content-Type': 'application/json'}
-    data = {"deviceInfo": {"clientName": "Bookshelf-Traveller", "deviceId": "Bookshelf-Traveller"},
-            "supportedMimeTypes": ["audio/flac", "audio/mp4"], "mediaPlayer": "Discord", "forceDirectPlay": "true"}
+    data = {
+        "deviceInfo": {"clientName": "Bookshelf-Traveller", "deviceId": "Bookshelf-Traveller"},
+        "supportedMimeTypes": ["audio/flac", "audio/mp4"],
+        "mediaPlayer": "Discord",
+        "forceDirectPlay": "true"
+    }
 
-    bookshelfURL = os.environ.get("bookshelfURL")
-    defaultAPIURL = bookshelfURL + "/api"
-    bookshelfToken = os.environ.get("bookshelfToken")
-    tokenInsert = "?token=" + bookshelfToken
+    bookshelfURL = os.environ.get("bookshelfURL", "")
+    bookshelfToken = os.environ.get("bookshelfToken", "")
+
+    if not bookshelfURL or not bookshelfToken:
+        logger.error("Missing Bookshelf URL or Token in environment variables.")
+        return None
+
+    defaultAPIURL = f"{bookshelfURL}/api"
+    tokenInsert = f"?token={bookshelfToken}"
 
     # Send request to play
     audio_obj = await bookshelf_conn(POST=True, endpoint=endpoint, Headers=headers, Data=data)
 
-    data = audio_obj.json()
+    if not audio_obj or audio_obj.status_code != 200:
+        logger.error(f"Failed to retrieve audio data. Status code: {audio_obj.status_code}")
+        return None
 
-    # Library Vars
-    ino = ""
-    audiofiles = data['libraryItem']['media']['audioFiles']
-    mediaType = data['libraryItem']['mediaType']
-    currentTime = data['currentTime']
-    session_id = data['id']
-    bookTitle = data['mediaMetadata']['title']
-    bookDuration = data.get('duration')
+    try:
+        data = audio_obj.json()
+    except Exception as e:
+        logger.error(f"Error parsing JSON response: {e}")
+        return None
 
-    for file in audiofiles:
-        ino = file['ino']
+    # Extract audio metadata
+    library_item = data.get("libraryItem", {})
+    audiofiles = library_item.get("media", {}).get("audioFiles", [])
+    mediaType = library_item.get("mediaType", "unknown")
+    currentTime = data.get("currentTime", 0)
+    session_id = data.get("id", "")
+    bookTitle = data.get("mediaMetadata", {}).get("title", "Unknown Title")
+    bookDuration = data.get("duration", None)
 
-    logger.info(f"Media Type:  {mediaType}, Current Time: {currentTime} Seconds")
+    if not audiofiles:
+        logger.warning(f"No audio files found for item {item_id}")
+        return None
+
+    logger.debug(f"{len(audiofiles)} audio files found for item {item_id}")
+
+    # Get the requested audio file or fallback to the first one
+    selected_file = next((file for file in audiofiles if file.get('index') == index_id), audiofiles[0])
+    ino = selected_file.get('ino', '')
+
+    if not ino:
+        logger.error(f"Invalid file index {index_id} for item {item_id}.")
+        return None
+
+    logger.info(f"Media Type: {mediaType}, Current Time: {currentTime} Seconds")
 
     onlineURL = f"{defaultAPIURL}/items/{item_id}/file/{ino}{tokenInsert}"
-    logger.info(f"attempting to play: {defaultAPIURL}/items/{item_id}/file/{ino}")
+    logger.info(f"Attempting to play: {onlineURL}")
 
     return onlineURL, currentTime, session_id, bookTitle, bookDuration
 
