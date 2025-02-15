@@ -225,6 +225,7 @@ class SubscriptionTask(Extension):
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
         bookshelfURL = os.environ.get("bookshelfURL")
+        img_url = os.getenv('OPT_IMAGE_URL')
 
         if self.ServerNickName == '':
             self.ServerNickName = "Audiobookshelf"
@@ -271,7 +272,10 @@ class SubscriptionTask(Extension):
                 embed_message.add_field(name="Added Time", value=addedTime)
                 embed_message.add_field(name="Additional Information", value=f"Wishlisted: **{wishlisted}**",
                                         inline=False)
-                embed_message.url = f"{os.getenv('bookshelfURL')}/item/{bookID}"
+                # Set the embed url to https if optional param has it
+                if "https" in img_url:
+                    bookshelfURL = img_url
+                embed_message.url = f"{bookshelfURL}/item/{bookID}"
                 embed_message.add_image(cover_link)
                 embed_message.footer = s.bookshelf_traveller_footer + " | " + self.ServerNickName
                 embeds.append(embed_message)
@@ -289,7 +293,8 @@ class SubscriptionTask(Extension):
 
             return embeds
 
-    async def embed_color_selector(self, color=0):
+    @staticmethod
+    async def embed_color_selector(color=0):
         color = int(color)
         selected_color = FlatUIColors.CARROT
         # Yellow
@@ -368,7 +373,8 @@ class SubscriptionTask(Extension):
     @slash_option(name="minutes", description=f"Lookback period, in minutes. "
                                               f"Defaults to {TASK_FREQUENCY} minutes. DOES NOT AFFECT TASK.",
                   opt_type=OptionType.INTEGER)
-    @slash_option(name="color", description="Will override the new book check embed color.", opt_type=OptionType.STRING, autocomplete=True)
+    @slash_option(name="color", description="Will override the new book check embed color.", opt_type=OptionType.STRING,
+                  autocomplete=True)
     @slash_option(name="enable_task", description="If set to true will enable recurring task.",
                   opt_type=OptionType.BOOLEAN)
     @slash_option(name="disable_task", description="If set to true, this will disable the task.",
