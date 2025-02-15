@@ -194,8 +194,6 @@ class WishList(Extension):
                 provider = DEFAULT_PROVIDER
                 published = book_dict.get('publishedYear')
 
-                add_info = f"Publisher: **{publisher}**\nYear Published: **{published}**\nProvided by: **{provider}**\nNarrator: **{narrators}**\n"
-
                 if search_all:
                     discord_id = item[6]
 
