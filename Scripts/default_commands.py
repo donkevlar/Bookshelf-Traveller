@@ -99,6 +99,9 @@ class PrimaryCommands(Extension):
                   autocomplete=True)
     async def search_media_progress(self, ctx: SlashContext, book_title: str):
         try:
+            img_url = os.getenv('OPT_IMAGE_URL')
+            bookshelf_url = os.getenv('bookshelfURL')
+
             formatted_data = await c.bookshelf_item_progress(book_title)
 
             cover_title = await c.bookshelf_cover_image(book_title)
@@ -131,7 +134,10 @@ class PrimaryCommands(Extension):
             embed_message.add_field(name="Media Progress", value=media_progress, inline=False)
             embed_message.add_field(name="Media Status", value=media_status, inline=False)
             embed_message.add_image(cover_title)
-            embed_message.url = f"{os.getenv('bookshelfURL')}/item/{book_title}"
+            # Set URL to HTTPS
+            if "https" in img_url:
+                bookshelf_url = img_url
+            embed_message.url = f"{bookshelf_url}/item/{book_title}"
 
             # Send message
             await ctx.send(embed=embed_message, ephemeral=self.ephemeral_output)
@@ -205,6 +211,9 @@ class PrimaryCommands(Extension):
             await ctx.defer(ephemeral=self.ephemeral_output)
             formatted_sessions_string, data = await c.bookshelf_listening_stats()
 
+            img_url = os.getenv('OPT_IMAGE_URL')
+            bookshelf_url = os.getenv('bookshelfURL')
+
             # Split formatted_sessions_string by newline character to separate individual sessions
             sessions_list = formatted_sessions_string.split('\n\n')
             count = 0
@@ -239,8 +248,11 @@ class PrimaryCommands(Extension):
                 embed_message.add_field(name='Number of Times a Session was Played', value=f'Play Count: {play_count}',
                                         inline=False)
                 # embed_message.add_field(name='Library Item ID', value=library_ID, inline=False)
+                # Set HTTPS URL if present
                 embed_message.add_image(cover_link)
-                embed_message.url = f"{os.getenv('bookshelfURL')}/item/{library_ID}"
+                if "https" in img_url:
+                    bookshelf_url = img_url
+                embed_message.url = f"{bookshelf_url}/item/{library_ID}"
 
                 embeds.append(embed_message)
 
