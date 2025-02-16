@@ -102,28 +102,26 @@ class PrimaryCommands(Extension):
             img_url = os.getenv('OPT_IMAGE_URL')
             bookshelf_url = os.getenv('bookshelfURL')
 
-            formatted_data = await c.bookshelf_item_progress(book_title)
+            formatted_data = await c.bookshelf_item_progress(book_title) or {}
 
-            cover_title = await c.bookshelf_cover_image(book_title)
+            cover_title = await c.bookshelf_cover_image(book_title) or "https://your-default-image-url.com"
 
-            chapter_progress, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(book_title)
+            chapter_progress, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(
+                book_title) or ({}, [], False, False)
 
-            if bookFinished:
-                chapterTitle = "Book Finished"
-            else:
-                chapterTitle = chapter_progress['title']
+            chapterTitle = "Book Finished" if bookFinished else chapter_progress.get('title', 'Unknown Chapter')
 
-            title = formatted_data['title']
-            progress = formatted_data['progress']
-            finished = formatted_data['finished']
-            currentTime = formatted_data['currentTime']
-            totalDuration = formatted_data['totalDuration']
-            lastUpdated = formatted_data['lastUpdated']
+            title = formatted_data.get('title', 'Unknown Title')
+            progress = formatted_data.get('progress', '0%')
+            finished = formatted_data.get('finished', False)
+            currentTime = formatted_data.get('currentTime', 0)
+            totalDuration = formatted_data.get('totalDuration', 0)
+            lastUpdated = formatted_data.get('lastUpdated', 'N/A')
 
             media_progress = (f"Progress: **{progress}**\nChapter Title: **{chapterTitle}**\n "
                               f"Time Progressed: **{currentTime}** Hours\n "
                               f"Total Duration: **{totalDuration}** Hours\n")
-            media_status = f"Is Finished: **{finished}**\n " f"Last Updated: **{lastUpdated}**\n"
+            media_status = f"Is Finished: **{finished}**\n Last Updated: **{lastUpdated}**\n"
 
             # Create Embed Message
             embed_message = Embed(
@@ -134,21 +132,22 @@ class PrimaryCommands(Extension):
             embed_message.add_field(name="Media Progress", value=media_progress, inline=False)
             embed_message.add_field(name="Media Status", value=media_status, inline=False)
             embed_message.add_image(cover_title)
-            # Set URL to HTTPS
-            if "https" in img_url:
+
+            # Ensure URL is set properly
+            if img_url and "https" in img_url:
                 bookshelf_url = img_url
             embed_message.url = f"{bookshelf_url}/item/{book_title}"
 
             # Send message
             await ctx.send(embed=embed_message, ephemeral=self.ephemeral_output)
-            logger.info(f' Successfully sent command: media-progress')
+            logger.info(f'Successfully sent command: media-progress')
 
         except Exception as e:
             await ctx.send(
                 "Could not complete this at the moment, likely due to no progress found. Please try again later",
                 ephemeral=self.ephemeral_output)
             logger.warning(
-                f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occured: {e} | Command Name: media-progress')
+                f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occurred: {e} | Command Name: media-progress')
 
     # Listening Stats, currently pulls the total time listened and converts it to hours
     @slash_command(name="listening-stats", description="Pulls the current ABS user's total listening time. Default Command")
