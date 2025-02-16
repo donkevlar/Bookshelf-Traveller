@@ -191,6 +191,18 @@ async def bookshelf_auth_test():
 async def bookshelf_get_item_details(book_id) -> dict:
     """
     Fetch book details from Bookshelf API.
+    :param book_id:
+    :return: formatted_data(dict) -> keys: title,
+        author,
+        narrator,
+        series,
+        publisher,
+        genres,
+        publishedYear,
+        description,
+        language,
+        duration,
+        addedDate
     """
     _url = f"/items/{book_id}"
     r = await bookshelf_conn(GET=True, endpoint=_url)
