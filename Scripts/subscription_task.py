@@ -224,13 +224,13 @@ class SubscriptionTask(Extension):
                 embeds=embed)  # NOQA
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
-        bookshelfURL = os.environ.get("bookshelfURL")
+        bookshelfURL = os.getenv("bookshelfURL", "https://default-bookshelf-url.com")
         img_url = os.getenv('OPT_IMAGE_URL')
 
-        if self.ServerNickName == '':
+        if not self.ServerNickName:
             self.ServerNickName = "Audiobookshelf"
 
-        items_added = await newBookList(task_frequency)
+        items_added = await newBookList(task_frequency) or []
 
         if items_added:
             count = 0
@@ -239,45 +239,43 @@ class SubscriptionTask(Extension):
             wishlist_titles = []
             logger.info(f'{total_item_count} New books found, executing Task!')
 
-            if wishlist_titles:
-                logger.debug(f"Wishlist Titles: {wishlist_titles}")
-
             for item in items_added:
                 count += 1
-                title = item.get('title')
-                logger.debug(title)
-                author = item.get('author')
-                addedTime = item.get('addedTime')
-                bookID = item.get('id')
+                title = item.get('title', 'Unknown Title')
+                author = item.get('author', 'Unknown Author')
+                addedTime = item.get('addedTime', 'Unknown Time')
+                bookID = item.get('id', 'Unknown ID')
+
+                logger.debug(f"Processing book: {title}")
 
                 wishlisted = False
-
-                cover_link = await c.bookshelf_cover_image(bookID)
+                cover_link = await c.bookshelf_cover_image(bookID) or "https://your-default-cover-url.com"
 
                 wl_search = search_wishlist_db(title=title)
                 if wl_search:
                     wishlisted = True
+                    wishlist_titles.append(title)
 
                 embed_message = Embed(
                     title=f"Recently Added Book {count}",
                     description=f"Recently added books for [{self.ServerNickName}]({bookshelfURL})",
+                    color=self.embedColor or FlatUIColors.ORANGE
                 )
-                if self.embedColor:
-                    embed_message.color = self.embedColor
-                else:
-                    embed_message.color = FlatUIColors.ORANGE
 
                 embed_message.add_field(name="Title", value=title, inline=False)
                 embed_message.add_field(name="Author", value=author)
                 embed_message.add_field(name="Added Time", value=addedTime)
                 embed_message.add_field(name="Additional Information", value=f"Wishlisted: **{wishlisted}**",
                                         inline=False)
-                # Set the embed url to https if optional param has it
-                if "https" in img_url:
+
+                # Ensure URL is properly assigned
+                if img_url and "https" in img_url:
                     bookshelfURL = img_url
                 embed_message.url = f"{bookshelfURL}/item/{bookID}"
+
                 embed_message.add_image(cover_link)
-                embed_message.footer = s.bookshelf_traveller_footer + " | " + self.ServerNickName
+                embed_message.footer = f"{s.bookshelf_traveller_footer} | {self.ServerNickName}"
+
                 embeds.append(embed_message)
 
                 if wl_search:
@@ -285,11 +283,10 @@ class SubscriptionTask(Extension):
                         discord_id = user[0]
                         search_title = user[2]
                         if enable_notifications:
-                            # Note: Function will send embeds individually if count > 10 due to limit
+                            # Send notification and update database
                             await self.send_user_wishlist(discord_id=discord_id, title=title, author=author,
                                                           embed=embeds)
                             mark_book_as_downloaded(discord_id=discord_id, title=search_title)
-                            # remove_book_db(title=search_title, discord_id=discord_id)
 
             return embeds
 
