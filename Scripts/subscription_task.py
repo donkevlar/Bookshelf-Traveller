@@ -257,7 +257,7 @@ class SubscriptionTask(Extension):
                     wishlist_titles.append(title)
 
                 embed_message = Embed(
-                    title=f"Recently Added Book {count}",
+                    title=f"{count}. Recently Added Book | {title}",
                     description=f"Recently added books for [{self.ServerNickName}]({bookshelfURL})",
                     color=self.embedColor or FlatUIColors.ORANGE
                 )
