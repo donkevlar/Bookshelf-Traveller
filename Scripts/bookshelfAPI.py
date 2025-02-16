@@ -190,78 +190,71 @@ async def bookshelf_auth_test():
 
 async def bookshelf_get_item_details(book_id) -> dict:
     """
-    :param book_id:
-    :return: formatted_data(dict) -> keys: title,
-        author,
-        narrator,
-        series,
-        publisher,
-        genres,
-        publishedYear,
-        description,
-        language,
-        duration,
-        addedDate
+    Fetch book details from Bookshelf API.
     """
-    # Get Media Title
     _url = f"/items/{book_id}"
     r = await bookshelf_conn(GET=True, endpoint=_url)
-    data = r.json()
+
+    # Check if response is valid
+    if r.status_code != 200:
+        logger.error(f"Failed to fetch book details. Status: {r.status_code}, Response: {r.text}")
+        return {}
+
+    try:
+        data = r.json()
+    except Exception as e:
+        logger.error(f"Error parsing JSON response: {e}. Raw response: {r.text}")
+        return {}
+
+    # Validate required fields
+    if not data or "media" not in data or "metadata" not in data["media"]:
+        logger.error(f"Invalid response structure: {data}")
+        return {}
+
     logger.debug(data)
 
-    title = data['media']['metadata']['title']
-    desc = data['media']['metadata']['description']
-    language = data['media']['metadata']['language']
-    publishedYear = data['media']['metadata']['publishedYear']
-    publisher = data['media']['metadata']['publisher']
-    addedDate = data['addedAt']
+    try:
+        title = data['media']['metadata'].get('title', 'Unknown Title')
+        desc = data['media']['metadata'].get('description', 'No Description')
+        language = data['media']['metadata'].get('language', 'Unknown Language')
+        publishedYear = data['media']['metadata'].get('publishedYear', 'Unknown Year')
+        publisher = data['media']['metadata'].get('publisher', 'Unknown Publisher')
+        addedDate = data.get('addedAt', 'Unknown Date')
 
-    authors_list = []
-    narrators_list = []
-    duration_sec = 0
-    series = ''
+        authors_list = [author.get('name') for author in data['media']['metadata'].get('authors', [])]
+        narrators_list = data['media']['metadata'].get('narrators', [])
+        series_raw = data['media']['metadata'].get('series', [])
+        files_raw = data['media'].get('audioFiles', [])
+        genres_raw = data['media']['metadata'].get('genres', [])
 
-    narrators_raw = data['media']['metadata']['narrators']
-    authors_raw = data['media']['metadata']['authors']
-    series_raw = data['media']['metadata']['series']
-    files_raw = data['media']['audioFiles']
-    genres_raw = data['media']['metadata']['genres']
+        # Construct series info
+        series = ''
+        if series_raw:
+            series_name = series_raw[0].get('name', 'Unknown Series')
+            series_seq = series_raw[0].get('sequence', '0')
+            series = f"{series_name}, Book {series_seq}"
 
-    for author in authors_raw:
-        name = author.get('name')
-        authors_list.append(name)
+        # Calculate total duration
+        duration_sec = sum(int(file.get('duration', 0)) for file in files_raw)
 
-    for narrator in narrators_raw:
-        narrators_list.append(narrator)
+        formatted_data = {
+            'title': title,
+            'author': ', '.join(authors_list),
+            'narrator': ', '.join(narrators_list),
+            'series': series,
+            'publisher': publisher,
+            'genres': ', '.join(genres_raw),
+            'publishedYear': publishedYear,
+            'description': desc,
+            'language': language,
+            'duration': duration_sec,
+            'addedDate': addedDate
+        }
 
-    for series in series_raw:
-        series_name = series.get('name')
-        series_seq = series.get('sequence')
-        series = f"{series_name}, Book {series_seq}"
-
-    for file in files_raw:
-        file_duration = int(file['duration'])
-        duration_sec += file_duration
-
-    authors = ', '.join(authors_list)
-    narrators = ', '.join(narrators_list)
-    genres = ', '.join(genres_raw)
-
-    formatted_data = {
-        'title': title,
-        'author': authors,
-        'narrator': narrators,
-        'series': series,
-        'publisher': publisher,
-        'genres': genres,
-        'publishedYear': publishedYear,
-        'description': desc,
-        'language': language,
-        'duration': duration_sec,
-        'addedDate': addedDate
-    }
-
-    return formatted_data
+        return formatted_data
+    except Exception as e:
+        logger.error(f"Error processing book data: {e}. Raw data: {data}")
+        return {}
 
 
 async def bookshelf_listening_stats():
