@@ -717,11 +717,11 @@ class AudioPlayBack(Extension):
             ctx.deferred = True
             try:
                 # Random - Sometimes a little surprise is noice!
-                if user_input.lower() in 'random':
-                    logger.debug('User input includes random, time for a surprise! :)')
+                if user_input.lower() in 'random' or user_input.lower() == 'random':
+                    logger.info('User input includes random, time for a surprise! :)')
                     titles_ = await c.bookshelf_get_valid_books()
                     titles_count = len(titles_)
-                    logger.debug(f"Total Title Count: {titles_count}")
+                    logger.info(f"Total Title Count: {titles_count}")
                     random_title_index = random.randint(1, titles_count)
                     random_book = titles_[random_title_index]
                     book_title = random_book.get('title')
@@ -734,7 +734,7 @@ class AudioPlayBack(Extension):
                     else:
                         name = book_title
 
-                    logger.debug(f'Surprise! {book_title} has been selected as tribute!')
+                    logger.info(f'Surprise! {book_title} has been selected as tribute!')
                     choices.append({"name": name, "value": f"{book_id}"})
 
                 else:
