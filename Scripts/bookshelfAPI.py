@@ -483,7 +483,7 @@ async def bookshelf_title_search(display_title: str) -> list:
                 logger.error(traceback.print_exc())
 
 
-async def bookshelf_get_users(name):
+async def bookshelf_search_users(name):
     endpoint = "/users"
 
     r = await bookshelf_conn(GET=True, endpoint=endpoint)
@@ -504,6 +504,16 @@ async def bookshelf_get_users(name):
                 c_last_seen = c_last_seen.strftime('%Y-%m-%d %H:%M:%S')
 
                 return isFound, username, user_id, c_last_seen, isActive
+
+
+async def get_users() -> dict:
+    endpoint = "/users"
+
+    r = await bookshelf_conn(GET=True, endpoint=endpoint)
+    if r.status_code == 200:
+        data = r.json()
+
+        return data
 
 
 async def bookshelf_create_user(username: str, password, user_type: str, email=None):
@@ -957,10 +967,8 @@ async def bookshelf_get_valid_books() -> list:
 async def main():
     if __name__ == '__main__':
         print("TESTING COMMENCES")
-        response, data = await bookshelf_listening_stats()
-        count = 0
-        for items in data['recentSessions']:
-            print(items.get('bookId'))
+        data = await get_users()
+        print(data)
 
 
 asyncio.run(main())
