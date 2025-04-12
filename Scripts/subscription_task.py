@@ -224,7 +224,7 @@ class SubscriptionTask(Extension):
                 embeds=embed)  # NOQA
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
-        bookshelfURL = os.getenv("bookshelfURL", "https://default-bookshelf-url.com")
+        bookshelfURL = os.getenv("bookshelfURL", "http://127.0.0.1")
         img_url = os.getenv('OPT_IMAGE_URL')
 
         if not self.ServerNickName:
