@@ -362,6 +362,10 @@ class SubscriptionTask(Extension):
                 "Task 'new-book-check' was active, but setup check failed. Please setup the task again via `/setup-tasks`.")
             self.newBookTask.stop()
 
+    @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
+    async def finishedBookTask(self):
+        logger.info('Initializing Finished Book Task!')
+
     # Slash Commands ----------------------------------------------------
 
     @slash_command(name="new-book-check",
@@ -454,18 +458,21 @@ class SubscriptionTask(Extension):
         task_name = ""
         success = False
         task_instruction = ''
+        task_num = int(task)
 
-        if int(task) == 1:
-            task_name = 'new-book-check'
-            task_command = '`/new-book-check disable_task: True`'
-            task_instruction = f'Task is now active. To disable, use **{task_command}**'
-            result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
-                                 server_name=server_name)
+        match task_num:
+            # New book check task
+            case 1:
+                task_name = 'new-book-check'
+                task_command = '`/new-book-check disable_task: True`'
+                task_instruction = f'Task is now active. To disable, use **{task_command}**'
+                result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
+                                     server_name=server_name)
 
-            if result:
-                success = True
-                if not self.newBookTask.running:
-                    self.newBookTask.start()
+                if result:
+                    success = True
+                    if not self.newBookTask.running:
+                        self.newBookTask.start()
 
         if success:
             if color:
