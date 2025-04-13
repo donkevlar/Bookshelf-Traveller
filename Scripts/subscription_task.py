@@ -384,6 +384,7 @@ class SubscriptionTask(Extension):
 
             user_list = []
             book_list = []
+            count = 0
             if users and books:
 
                 for user in users['users']:
@@ -399,17 +400,24 @@ class SubscriptionTask(Extension):
 
                             media_type = media['mediaItemType']
                             libraryItemId = media['libraryItemId']
+                            displayTitle = media.get('displayTitle')
                             finished = bool(media.get('isFinished'))
-                            finishedAtTime = int(media.get('finishedAt'))
 
-                            # Convert time to regular format
-                            formatted_time = finishedAtTime / 1000
-                            formatted_time = datetime.fromtimestamp(formatted_time)
-                            formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
+                            # Verify it's a book and not a podcast and the book is finished
+                            if media_type == 'book' and finished:
 
-                            # Verify it's a book and not a podcast
-                            if media_type == 'book' and finished and finishedAtTime >= timestamp_minus_delta:
-                                print(f'{username} Finished Book ID: {libraryItemId}')
+                                finishedAtTime = int(media.get('finishedAt'))
+
+                                # Convert time to regular format
+                                formatted_time = finishedAtTime / 1000
+                                formatted_time = datetime.fromtimestamp(formatted_time)
+                                formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
+
+                                if finishedAtTime >= timestamp_minus_delta:
+                                    count += 1
+                                    logger.info(f'User {username}, finished Book: {displayTitle} with  ID: {libraryItemId} at {formatted_time}')
+
+                logger.info(f"Total Found Books: {count}")
 
         except Exception as e:
             logger.error(f'Error occured: {e}')
