@@ -500,7 +500,7 @@ async def bookshelf_search_users(name):
                 isActive = user['isActive']
 
                 # convert last seen
-                c_last_seen = datetime.utcfromtimestamp(last_seen)
+                c_last_seen = datetime.fromtimestamp(last_seen)
                 c_last_seen = c_last_seen.strftime('%Y-%m-%d %H:%M:%S')
 
                 return isFound, username, user_id, c_last_seen, isActive
@@ -972,11 +972,9 @@ async def main():
         data = await get_users()
         users = data['users']
 
-        ids_ = []
         completed_list = []
         for user in users:
             user_id = user.get('id')
-            ids_.append(user_id)
 
             endpoint = f'/users/{user_id}'
             r = await bookshelf_conn(endpoint=endpoint, GET=True)
@@ -993,9 +991,6 @@ async def main():
                         completed_list.append(libraryItemId)
                         media_progress_count += 1
                 print("completed media items: ", media_progress_count)
-
-
-
 
 
 asyncio.run(main())
