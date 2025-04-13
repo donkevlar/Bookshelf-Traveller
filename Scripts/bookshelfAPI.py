@@ -395,7 +395,7 @@ async def bookshelf_item_progress(item_id):
 
         # Convert lastUpdate Time from unix to standard time
         # Conversions Below
-        lastUpdate = datetime.utcfromtimestamp(lastUpdate)
+        lastUpdate = datetime.fromtimestamp(lastUpdate)
         converted_lastUpdate = lastUpdate.strftime('%Y-%m-%d %H:%M')
 
         # Get Media Title
@@ -598,7 +598,7 @@ async def bookshelf_all_library_items(library_id, params=''):
         dataset = data.get('results', [])
         for items in dataset:
             book_title = items['media']['metadata']['title']
-            author = items['media']['metadata']['authorName']
+            author = items['media']['metadata'].get('authorName')
             media_type = items['mediaType']
             item_id = items['id']
 
@@ -967,8 +967,35 @@ async def bookshelf_get_valid_books() -> list:
 async def main():
     if __name__ == '__main__':
         print("TESTING COMMENCES")
+        books = await bookshelf_get_valid_books()
+        print(books)
         data = await get_users()
-        print(data)
+        users = data['users']
+
+        ids_ = []
+        completed_list = []
+        for user in users:
+            user_id = user.get('id')
+            ids_.append(user_id)
+
+            endpoint = f'/users/{user_id}'
+            r = await bookshelf_conn(endpoint=endpoint, GET=True)
+            if r.status_code == 200:
+                media_progress_count = 0
+                user_data = r.json()
+
+                for media in user_data['mediaProgress']:
+                    media_type = media['mediaItemType']
+                    libraryItemId = media['libraryItemId']
+                    finished = bool(media.get('isFinished'))
+                    # Verify it's a book and not a podcast
+                    if media_type == 'book' and finished:
+                        completed_list.append(libraryItemId)
+                        media_progress_count += 1
+                print("completed media items: ", media_progress_count)
+
+
+
 
 
 asyncio.run(main())
