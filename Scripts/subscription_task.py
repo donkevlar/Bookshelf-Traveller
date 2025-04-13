@@ -186,8 +186,8 @@ async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
 class SubscriptionTask(Extension):
     def __init__(self, bot):
         # Channel object has 3 main properties .name, .id, .type
-        self.newBookCheckChannel = None
-        self.newBookCheckChannelID = None
+        self.TaskChannel = None
+        self.TaskChannelID = None
         self.ServerNickName = ''
         self.embedColor = None
 
