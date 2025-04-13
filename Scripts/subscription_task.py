@@ -616,6 +616,7 @@ class SubscriptionTask(Extension):
                     success = True
                     if not self.newBookTask.running:
                         self.newBookTask.start()
+                        logger.info('Successfully subscribed to new-book-check!')
 
             # Finished book check task
             case 2:
@@ -629,6 +630,7 @@ class SubscriptionTask(Extension):
                     success = True
                     if not self.finishedBookTask.running:
                         self.finishedBookTask.start()
+                        logger.info('Successfully subscribed to finished-book-task!')
 
         if success:
             if color:
