@@ -644,8 +644,8 @@ class SubscriptionTask(Extension):
                 f"Please visit the logs for more information.", ephemeral=True)
 
     @check(is_owner())
-    @slash_command(name='remove-task', description="Remove an active task from the task db. Autofill format: c1: task, c2: channel name.")
-    @slash_option(name='task', description="Active tasks pulled from db.", autocomplete=True, required=True,
+    @slash_command(name='remove-task', description="Remove an active task from the task db.")
+    @slash_option(name='task', description="Active tasks pulled from db. Autofill format: c1: task, c2: channel name.", autocomplete=True, required=True,
                   opt_type=OptionType.STRING)
     async def remove_task_command(self, ctx: SlashContext, task):
         result = remove_task_db(db_id=task)
