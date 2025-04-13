@@ -620,7 +620,7 @@ class SubscriptionTask(Extension):
             # Finished book check task
             case 2:
                 task_name = 'finished-book-check'
-                task_command = '`/finished-book-check disable_task: True`'
+                task_command = '`/remove-task task:finished-book-check`'
                 task_instruction = f'Task is now active. To disable, use **{task_command}**'
                 result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
                                      server_name=server_name)
