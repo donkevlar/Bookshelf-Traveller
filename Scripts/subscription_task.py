@@ -422,7 +422,7 @@ class SubscriptionTask(Extension):
 
         return selected_color
 
-    @Task.create(trigger=IntervalTrigger(minutes=1))
+    @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def newBookTask(self):
         logger.info("Initializing new-book-check task!")
         channel_list = []
@@ -470,7 +470,7 @@ class SubscriptionTask(Extension):
                 "Task 'new-book-check' was active, but setup check failed. Please setup the task again via `/setup-tasks`.")
             self.newBookTask.stop()
 
-    @Task.create(trigger=IntervalTrigger(minutes=1))
+    @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def finishedBookTask(self):
         logger.info('Initializing Finished Book Task!')
         channel_list = []
