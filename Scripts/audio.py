@@ -20,12 +20,8 @@ logger = logging.getLogger("bot")
 # Update Frequency for session sync
 updateFrequency = s.UPDATES
 
-# ENV VARS Specific to Audio Module
-playback_role = int(s.PLAYBACK_ROLE)
-
 # Default only owner can use this bot
 ownership = s.OWNER_ONLY
-ownership = eval(ownership)
 
 # Timezone
 timeZone = pytz.timezone(TIMEZONE)
@@ -384,15 +380,7 @@ class AudioPlayBack(Extension):
                   description="Force start an item which might of already been marked as finished. IMPORTANT: THIS CAN FAIL!",
                   opt_type=OptionType.BOOLEAN)
     async def play_audio(self, ctx: SlashContext, book: str, force=False):
-        if playback_role != 0:
-            logger.info('PLAYBACK_ROLE is currently active, verifying if user is authorized.')
-            if not ctx.author.has_role(playback_role):  # NOQA
-                logger.info('user not authorized to use this command!')
-                await ctx.send(content='You are not authorized to use this command!', ephemeral=True)
-                return
-            else:
-                logger.info('user verified!, executing command!')
-        elif ownership and playback_role == 0:
+        if ownership:
             if ctx.author.id not in ctx.bot.owners:
                 logger.warning(f'User {ctx.author} attempted to use /play, and OWNER_ONLY is enabled!')
                 await ctx.send(
