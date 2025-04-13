@@ -300,90 +300,16 @@ class SubscriptionTask(Extension):
             return embeds
 
     @staticmethod
-    async def embed_color_selector(color=0):
-        color = int(color)
-        selected_color = FlatUIColors.CARROT
-        # Yellow
-        if color == 1:
-            selected_color = FlatUIColors.SUNFLOWER
-        # Orange
-        elif color == 2:
-            selected_color = FlatUIColors.CARROT
-        # Purple
-        elif color == 3:
-            selected_color = FlatUIColors.AMETHYST
-        # Turquoise
-        elif color == 4:
-            selected_color = FlatUIColors.TURQUOISE
-        # Red
-        elif color == 5:
-            selected_color = FlatUIColors.ALIZARIN
-        # Green
-        elif color == 6:
-            selected_color = FlatUIColors.EMERLAND
-
-        return selected_color
-
-    @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
-    async def newBookTask(self):
-        logger.info("Initializing new-book-check task!")
-        channel_list = []
-        search_result = search_task_db(task='new-book-check')
-        if search_result:
-            if self.ServerNickName == '':
-                await self.get_server_name_db()
-            logger.debug(f"search result: {search_result}")
-            new_titles = await newBookList()
-            if new_titles:
-                logger.debug(f"New Titles Found: {new_titles}")
-
-            if len(new_titles) > 10:
-                logger.warning("Found more than 10 titles")
-
-            embeds = await self.NewBookCheckEmbed(enable_notifications=True)
-            if embeds:
-                for result in search_result:
-                    channel_id = int(result[2])
-                    channel_list.append(channel_id)
-
-                for channelID in channel_list:
-                    channel_query = await self.bot.fetch_channel(channel_id=channelID, force=True)
-                    if channel_query:
-                        logger.debug(f"Found Channel: {channelID}")
-                        logger.debug(f"Bot will now attempt to send a message to channel id: {channelID}")
-
-                        if len(embeds) < 10:
-                            msg = await channel_query.send(content="New books have been added to your library!")
-                            await msg.edit(embeds=embeds)
-                        else:
-                            await channel_query.send(content="New books have been added to your library!")
-                            for embed in embeds:
-                                await channel_query.send(embed=embed)
-                        logger.info("Successfully completed new-book-check task!")
-
-            else:
-                logger.info("No new books found, marking task as complete.")
-        # If active but no result, disable task and send owner message.
-        else:
-            logger.warning("Task 'new-book-check' was active, but setup check failed.")
-            owner = self.bot.owner
-            await owner.send(
-                "Task 'new-book-check' was active, but setup check failed. Please setup the task again via `/setup-tasks`.")
-            self.newBookTask.stop()
-
-    @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
-    async def finishedBookTask(self):
-        logger.info('Initializing Finished Book Task!')
+    async def getFinishedBooks():
+        current_time = datetime.now()
+        book_list = []
         try:
-            current_time = datetime.now()
             books = await c.bookshelf_get_valid_books()
             users = await c.get_users()
 
             time_minus_delta = current_time - timedelta(minutes=TASK_FREQUENCY)
             timestamp_minus_delta = int(time.mktime(time_minus_delta.timetuple()) * 1000)
 
-            user_list = []
-            book_list = []
             count = 0
             if users and books:
 
@@ -415,12 +341,169 @@ class SubscriptionTask(Extension):
 
                                 if finishedAtTime >= timestamp_minus_delta:
                                     count += 1
-                                    logger.info(f'User {username}, finished Book: {displayTitle} with  ID: {libraryItemId} at {formatted_time}')
+                                    media['username'] = username
+                                    book_list.append(media)
+                                    logger.info(
+                                        f'User {username}, finished Book: {displayTitle} with  ID: {libraryItemId} at {formatted_time}')
 
                 logger.info(f"Total Found Books: {count}")
 
         except Exception as e:
-            logger.error(f'Error occured: {e}')
+            logger.error(f"Error occured while attempting to get finished book: {e}")
+
+        return book_list
+
+    async def FinishedBookEmbeds(self, book_list: list):
+        count = 0
+        embeds = []
+        serverURL = os.getenv("bookshelfURL", "http://127.0.0.1")
+        img_url = os.getenv('OPT_IMAGE_URL')
+        for book in book_list:
+            count += 1
+            title = book.get('displayTitle', 'No Title Provided')
+            bookID = book.get('libraryItemId')
+            finishedAtTime = int(book.get('finishedAt'))
+            username = book.get('username')
+
+            # Get cover link
+            cover_link = await c.bookshelf_cover_image(bookID)
+
+            # Convert time to regular format
+            formatted_time = finishedAtTime / 1000
+            formatted_time = datetime.fromtimestamp(formatted_time)
+            formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
+
+            # Construct embed message
+            embed_message = Embed(
+                title=f"{count}. Recently Finished Book | {title}",
+                description=f"Recently finished books for [{self.ServerNickName}]({serverURL})",
+                color=self.embedColor or FlatUIColors.ORANGE
+            )
+
+            embed_message.add_field(name="Title", value=title, inline=False)
+            embed_message.add_field(name="Finished Time", value=formatted_time)
+            embed_message.add_field(name="Finished by User", value=username,
+                                    inline=False)
+
+            # Ensure URL is properly assigned
+            if img_url and "https" in img_url:
+                serverURL = img_url
+            embed_message.url = f"{serverURL}/item/{bookID}"
+
+            embed_message.add_image(cover_link)
+            embed_message.footer = f"{s.bookshelf_traveller_footer} | {self.ServerNickName}"
+
+            embeds.append(embed_message)
+
+        return embeds
+
+    @staticmethod
+    async def embed_color_selector(color=0):
+        color = int(color)
+        selected_color = FlatUIColors.CARROT
+        # Yellow
+        if color == 1:
+            selected_color = FlatUIColors.SUNFLOWER
+        # Orange
+        elif color == 2:
+            selected_color = FlatUIColors.CARROT
+        # Purple
+        elif color == 3:
+            selected_color = FlatUIColors.AMETHYST
+        # Turquoise
+        elif color == 4:
+            selected_color = FlatUIColors.TURQUOISE
+        # Red
+        elif color == 5:
+            selected_color = FlatUIColors.ALIZARIN
+        # Green
+        elif color == 6:
+            selected_color = FlatUIColors.EMERLAND
+
+        return selected_color
+
+    @Task.create(trigger=IntervalTrigger(minutes=1))
+    async def newBookTask(self):
+        logger.info("Initializing new-book-check task!")
+        channel_list = []
+        search_result = search_task_db(task='new-book-check')
+        print(search_result)
+        if search_result:
+            if self.ServerNickName == '':
+                await self.get_server_name_db()
+            logger.debug(f"search result: {search_result}")
+            new_titles = await newBookList()
+            if new_titles:
+                logger.debug(f"New Titles Found: {new_titles}")
+
+            if len(new_titles) > 10:
+                logger.warning("Found more than 10 titles")
+
+            embeds = await self.NewBookCheckEmbed(enable_notifications=True)
+            if embeds:
+                for result in search_result:
+                    channel_id = int(result[1])
+                    channel_list.append(channel_id)
+
+                for channelID in channel_list:
+                    channel_query = await self.bot.fetch_channel(channel_id=channelID, force=True)
+                    if channel_query:
+                        logger.debug(f"Found Channel: {channelID}")
+                        logger.debug(f"Bot will now attempt to send a message to channel id: {channelID}")
+
+                        if len(embeds) < 10:
+                            msg = await channel_query.send(content="New books have been added to your library!")
+                            await msg.edit(embeds=embeds)
+                        else:
+                            await channel_query.send(content="New books have been added to your library!")
+                            for embed in embeds:
+                                await channel_query.send(embed=embed)
+                        logger.info("Successfully completed new-book-check task!")
+
+            else:
+                logger.info("No new books found, marking task as complete.")
+        # If active but no result, disable task and send owner message.
+        else:
+            logger.warning("Task 'new-book-check' was active, but setup check failed.")
+            owner = self.bot.owner
+            await owner.send(
+                "Task 'new-book-check' was active, but setup check failed. Please setup the task again via `/setup-tasks`.")
+            self.newBookTask.stop()
+
+    @Task.create(trigger=IntervalTrigger(minutes=1))
+    async def finishedBookTask(self):
+        logger.info('Initializing Finished Book Task!')
+        channel_list = []
+        book_list = await self.getFinishedBooks()
+        search_result = search_task_db(task='finished-book-check')
+        print(search_result)
+        if book_list and search_result:
+            logger.info('Finished books found! Creating embeds.')
+
+            embeds = await self.FinishedBookEmbeds(book_list)
+            if embeds:
+                for result in search_result:
+                    channel_id = int(result[1])
+                    logger.info(f'Channel ID: {channel_id}')
+                    channel_list.append(channel_id)
+
+                    for channelID in channel_list:
+                        channel_query = await self.bot.fetch_channel(channel_id=channelID, force=True)
+                        if channel_query:
+                            logger.debug(f"Found Channel: {channelID}")
+                            logger.debug(f"Bot will now attempt to send a message to channel id: {channelID}")
+
+                            if len(embeds) < 10:
+                                msg = await channel_query.send(content="These books have been recently finished in your library!")
+                                await msg.edit(embeds=embeds)
+                            else:
+                                await channel_query.send(content="These books have been recently finished in your library!")
+                                for embed in embeds:
+                                    await channel_query.send(embed=embed)
+                            logger.info("Successfully completed finished-book-check task!")
+
+        else:
+            logger.info('No finished books found! Aborting!')
 
     # Slash Commands ----------------------------------------------------
 
@@ -663,4 +746,3 @@ class SubscriptionTask(Extension):
                 self.finishedBookTask.start()
                 logger.info(
                     f"Enabling task: Finished Book Check on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
-
