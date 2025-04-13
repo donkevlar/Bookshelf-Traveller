@@ -25,23 +25,23 @@ handler = logging.StreamHandler()
 console_handler = logger.handlers[0]
 original_formatter = console_handler.formatter
 
+
 # Experimental Imports
 # enables experimental features and modules
 
+# Convert ENV string to bool
+def bool_converter(param) -> bool:
+    if param == "True":
+        return True
+    else:
+        return False
+
 
 # Global Vars
-MULTI_USER = eval(settings.MULTI_USER)
-AUDIO_ENABLED = eval(settings.AUDIO_ENABLED)
+MULTI_USER = settings.MULTI_USER
+# AUDIO_ENABLED = settings.AUDIO_ENABLED
 DEBUG_MODE = settings.DEBUG_MODE
-INITIALIZED_MSG = bool(settings.INITIALIZED_MSG)
-
-
-# TEMP
-if DEBUG_MODE == "True":
-    DEBUG_MODE = True
-    logger.setLevel(logging.DEBUG)
-else:
-    DEBUG_MODE = False
+INITIALIZED_MSG = settings.INITIALIZED_MSG
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
@@ -131,7 +131,7 @@ async def on_startup(event: Startup):
     if settings.EXPERIMENTAL:
         logger.warning(f'EXPERIMENTAL FEATURES ENABLED!')
 
-    if MULTI_USER:
+    if MULTI_USER == 'True':
         import multi_user as mu
         user_token = os.getenv('bookshelfToken')
         user_info = c.bookshelf_user_login(token=user_token)
@@ -174,12 +174,9 @@ if __name__ == '__main__':
     logger.info('Wishlist module loaded!')
     bot.load_extension("wishlist")
 
-    if AUDIO_ENABLED:
-        # Load Audio Extension
-        logger.info("Audio module loaded!")
-        bot.load_extension("audio")
-    else:
-        logger.warning('Audio module disabled!')
+    # Must load audio module
+    logger.info("Audio module loaded!")
+    bot.load_extension("audio")
 
     # Load Admin related extensions
     if ADMIN and not MULTI_USER:

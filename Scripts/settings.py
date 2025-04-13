@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # Version Info
-versionNumber = 'V1.3.1b'
+versionNumber = 'V1.3.2 '
 
 COMMAND_COUNT = 0
 
@@ -17,6 +17,7 @@ current_platform = platform.system()
 DEBUG_MODE = os.environ.get('DEBUG_MODE', True)
 
 # Server URL
+# Mandatory
 SERVER_URL = os.environ.get("bookshelfURL")
 
 OPT_IMAGE_URL = os.getenv('OPT_IMAGE_URL', '')
@@ -34,6 +35,7 @@ AUDIO_ENABLED = os.getenv('AUDIO_ENABLED', True)
 MULTI_USER = os.environ.get('MULTI_USER', True)
 
 # Discord token
+# Mandatory
 DISCORD_API_SECRET = os.getenv("DISCORD_TOKEN")
 
 # Default search provider

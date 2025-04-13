@@ -118,8 +118,17 @@ def search_task_db(discord_id=0, task='', channel_id=0, override_response='') ->
                         ''', (discord_id,))
         rows = cursor.fetchall()
 
-    else:
+    elif task != '':
         option = 4
+        if not override:
+            logger.info(f'OPTION {option}: Searching db using task name in tasks table.')
+        cursor.execute('''
+                        SELECT task, channel_id, id FROM tasks WHERE task = ?
+                        ''', (task,))
+        rows = cursor.fetchall()
+
+    else:
+        option = 5
         if not override:
             logger.info(f'OPTION {option}: Searching db using no arguments in tasks table.')
         cursor.execute('''SELECT discord_id, task, channel_id, server_name FROM tasks''')
@@ -186,8 +195,8 @@ async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
 class SubscriptionTask(Extension):
     def __init__(self, bot):
         # Channel object has 3 main properties .name, .id, .type
-        self.newBookCheckChannel = None
-        self.newBookCheckChannelID = None
+        self.TaskChannel = None
+        self.TaskChannelID = None
         self.ServerNickName = ''
         self.embedColor = None
 
@@ -224,7 +233,7 @@ class SubscriptionTask(Extension):
                 embeds=embed)  # NOQA
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
-        bookshelfURL = os.getenv("bookshelfURL", "https://default-bookshelf-url.com")
+        bookshelfURL = os.getenv("bookshelfURL", "http://127.0.0.1")
         img_url = os.getenv('OPT_IMAGE_URL')
 
         if not self.ServerNickName:
@@ -291,6 +300,104 @@ class SubscriptionTask(Extension):
             return embeds
 
     @staticmethod
+    async def getFinishedBooks():
+        current_time = datetime.now()
+        book_list = []
+        try:
+            books = await c.bookshelf_get_valid_books()
+            users = await c.get_users()
+
+            time_minus_delta = current_time - timedelta(minutes=TASK_FREQUENCY)
+            timestamp_minus_delta = int(time.mktime(time_minus_delta.timetuple()) * 1000)
+
+            count = 0
+            if users and books:
+
+                for user in users['users']:
+                    user_id = user.get('id')
+                    username = user.get('username')
+
+                    endpoint = f'/users/{user_id}'
+                    r = await c.bookshelf_conn(endpoint=endpoint, GET=True)
+                    if r.status_code == 200:
+                        user_data = r.json()
+
+                        for media in user_data['mediaProgress']:
+
+                            media_type = media['mediaItemType']
+                            libraryItemId = media['libraryItemId']
+                            displayTitle = media.get('displayTitle')
+                            finished = bool(media.get('isFinished'))
+
+                            # Verify it's a book and not a podcast and the book is finished
+                            if media_type == 'book' and finished:
+
+                                finishedAtTime = int(media.get('finishedAt'))
+
+                                # Convert time to regular format
+                                formatted_time = finishedAtTime / 1000
+                                formatted_time = datetime.fromtimestamp(formatted_time)
+                                formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
+
+                                if finishedAtTime >= timestamp_minus_delta:
+                                    count += 1
+                                    media['username'] = username
+                                    book_list.append(media)
+                                    logger.info(
+                                        f'User {username}, finished Book: {displayTitle} with  ID: {libraryItemId} at {formatted_time}')
+
+                logger.info(f"Total Found Books: {count}")
+
+        except Exception as e:
+            logger.error(f"Error occured while attempting to get finished book: {e}")
+
+        return book_list
+
+    async def FinishedBookEmbeds(self, book_list: list):
+        count = 0
+        embeds = []
+        serverURL = os.getenv("bookshelfURL", "http://127.0.0.1")
+        img_url = os.getenv('OPT_IMAGE_URL')
+        for book in book_list:
+            count += 1
+            title = book.get('displayTitle', 'No Title Provided')
+            bookID = book.get('libraryItemId')
+            finishedAtTime = int(book.get('finishedAt'))
+            username = book.get('username')
+
+            # Get cover link
+            cover_link = await c.bookshelf_cover_image(bookID)
+
+            # Convert time to regular format
+            formatted_time = finishedAtTime / 1000
+            formatted_time = datetime.fromtimestamp(formatted_time)
+            formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
+
+            # Construct embed message
+            embed_message = Embed(
+                title=f"{count}. Recently Finished Book | {title}",
+                description=f"Recently finished books for [{self.ServerNickName}]({serverURL})",
+                color=self.embedColor or FlatUIColors.ORANGE
+            )
+
+            embed_message.add_field(name="Title", value=title, inline=False)
+            embed_message.add_field(name="Finished Time", value=formatted_time)
+            embed_message.add_field(name="Finished by User", value=username,
+                                    inline=False)
+
+            # Ensure URL is properly assigned
+            if img_url and "https" in img_url:
+                serverURL = img_url
+            embed_message.url = f"{serverURL}/item/{bookID}"
+
+            embed_message.add_image(cover_link)
+            embed_message.footer = f"{s.bookshelf_traveller_footer} | {self.ServerNickName}"
+
+            embeds.append(embed_message)
+
+        return embeds
+
+    @staticmethod
     async def embed_color_selector(color=0):
         color = int(color)
         selected_color = FlatUIColors.CARROT
@@ -319,7 +426,8 @@ class SubscriptionTask(Extension):
     async def newBookTask(self):
         logger.info("Initializing new-book-check task!")
         channel_list = []
-        search_result = search_task_db()
+        search_result = search_task_db(task='new-book-check')
+        print(search_result)
         if search_result:
             if self.ServerNickName == '':
                 await self.get_server_name_db()
@@ -334,7 +442,7 @@ class SubscriptionTask(Extension):
             embeds = await self.NewBookCheckEmbed(enable_notifications=True)
             if embeds:
                 for result in search_result:
-                    channel_id = int(result[2])
+                    channel_id = int(result[1])
                     channel_list.append(channel_id)
 
                 for channelID in channel_list:
@@ -361,6 +469,45 @@ class SubscriptionTask(Extension):
             await owner.send(
                 "Task 'new-book-check' was active, but setup check failed. Please setup the task again via `/setup-tasks`.")
             self.newBookTask.stop()
+
+    @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
+    async def finishedBookTask(self):
+        logger.info('Initializing Finished Book Task!')
+        channel_list = []
+        book_list = await self.getFinishedBooks()
+        search_result = search_task_db(task='finished-book-check')
+        print(search_result)
+        if search_result:
+            if book_list:
+                logger.info('Finished books found! Creating embeds.')
+
+                embeds = await self.FinishedBookEmbeds(book_list)
+                if embeds:
+                    for result in search_result:
+                        channel_id = int(result[1])
+                        logger.info(f'Channel ID: {channel_id}')
+                        channel_list.append(channel_id)
+
+                        for channelID in channel_list:
+                            channel_query = await self.bot.fetch_channel(channel_id=channelID, force=True)
+                            if channel_query:
+                                logger.debug(f"Found Channel: {channelID}")
+                                logger.debug(f"Bot will now attempt to send a message to channel id: {channelID}")
+
+                                if len(embeds) < 10:
+                                    msg = await channel_query.send(content="These books have been recently finished in your library!")
+                                    await msg.edit(embeds=embeds)
+                                else:
+                                    await channel_query.send(content="These books have been recently finished in your library!")
+                                    for embed in embeds:
+                                        await channel_query.send(embed=embed)
+                                logger.info("Successfully completed finished-book-check task!")
+
+            else:
+                logger.info('No finished books found! Aborting!')
+        else:
+            logger.warning("Task 'new-book-check' was active, but setup check failed.")
+            self.finishedBookTask.stop()
 
     # Slash Commands ----------------------------------------------------
 
@@ -454,18 +601,34 @@ class SubscriptionTask(Extension):
         task_name = ""
         success = False
         task_instruction = ''
+        task_num = int(task)
 
-        if int(task) == 1:
-            task_name = 'new-book-check'
-            task_command = '`/new-book-check disable_task: True`'
-            task_instruction = f'Task is now active. To disable, use **{task_command}**'
-            result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
-                                 server_name=server_name)
+        match task_num:
+            # New book check task
+            case 1:
+                task_name = 'new-book-check'
+                task_command = '`/new-book-check disable_task: True`'
+                task_instruction = f'Task is now active. To disable, use **{task_command}**'
+                result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
+                                     server_name=server_name)
 
-            if result:
-                success = True
-                if not self.newBookTask.running:
-                    self.newBookTask.start()
+                if result:
+                    success = True
+                    if not self.newBookTask.running:
+                        self.newBookTask.start()
+
+            # Finished book check task
+            case 2:
+                task_name = 'finished-book-check'
+                task_command = '`/remove-task task:finished-book-check`'
+                task_instruction = f'Task is now active. To disable, use **{task_command}**'
+                result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
+                                     server_name=server_name)
+
+                if result:
+                    success = True
+                    if not self.finishedBookTask.running:
+                        self.finishedBookTask.start()
 
         if success:
             if color:
@@ -481,8 +644,8 @@ class SubscriptionTask(Extension):
                 f"Please visit the logs for more information.", ephemeral=True)
 
     @check(is_owner())
-    @slash_command(name='remove-task', description="Remove an active task from the task db")
-    @slash_option(name='task', description="Active tasks pulled from db.", autocomplete=True, required=True,
+    @slash_command(name='remove-task', description="Remove an active task from the task db.")
+    @slash_option(name='task', description="Active tasks pulled from db. Autofill format: c1: task | c2: channel name.", autocomplete=True, required=True,
                   opt_type=OptionType.STRING)
     async def remove_task_command(self, ctx: SlashContext, task):
         result = remove_task_db(db_id=task)
@@ -525,7 +688,8 @@ class SubscriptionTask(Extension):
     @task_setup.autocomplete('task')
     async def auto_com_task(self, ctx: AutocompleteContext):
         choices = [
-            {"name": "new-book-check", "value": "1"}
+            {"name": "new-book-check", "value": "1"},
+            {"name": "finished-book-check", "value": "2"}
         ]
         await ctx.send(choices=choices)
 
@@ -563,6 +727,7 @@ class SubscriptionTask(Extension):
         task_name = "new-book-check"
         task_list = []
         if result:
+            logger.info('Subscription Task db was populated, initializing tasks...')
             for item in result:
                 task = item[1]
                 task_list.append(task)
@@ -570,12 +735,18 @@ class SubscriptionTask(Extension):
                 if s.DEBUG_MODE != "True":
                     logger.debug(f"Tasks db search result: {task}")
 
+            # Check if new book check is running
             if not self.newBookTask.running and task_name in task_list:
                 self.newBookTask.start()
                 owner = event.bot.owner
                 logger.info(
-                    f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
+                    f"Enabling task: New Book Check on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
                 # Debug Stuff
                 if s.DEBUG_MODE != "True" and s.INITIALIZED_MSG == "True":
                     await owner.send(
                         f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
+
+            if not self.finishedBookTask.running and 'finished-book-check' in task_list:
+                self.finishedBookTask.start()
+                logger.info(
+                    f"Enabling task: Finished Book Check on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
