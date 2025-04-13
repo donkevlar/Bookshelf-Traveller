@@ -477,33 +477,37 @@ class SubscriptionTask(Extension):
         book_list = await self.getFinishedBooks()
         search_result = search_task_db(task='finished-book-check')
         print(search_result)
-        if book_list and search_result:
-            logger.info('Finished books found! Creating embeds.')
+        if search_result:
+            if book_list:
+                logger.info('Finished books found! Creating embeds.')
 
-            embeds = await self.FinishedBookEmbeds(book_list)
-            if embeds:
-                for result in search_result:
-                    channel_id = int(result[1])
-                    logger.info(f'Channel ID: {channel_id}')
-                    channel_list.append(channel_id)
+                embeds = await self.FinishedBookEmbeds(book_list)
+                if embeds:
+                    for result in search_result:
+                        channel_id = int(result[1])
+                        logger.info(f'Channel ID: {channel_id}')
+                        channel_list.append(channel_id)
 
-                    for channelID in channel_list:
-                        channel_query = await self.bot.fetch_channel(channel_id=channelID, force=True)
-                        if channel_query:
-                            logger.debug(f"Found Channel: {channelID}")
-                            logger.debug(f"Bot will now attempt to send a message to channel id: {channelID}")
+                        for channelID in channel_list:
+                            channel_query = await self.bot.fetch_channel(channel_id=channelID, force=True)
+                            if channel_query:
+                                logger.debug(f"Found Channel: {channelID}")
+                                logger.debug(f"Bot will now attempt to send a message to channel id: {channelID}")
 
-                            if len(embeds) < 10:
-                                msg = await channel_query.send(content="These books have been recently finished in your library!")
-                                await msg.edit(embeds=embeds)
-                            else:
-                                await channel_query.send(content="These books have been recently finished in your library!")
-                                for embed in embeds:
-                                    await channel_query.send(embed=embed)
-                            logger.info("Successfully completed finished-book-check task!")
+                                if len(embeds) < 10:
+                                    msg = await channel_query.send(content="These books have been recently finished in your library!")
+                                    await msg.edit(embeds=embeds)
+                                else:
+                                    await channel_query.send(content="These books have been recently finished in your library!")
+                                    for embed in embeds:
+                                        await channel_query.send(embed=embed)
+                                logger.info("Successfully completed finished-book-check task!")
 
+            else:
+                logger.info('No finished books found! Aborting!')
         else:
-            logger.info('No finished books found! Aborting!')
+            logger.warning("Task 'new-book-check' was active, but setup check failed.")
+            self.finishedBookTask.stop()
 
     # Slash Commands ----------------------------------------------------
 
