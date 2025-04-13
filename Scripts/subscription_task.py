@@ -118,8 +118,17 @@ def search_task_db(discord_id=0, task='', channel_id=0, override_response='') ->
                         ''', (discord_id,))
         rows = cursor.fetchall()
 
-    else:
+    elif task != '':
         option = 4
+        if not override:
+            logger.info(f'OPTION {option}: Searching db using task name in tasks table.')
+        cursor.execute('''
+                        SELECT task, channel_id, id FROM tasks WHERE task = ?
+                        ''', (task,))
+        rows = cursor.fetchall()
+
+    else:
+        option = 5
         if not override:
             logger.info(f'OPTION {option}: Searching db using no arguments in tasks table.')
         cursor.execute('''SELECT discord_id, task, channel_id, server_name FROM tasks''')
@@ -319,7 +328,7 @@ class SubscriptionTask(Extension):
     async def newBookTask(self):
         logger.info("Initializing new-book-check task!")
         channel_list = []
-        search_result = search_task_db()
+        search_result = search_task_db(task='new-book-check')
         if search_result:
             if self.ServerNickName == '':
                 await self.get_server_name_db()
@@ -365,6 +374,45 @@ class SubscriptionTask(Extension):
     @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def finishedBookTask(self):
         logger.info('Initializing Finished Book Task!')
+        try:
+            current_time = datetime.now()
+            books = await c.bookshelf_get_valid_books()
+            users = await c.get_users()
+
+            time_minus_delta = current_time - timedelta(minutes=TASK_FREQUENCY)
+            timestamp_minus_delta = int(time.mktime(time_minus_delta.timetuple()) * 1000)
+
+            user_list = []
+            book_list = []
+            if users and books:
+
+                for user in users['users']:
+                    user_id = user.get('id')
+                    username = user.get('username')
+
+                    endpoint = f'/users/{user_id}'
+                    r = await c.bookshelf_conn(endpoint=endpoint, GET=True)
+                    if r.status_code == 200:
+                        user_data = r.json()
+
+                        for media in user_data['mediaProgress']:
+
+                            media_type = media['mediaItemType']
+                            libraryItemId = media['libraryItemId']
+                            finished = bool(media.get('isFinished'))
+                            finishedAtTime = int(media.get('finishedAt'))
+
+                            # Convert time to regular format
+                            formatted_time = finishedAtTime / 1000
+                            formatted_time = datetime.fromtimestamp(formatted_time)
+                            formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
+
+                            # Verify it's a book and not a podcast
+                            if media_type == 'book' and finished and finishedAtTime >= timestamp_minus_delta:
+                                print(f'{username} Finished Book ID: {libraryItemId}')
+
+        except Exception as e:
+            logger.error(f'Error occured: {e}')
 
     # Slash Commands ----------------------------------------------------
 
@@ -474,6 +522,19 @@ class SubscriptionTask(Extension):
                     if not self.newBookTask.running:
                         self.newBookTask.start()
 
+            # Finished book check task
+            case 2:
+                task_name = 'finished-book-check'
+                task_command = '`/finished-book-check disable_task: True`'
+                task_instruction = f'Task is now active. To disable, use **{task_command}**'
+                result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
+                                     server_name=server_name)
+
+                if result:
+                    success = True
+                    if not self.finishedBookTask.running:
+                        self.finishedBookTask.start()
+
         if success:
             if color:
                 self.embedColor = await self.embed_color_selector(int(color))
@@ -532,7 +593,8 @@ class SubscriptionTask(Extension):
     @task_setup.autocomplete('task')
     async def auto_com_task(self, ctx: AutocompleteContext):
         choices = [
-            {"name": "new-book-check", "value": "1"}
+            {"name": "new-book-check", "value": "1"},
+            {"name": "finished-book-check", "value": "2"}
         ]
         await ctx.send(choices=choices)
 
@@ -570,6 +632,7 @@ class SubscriptionTask(Extension):
         task_name = "new-book-check"
         task_list = []
         if result:
+            logger.info('Subscription Task db was populated, initializing tasks...')
             for item in result:
                 task = item[1]
                 task_list.append(task)
@@ -577,12 +640,19 @@ class SubscriptionTask(Extension):
                 if s.DEBUG_MODE != "True":
                     logger.debug(f"Tasks db search result: {task}")
 
+            # Check if new book check is running
             if not self.newBookTask.running and task_name in task_list:
                 self.newBookTask.start()
                 owner = event.bot.owner
                 logger.info(
-                    f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
+                    f"Enabling task: New Book Check on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
                 # Debug Stuff
                 if s.DEBUG_MODE != "True" and s.INITIALIZED_MSG == "True":
                     await owner.send(
                         f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
+
+            if not self.finishedBookTask.running and 'finished-book-check' in task_list:
+                self.finishedBookTask.start()
+                logger.info(
+                    f"Enabling task: Finished Book Check on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
+
