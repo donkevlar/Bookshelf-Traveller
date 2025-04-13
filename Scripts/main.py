@@ -38,10 +38,10 @@ def bool_converter(param) -> bool:
 
 
 # Global Vars
-MULTI_USER = bool_converter(settings.MULTI_USER)
-AUDIO_ENABLED = bool_converter(settings.AUDIO_ENABLED)
-DEBUG_MODE = bool_converter(settings.DEBUG_MODE)
-INITIALIZED_MSG = bool_converter(settings.INITIALIZED_MSG)
+MULTI_USER = settings.MULTI_USER
+# AUDIO_ENABLED = settings.AUDIO_ENABLED
+DEBUG_MODE = settings.DEBUG_MODE
+INITIALIZED_MSG = settings.INITIALIZED_MSG
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
@@ -131,7 +131,7 @@ async def on_startup(event: Startup):
     if settings.EXPERIMENTAL:
         logger.warning(f'EXPERIMENTAL FEATURES ENABLED!')
 
-    if MULTI_USER:
+    if MULTI_USER == 'True':
         import multi_user as mu
         user_token = os.getenv('bookshelfToken')
         user_info = c.bookshelf_user_login(token=user_token)
@@ -174,12 +174,9 @@ if __name__ == '__main__':
     logger.info('Wishlist module loaded!')
     bot.load_extension("wishlist")
 
-    if AUDIO_ENABLED:
-        # Load Audio Extension
-        logger.info("Audio module loaded!")
-        bot.load_extension("audio")
-    else:
-        logger.warning('Audio module disabled!')
+    # Must load audio module
+    logger.info("Audio module loaded!")
+    bot.load_extension("audio")
 
     # Load Admin related extensions
     if ADMIN and not MULTI_USER:
