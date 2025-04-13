@@ -705,7 +705,7 @@ class AudioPlayBack(Extension):
             ctx.deferred = True
             try:
                 # Random - Sometimes a little surprise is noice!
-                if user_input.lower() in 'random' or user_input.lower() == 'random':
+                if user_input.lower() == 'random':
                     logger.info('User input includes random, time for a surprise! :)')
                     titles_ = await c.bookshelf_get_valid_books()
                     titles_count = len(titles_)
