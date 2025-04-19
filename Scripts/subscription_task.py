@@ -230,7 +230,7 @@ class SubscriptionTask(Extension):
         user = await self.bot.fetch_user(discord_id)
         result = search_task_db(discord_id=discord_id, task='new-book-check')
         name = ''
-        msg = f"Hello **{user.display_name}**, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**!
+        msg = f"Hello **{user.display_name}**, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**!"
         if result:
             try:
                 name = result[1]
