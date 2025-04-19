@@ -383,6 +383,7 @@ class WishList(Extension):
     @view_wishlist.autocomplete('user')
     async def user_wishlist_auto(self, ctx: AutocompleteContext):
         choices = []
+        found_users = []
         user = None
         if ctx.author == ctx.bot.owner:
             result = search_all_wishlists()
@@ -391,7 +392,8 @@ class WishList(Extension):
                     user = item[6] or 0
                     logger.debug(f"User ID Found: {user}")
 
-                    if user != 0:
+                    if user != 0 and user not in found_users:
+                        found_users.append(user)
                         user_obj = await self.bot.fetch_user(user)
                         choices.append({"name": user_obj.display_name, "value": str(user_obj.id)})
         else:
