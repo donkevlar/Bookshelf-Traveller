@@ -32,7 +32,7 @@ conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 
 
-def table_create():
+def tasks_table_create():
     cursor.execute('''
 CREATE TABLE IF NOT EXISTS tasks (
 id INTEGER PRIMARY KEY,
@@ -45,9 +45,24 @@ UNIQUE(channel_id, task)
                         ''')
 
 
+def permissions_table_create():
+    cursor.execute('''
+CREATE TABLE IF NOT EXISTS permissions (
+discord_id INTEGER NOT NULL,
+role_id INTEGER NOT NULL,
+guild_id INTEGER NOT NULL,
+channel_id INTEGER,
+UNIQUE(discord_id, role_id)
+)
+                    ''')
+
+
 # Initialize table
 logger.info("Initializing tasks table")
-table_create()
+tasks_table_create()
+
+logger.info("Initializing permissions table")
+permissions_table_create()
 
 
 def insert_data(discord_id: int, channel_id: int, task, server_name):
@@ -495,10 +510,12 @@ class SubscriptionTask(Extension):
                                 logger.debug(f"Bot will now attempt to send a message to channel id: {channelID}")
 
                                 if len(embeds) < 10:
-                                    msg = await channel_query.send(content="These books have been recently finished in your library!")
+                                    msg = await channel_query.send(
+                                        content="These books have been recently finished in your library!")
                                     await msg.edit(embeds=embeds)
                                 else:
-                                    await channel_query.send(content="These books have been recently finished in your library!")
+                                    await channel_query.send(
+                                        content="These books have been recently finished in your library!")
                                     for embed in embeds:
                                         await channel_query.send(embed=embed)
                                 logger.info("Successfully completed finished-book-check task!")
@@ -647,7 +664,8 @@ class SubscriptionTask(Extension):
 
     @check(is_owner())
     @slash_command(name='remove-task', description="Remove an active task from the task db.")
-    @slash_option(name='task', description="Active tasks pulled from db. Autofill format: c1: task | c2: channel name.", autocomplete=True, required=True,
+    @slash_option(name='task', description="Active tasks pulled from db. Autofill format: c1: task | c2: channel name.",
+                  autocomplete=True, required=True,
                   opt_type=OptionType.STRING)
     async def remove_task_command(self, ctx: SlashContext, task):
         result = remove_task_db(db_id=task)

@@ -315,12 +315,24 @@ class WishList(Extension):
                            ephemeral=True)
 
     @slash_command(name='wishlist', description='View your wishlist')
-    async def view_wishlist(self, ctx: SlashContext):
-        embeds = await self.wishlist_view_embed(ctx.author_id)
+    @slash_option(name='user', description='View a users specific wishlist. Admin Command.', autocomplete=True, required=False, opt_type=OptionType.STRING)
+    async def view_wishlist(self, ctx: SlashContext, user=0):
+        user = int(user)
+        if user == 0:
+            logger.info('Wishlist: default option selected')
+            embeds = await self.wishlist_view_embed(ctx.author_id)
+
+        else:
+            if ctx.bot.owner == ctx.author:
+                logger.info('Wishlist: user search option selected (Admin Exclusive)')
+                embeds = await self.wishlist_view_embed(user)
+            else:
+                await ctx.send('Permission Denied!', ephemeral=True)
+                return
+
         if embeds:
             paginator = Paginator.create_from_embeds(self.client, *embeds)
             await paginator.send(ctx, ephemeral=True)
-
         else:
             await ctx.send(
                 "You currently don't have any items in your wishlist. Please use **`/add-book`** to add items to your wishlist.",
@@ -366,6 +378,25 @@ class WishList(Extension):
                 await ctx.send(choices=[{"name": provider, "value": provider}])
                 return
 
+        await ctx.send(choices=choices)
+
+    @view_wishlist.autocomplete('user')
+    async def user_wishlist_auto(self, ctx: AutocompleteContext):
+        choices = []
+        user = None
+        if ctx.author == ctx.bot.owner:
+            result = search_all_wishlists()
+            if result:
+                for item in result:
+                    user = item[6] or 0
+                    logger.debug(f"User ID Found: {user}")
+
+                    if user != 0:
+                        user_obj = await self.bot.fetch_user(user)
+                        choices.append({"name": user_obj.display_name, "value": str(user_obj.id)})
+        else:
+            logger.info(f"User: {ctx.author.display_name} not authorized to receive autocomplete prompt! Returning None.")
+            pass
         await ctx.send(choices=choices)
 
     # Component Callbacks -----------------------------------------
@@ -432,14 +463,14 @@ class WishList(Extension):
     @component_callback('request_button')
     async def request_button_callback(self, ctx: ComponentContext):
         # Book Variables
-        title = self.selectedBook['title']
-        author = self.selectedBook['author']
-        description = self.selectedBook['description']
-        subtitle = self.selectedBook['subtitle']
-        cover = self.selectedBook['cover']
-        narrator = self.selectedBook['narrator']
-        published = self.selectedBook['publishedYear']
-        language = self.selectedBook['language']
+        title = self.selectedBook.get('title')
+        author = self.selectedBook.get('author')
+        description = self.selectedBook.get('description') or ''
+        subtitle = self.selectedBook.get('subtitle') or ''
+        cover = self.selectedBook.get('cover')
+        narrator = self.selectedBook.get('narrator')
+        published = self.selectedBook.get('publishedYear')
+        language = self.selectedBook.get('language')
         provider = DEFAULT_PROVIDER
         discord_id = ctx.author_id
 
@@ -461,9 +492,9 @@ class WishList(Extension):
             logger.warning("Force wishlist is enabled, attempting to add book to wishlist.")
 
         if 'audible' in provider:
-            provider_id = self.selectedBook['asin']
+            provider_id = self.selectedBook.get('asin')
         else:
-            provider_id = self.selectedBook['id']
+            provider_id = self.selectedBook.get('id')
 
         result = insert_wishlist_data(title=title, author=author, description=description, cover=cover,
                                       provider=provider,

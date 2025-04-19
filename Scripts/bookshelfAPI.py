@@ -975,6 +975,7 @@ async def main():
         completed_list = []
         for user in users:
             user_id = user.get('id')
+            username = user.get('username')
 
             endpoint = f'/users/{user_id}'
             r = await bookshelf_conn(endpoint=endpoint, GET=True)
@@ -988,6 +989,8 @@ async def main():
                     finished = bool(media.get('isFinished'))
                     # Verify it's a book and not a podcast
                     if media_type == 'book' and finished:
+                        media['username'] = username
+                        print(media)
                         completed_list.append(libraryItemId)
                         media_progress_count += 1
                 print("completed media items: ", media_progress_count)
