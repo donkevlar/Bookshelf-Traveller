@@ -240,6 +240,7 @@ class SubscriptionTask(Extension):
 
         if len(embed) > 10:
             for emb in embed:
+
                 await user.send(content=msg,
                                 embed=emb)
         else:

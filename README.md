@@ -25,7 +25,10 @@ Make sure that you select all intents when setting up your bot and that you have
 **When using commands that use images, i.e. `/media_progress` or `/recent_sessions`, 
 the server must use an `HTTPS` connection due to a requirement from discord's API. If not, no image will be generated.**
 
-**Important note regarding `HTTPS` connections. I've experienced a lot of issues when streaming audio from my server to discord using a https connection as the source. I have yet to confirm if this is a double NAT issue, a reverse proxy issue or otherwise. I suggest you utilize a direct connection to your server i.e. `http://127.0.0.1:13378` if you intend to listen to an audiobook for more than 15 minutes at a time.**  
+**Important note regarding `HTTPS` connections. I've experienced a lot of issues when streaming audio from my server to discord using a https connection as the source. I have yet to confirm if this is a double NAT issue, a reverse proxy issue or otherwise. I suggest you utilize a direct connection to your server i.e. `http://127.0.0.1:13378` if you intend to listen to an audiobook for more than 15 minutes at a time. As a workaround for including images, I've added the `OPT_IMAGE_URL` env variable. If this is utilized (With an https connection) the bot will use this link for all images instead of the initial server url.**
+
+### Troubleshooting
+**Before reporting an issue, please make sure that you enable `DEBUG_MODE=True`. You can use this when reporting an issue as it will describe all backend services and any script-related problems.**
 
 ### Environmental Variables
 
@@ -35,14 +38,15 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 | `DISCORD_TOKEN`    | Discord API Token                                                                                                                                          | *String*  | **YES**   |
 | `bookshelfToken`   | Bookshelf User Token (All user types work, but some will limit your interaction options.)                                                                  | *String*  | **YES**   |
 | `bookshelfURL`     | Bookshelf url with protocol and port, ex: http://localhost:80                                                                                              | *String*  | **YES**   |
-| `PLAYBACK_ROLE`    | A discord role id, used if you want other users to have access to playback.                                                                                | *Integer* | **NO**    |
+| `PLAYBACK_ROLE`*   | A discord role id, used if you want other users to have access to playback. *NO LONGER SUPPORTED                                                           | *Integer* | **NO**    |
 | `OWNER_ONLY`       | By default set to `True`. Only allow bot owner to use bot.                                                                                                 | *Boolean* | **NO**    |
-| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you)                                                                          | *Boolean* | **NO**    |
+| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you). * Note: This has been transitioned to a command, it only affects the default commands module.| *Boolean* | **NO**    |
 | `MULTI_USER`       | By default set to `True`, disable this to re-enable admin controls (Conditional on the user logged in.) and to remove the /login and /select options       | *Boolean* | **NO**    |
 | `AUDIO_ENABLED`    | By default set to `True`, disable if you want to remove the ability for audio playback.                                                                    | *Boolean* | **NO**    |
 | `OPT_IMAGE_URL`    | Optional HTTPS URL for generating cover images and sending them to the discord API. This is primarily if you experience similar issues as mentioned above. | *String*  | **NO**    |
 | `TIMEZONE`         | Default set to `America/Toronto`                                                                                                                           | *String*  | **NO**    |
 | `DEFAULT_PROVIDER` | Experimental, set the default search provider for certain commands.                                                                                        | *String*  | **NO**    |
+| `DEBUG_MODE`       | By default, set to `False`. It enables verbose logs and also disables all notifications.                                                                   | *String*  | **NO**    |
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**
@@ -68,6 +72,10 @@ docker run -d \
 -e DISCORD_TOKEN="INSERT_TOKEN" \
 -e bookshelfToken="INSERT_TOKEN" \
 -e bookshelfURL="http://myurl.domain.com" \
+-e CLIENT_ID="CLIENTID" \
+-e AUDIO_ENABLED="True" \
+-e MULTI_USER="True" \
+
 donkevlar/bookshelf-traveller:latest
 ```
 
@@ -101,8 +109,6 @@ Requirements: **Python 3.10 or above**.
 [FFMPEG](https://www.ffmpeg.org/download.html)
 
 you'll also need an '.env' file for loading the above [ENV Variables](https://github.com/donkevlar/Bookshelf-Traveller/blob/master/README.md#environmental-variables)
-
-*Disclaimer: When installing via git clone, I assume that you are knowledgeable enough to execute the script. I suggest you use a virtual environment when doing so.*
 
 #### Step 1: Navigate to Directory
 Open your terminal and navigate to your desired folder. 
@@ -169,16 +175,31 @@ Here's the list of commands sorted alphabetically:
 
 ### Alternative Packages
 Audio-only packages have been deprecated. Please use the environmental variables to modify how you would like your bot to function.
-### Screenshots
-Below are a few examples of the commands shown above. Note: images are subject to change, or can become outdated as the project is very much active. 
 
-#### /recent-sessions
-![img.png](images/img.png)
+## Features
 
 #### /play
+Play any of your audiobooks directly in discord! This also works with Xbox or Mobile clients. The bot will automatically sync your progress to your ABS server, and allow you to use multiple users from one place!
+
 ![image](https://github.com/user-attachments/assets/9a74535e-b81a-480d-adb9-b84953c7e4ce)
 
+#### Multi-Channel Notifications (/setup-task)
+Monitor and track what is added to your ABS server by utilizing the book check tasks. Select which channels you want the notifications to be subscribed, multiple channel notifications are supported! 
+
+#### /wishlist
+Create a customized wishlist, with direct messages so that your other server members can subscribe to see when something they wishlisted gets added. 
+
+![image](https://github.com/user-attachments/assets/7e2ae50f-2606-4af5-8478-85189419ff40)
+
+
+#### /recent-sessions
+List your most recent-sessions.
+
+![img.png](images/img.png)
+
 #### /mediaprogress
+View all of your media's progress at a glance.
+
 ![img.png](images/mediaprogress.png)
 
 #### Other examples
