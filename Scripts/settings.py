@@ -39,7 +39,7 @@ MULTI_USER = os.environ.get('MULTI_USER', True)
 DISCORD_API_SECRET = os.getenv("DISCORD_TOKEN")
 
 # Default search provider
-DEFAULT_PROVIDER = os.getenv("DEFAULT_PROVIDER", '')
+DEFAULT_PROVIDER = os.getenv("DEFAULT_PROVIDER", 'audible')
 
 # Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
