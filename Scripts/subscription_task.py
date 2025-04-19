@@ -230,6 +230,7 @@ class SubscriptionTask(Extension):
         user = await self.bot.fetch_user(discord_id)
         result = search_task_db(discord_id=discord_id, task='new-book-check')
         name = ''
+        msg = f"Hello **{user.display_name}**, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**!
         if result:
             try:
                 name = result[1]
@@ -239,12 +240,10 @@ class SubscriptionTask(Extension):
 
         if len(embed) > 10:
             for emb in embed:
-                await user.send(
-                    f"Hello **{user.display_name}**, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**! ",
+                await user.send(content=msg,
                     embed=emb)
         else:
-            await user.send(
-                f"Hello **{user.display_name}**, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**! ",
+            await user.send(content=msg,
                 embeds=embed)  # NOQA
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
