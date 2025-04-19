@@ -240,11 +240,11 @@ class SubscriptionTask(Extension):
         if len(embed) > 10:
             for emb in embed:
                 await user.send(
-                    f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**! ",
+                    f"Hello **{user.display_name}**, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**! ",
                     embed=emb)
         else:
             await user.send(
-                f"Hello {user}, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**! ",
+                f"Hello **{user.display_name}**, **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**! ",
                 embeds=embed)  # NOQA
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
@@ -281,8 +281,8 @@ class SubscriptionTask(Extension):
                     wishlist_titles.append(title)
 
                 embed_message = Embed(
-                    title=f"{count}. Recently Added Book | {title}",
-                    description=f"Recently added books for [{self.ServerNickName}]({bookshelfURL})",
+                    title=f"{title}",
+                    description=f"Recently added book #{count} for [{self.ServerNickName}]({bookshelfURL})",
                     color=self.embedColor or FlatUIColors.ORANGE
                 )
 
