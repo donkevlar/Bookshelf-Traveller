@@ -241,10 +241,10 @@ class SubscriptionTask(Extension):
         if len(embed) > 10:
             for emb in embed:
                 await user.send(content=msg,
-                    embed=emb)
+                                embed=emb)
         else:
             await user.send(content=msg,
-                embeds=embed)  # NOQA
+                            embeds=embed)  # NOQA
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
         bookshelfURL = os.getenv("bookshelfURL", "http://127.0.0.1")
