@@ -5,6 +5,7 @@ import time
 import bookshelfAPI as c
 import settings as s
 import logging
+import sys
 
 from interactions import *
 from interactions.api.events import Startup
@@ -12,6 +13,7 @@ from datetime import datetime, timedelta
 from interactions.ext.paginators import Paginator
 from dotenv import load_dotenv
 from wishlist import search_wishlist_db, mark_book_as_downloaded
+from multi_user import search_user_db
 
 # Enable dot env outside of docker
 load_dotenv()
@@ -32,17 +34,44 @@ conn = sqlite3.connect(db_path)
 cursor = conn.cursor()
 
 
+async def conn_test():
+    # Will print username when successful
+    auth_test, user_type, user_locked = await c.bookshelf_auth_test()
+    logger.info(f"Logging user in and verifying role.")
+
+    # Quit if user is locked
+    if user_locked:
+        logger.warning("User locked from logging in, please unlock via web gui.")
+        sys.exit("User locked from logging in, please unlock via web gui.")
+
+    # Check if ABS user is an admin
+    ADMIN_USER = False
+    if user_type == "root" or user_type == "admin":
+        ADMIN_USER = True
+        logger.info(f"ABS user logged in as ADMIN with type: {user_type}")
+    else:
+        logger.info(f"ABS user logged in as NON-ADMIN with type: {user_type}")
+    return ADMIN_USER
+
+
 def tasks_table_create():
     cursor.execute('''
-CREATE TABLE IF NOT EXISTS tasks (
-id INTEGER PRIMARY KEY,
-discord_id INTEGER NOT NULL,
-channel_id INTEGER NOT NULL,
-task TEXT NOT NULL,
-server_name TEXT NOT NULL,
-UNIQUE(channel_id, task)
-)
-                        ''')
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY,
+            discord_id INTEGER NOT NULL,
+            channel_id INTEGER NOT NULL,
+            task TEXT NOT NULL,
+            server_name TEXT NOT NULL,
+            token TEXT,
+            UNIQUE(channel_id, task)
+        )
+    ''')
+
+    # Check if 'token' column exists
+    cursor.execute("PRAGMA table_info(tasks)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if 'token' not in columns:
+        cursor.execute("ALTER TABLE tasks ADD COLUMN token TEXT")
 
 
 def permissions_table_create():
@@ -65,13 +94,13 @@ logger.info("Initializing permissions table")
 permissions_table_create()
 
 
-def insert_data(discord_id: int, channel_id: int, task, server_name):
+def insert_data(discord_id: int, channel_id: int, task, server_name, token):
     try:
         cursor.execute('''
-        INSERT INTO tasks (discord_id, channel_id, task, server_name) VALUES (?, ?, ?, ?)''',
-                       (int(discord_id), int(channel_id), task, server_name))
+        INSERT INTO tasks (discord_id, channel_id, task, server_name, token) VALUES (?, ?, ?, ?, ?)''',
+                       (int(discord_id), int(channel_id), task, server_name, token))
         conn.commit()
-        logger.debug(f"Inserted: {discord_id} with channel_id and task")
+        logger.info(f"Inserted: {discord_id} into tasks table!")
         return True
     except sqlite3.IntegrityError:
         logger.warning(f"Failed to insert: {discord_id} with task {task} already exists.")
@@ -129,7 +158,7 @@ def search_task_db(discord_id=0, task='', channel_id=0, override_response='') ->
         if not override:
             logger.info(f'OPTION {option}: Searching db using discord ID in tasks table.')
         cursor.execute('''
-                        SELECT task, channel_id, id FROM tasks WHERE discord_id = ?
+                        SELECT task, channel_id, id, token FROM tasks WHERE discord_id = ?
                         ''', (discord_id,))
         rows = cursor.fetchall()
 
@@ -138,7 +167,7 @@ def search_task_db(discord_id=0, task='', channel_id=0, override_response='') ->
         if not override:
             logger.info(f'OPTION {option}: Searching db using task name in tasks table.')
         cursor.execute('''
-                        SELECT task, channel_id, id FROM tasks WHERE task = ?
+                        SELECT task, channel_id, id, token FROM tasks WHERE task = ?
                         ''', (task,))
         rows = cursor.fetchall()
 
@@ -214,6 +243,8 @@ class SubscriptionTask(Extension):
         self.TaskChannelID = None
         self.ServerNickName = ''
         self.embedColor = None
+        self.admin_token = None
+        self.previous_token = None
 
     async def get_server_name_db(self, discord_id=0, task='new-book-check'):
         cursor.execute('''
@@ -440,9 +471,7 @@ class SubscriptionTask(Extension):
     @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def newBookTask(self):
         logger.info("Initializing new-book-check task!")
-        channel_list = []
         search_result = search_task_db(task='new-book-check')
-        print(search_result)
         if search_result:
             if self.ServerNickName == '':
                 await self.get_server_name_db()
@@ -455,16 +484,21 @@ class SubscriptionTask(Extension):
                 logger.warning("Found more than 10 titles")
 
             embeds = await self.NewBookCheckEmbed(enable_notifications=True)
+            self.previous_token = os.getenv('bookshelfToken')
             if embeds:
                 for result in search_result:
                     channel_id = int(result[1])
-                    channel_list.append(channel_id)
 
-                for channelID in channel_list:
-                    channel_query = await self.bot.fetch_channel(channel_id=channelID, force=True)
+                    self.admin_token = result[3]
+                    print("admin token: ", self.admin_token)
+                    masked = len(self.admin_token)
+                    logging.info(f"Appending Active Token! {masked}")
+                    os.environ['bookshelfToken'] = self.admin_token
+
+                    channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
                     if channel_query:
-                        logger.debug(f"Found Channel: {channelID}")
-                        logger.debug(f"Bot will now attempt to send a message to channel id: {channelID}")
+                        logger.debug(f"Found Channel: {channel_id}")
+                        logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
 
                         if len(embeds) < 10:
                             msg = await channel_query.send(content="New books have been added to your library!")
@@ -473,26 +507,30 @@ class SubscriptionTask(Extension):
                             await channel_query.send(content="New books have been added to your library!")
                             for embed in embeds:
                                 await channel_query.send(embed=embed)
-                        logger.info("Successfully completed new-book-check task!")
+
+                        # Reset admin token
+                        self.admin_token = None
+
+                # Reset Vars
+                os.environ['bookshelfToken'] = self.previous_token
+                print(f'Returned Active Token to: {self.previous_token}')
+                self.previous_token = None
+                logger.info("Successfully completed new-book-check task!")
 
             else:
                 logger.info("No new books found, marking task as complete.")
         # If active but no result, disable task and send owner message.
         else:
             logger.warning("Task 'new-book-check' was active, but setup check failed.")
-            owner = self.bot.owner
-            await owner.send(
-                "Task 'new-book-check' was active, but setup check failed. Please setup the task again via `/setup-tasks`.")
             self.newBookTask.stop()
 
     @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def finishedBookTask(self):
         logger.info('Initializing Finished Book Task!')
-        channel_list = []
         book_list = await self.getFinishedBooks()
         search_result = search_task_db(task='finished-book-check')
-        print(search_result)
         if search_result:
+            self.previous_token = os.getenv('bookshelfToken')
             if book_list:
                 logger.info('Finished books found! Creating embeds.')
 
@@ -501,24 +539,33 @@ class SubscriptionTask(Extension):
                     for result in search_result:
                         channel_id = int(result[1])
                         logger.info(f'Channel ID: {channel_id}')
-                        channel_list.append(channel_id)
+                        self.admin_token = result[3]
+                        masked = len(self.admin_token)
+                        logging.info(f"Appending Active Token! {masked}")
+                        os.environ['bookshelfToken'] = self.admin_token
 
-                        for channelID in channel_list:
-                            channel_query = await self.bot.fetch_channel(channel_id=channelID, force=True)
-                            if channel_query:
-                                logger.debug(f"Found Channel: {channelID}")
-                                logger.debug(f"Bot will now attempt to send a message to channel id: {channelID}")
+                        channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
+                        if channel_query:
+                            logger.debug(f"Found Channel: {channel_id}")
+                            logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
 
-                                if len(embeds) < 10:
-                                    msg = await channel_query.send(
-                                        content="These books have been recently finished in your library!")
-                                    await msg.edit(embeds=embeds)
-                                else:
-                                    await channel_query.send(
-                                        content="These books have been recently finished in your library!")
-                                    for embed in embeds:
-                                        await channel_query.send(embed=embed)
-                                logger.info("Successfully completed finished-book-check task!")
+                            if len(embeds) < 10:
+                                msg = await channel_query.send(
+                                    content="These books have been recently finished in your library!")
+                                await msg.edit(embeds=embeds)
+                            else:
+                                await channel_query.send(
+                                    content="These books have been recently finished in your library!")
+                                for embed in embeds:
+                                    await channel_query.send(embed=embed)
+                        # Reset admin token
+                        self.admin_token = None
+
+                    # Reset Vars
+                    os.environ['bookshelfToken'] = self.previous_token
+                    print(f'Returned Active Token to: {self.previous_token}')
+                    self.previous_token = None
+                    logger.info("Successfully completed finished-book-check task!")
 
             else:
                 logger.info('No finished books found! Aborting!')
@@ -609,16 +656,20 @@ class SubscriptionTask(Extension):
                   opt_type=OptionType.STRING)
     @slash_option(opt_type=OptionType.CHANNEL, name="channel", description="select a channel",
                   channel_types=[ChannelType.GUILD_TEXT], required=True)
+    @slash_option(name='user', description="Select a stored user for the task to be executed by.",
+                  opt_type=OptionType.STRING, autocomplete=True, required=True)
     @slash_option(name="server_name",
                   description="Give your Audiobookshelf server a nickname. This will overwrite the previous name.",
                   opt_type=OptionType.STRING, required=True)
     @slash_option(name='color', description='Embed message optional accent color, overrides default author color.',
                   opt_type=OptionType.STRING)
-    async def task_setup(self, ctx: SlashContext, task, channel, server_name, color=None):
+    async def task_setup(self, ctx: SlashContext, task, channel, user, server_name, color=None):
         task_name = ""
         success = False
         task_instruction = ''
         task_num = int(task)
+        user_result = search_user_db(user=user)
+        token = user_result[0]
 
         match task_num:
             # New book check task
@@ -627,7 +678,7 @@ class SubscriptionTask(Extension):
                 task_command = '`/new-book-check disable_task: True`'
                 task_instruction = f'Task is now active. To disable, use **{task_command}**'
                 result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
-                                     server_name=server_name)
+                                     server_name=server_name, token=token)
 
                 if result:
                     success = True
@@ -641,7 +692,7 @@ class SubscriptionTask(Extension):
                 task_command = '`/remove-task task:finished-book-check`'
                 task_instruction = f'Task is now active. To disable, use **{task_command}**'
                 result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
-                                     server_name=server_name)
+                                     server_name=server_name, token=token)
 
                 if result:
                     success = True
@@ -718,7 +769,7 @@ class SubscriptionTask(Extension):
         choices = []
         result = search_task_db(discord_id=ctx.author_id)
         if result:
-            for task, channel_id, db_id in result:
+            for task, channel_id, db_id, token in result:
                 channel = await self.bot.fetch_channel(channel_id)
                 if channel:
                     response = f"{task} | {channel.name}"
@@ -737,6 +788,23 @@ class SubscriptionTask(Extension):
             count += 1
 
         await ctx.send(choices=choices)
+
+    @task_setup.autocomplete('user')
+    async def user_search_task(self, ctx: AutocompleteContext):
+        choices = []
+        users_ = []
+        user_result = search_user_db()
+        if user_result:
+            for user in user_result:
+                username = user[0]
+
+                if username not in users_:
+                    users_.append(username)
+                    choices.append({'name': username, 'value': username})
+
+        await ctx.send(choices=choices)
+
+    # --------------------------------------
 
     # Auto Start Task if db is populated
     @listen()
