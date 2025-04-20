@@ -11,6 +11,7 @@ from interactions import *
 from interactions.api.events import *
 from datetime import datetime
 from dotenv import load_dotenv
+from subscription_task import conn_test
 
 # File Imports
 import bookshelfAPI as c
@@ -93,26 +94,6 @@ if server_status_code != 200:
 
 else:
     logger.info(f'Current Server Status = {server_status_code}, Good to go!')
-
-
-async def conn_test():
-    # Will print username when successful
-    auth_test, user_type, user_locked = await c.bookshelf_auth_test()
-    logger.info(f"Logging user in and verifying role.")
-
-    # Quit if user is locked
-    if user_locked:
-        logger.warning("User locked from logging in, please unlock via web gui.")
-        sys.exit("User locked from logging in, please unlock via web gui.")
-
-    # Check if ABS user is an admin
-    ADMIN_USER = False
-    if user_type == "root" or user_type == "admin":
-        ADMIN_USER = True
-        logger.info(f"ABS user logged in as ADMIN with type: {user_type}")
-    else:
-        logger.info(f"ABS user logged in as NON-ADMIN with type: {user_type}")
-    return ADMIN_USER
 
 
 # Bot basic setup
