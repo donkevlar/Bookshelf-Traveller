@@ -335,7 +335,8 @@ class WishList(Extension):
             await paginator.send(ctx, ephemeral=True)
         else:
             await ctx.send(
-                "You currently don't have any items in your wishlist. Please use **`/add-book`** to add items to your wishlist.",
+                "You currently don't have any items"
+                " in your wishlist. Please use **`/add-book`** to add items to your wishlist.",
                 ephemeral=True)
 
     @check(is_owner())
