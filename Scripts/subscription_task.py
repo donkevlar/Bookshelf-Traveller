@@ -278,14 +278,15 @@ class SubscriptionTask(Extension):
         user = await self.bot.fetch_user(discord_id)
         result = search_task_db(discord_id=discord_id, task='new-book-check')
         name = ''
-        msg = f"Hello **{user.display_name}**, one of your wishlisted books has become available! **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**!"
+
         if result:
             try:
                 name = result[1]
             except TypeError as error:
                 logger.error(f"Couldn't assign server name, {error}")
                 name = "Audiobookshelf"
-
+        # Wishlist message
+        msg = f"Hello **{user.display_name}**, one of your wishlisted books has become available! **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**!"
         if len(embed) > 10:
             for emb in embed:
 
