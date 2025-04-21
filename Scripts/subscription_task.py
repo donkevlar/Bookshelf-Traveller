@@ -74,24 +74,23 @@ def tasks_table_create():
         cursor.execute("ALTER TABLE tasks ADD COLUMN token TEXT")
 
 
-def permissions_table_create():
+def version_table_create():
     cursor.execute('''
-CREATE TABLE IF NOT EXISTS permissions (
-discord_id INTEGER NOT NULL,
-role_id INTEGER NOT NULL,
-guild_id INTEGER NOT NULL,
-channel_id INTEGER,
-UNIQUE(discord_id, role_id)
+        CREATE TABLE IF NOT EXISTS version_control (
+        id INTEGER PRIMARY KEY,
+        version TEXT,
+        UNIQUE(version)
 )
-                    ''')
+    ''')
+    conn.commit()
 
 
 # Initialize table
 logger.info("Initializing tasks table")
 tasks_table_create()
 
-logger.info("Initializing permissions table")
-permissions_table_create()
+logger.info("Initializing versions table")
+version_table_create()
 
 
 def insert_data(discord_id: int, channel_id: int, task, server_name, token):
@@ -105,6 +104,24 @@ def insert_data(discord_id: int, channel_id: int, task, server_name, token):
     except sqlite3.IntegrityError:
         logger.warning(f"Failed to insert: {discord_id} with task {task} already exists.")
         return False
+
+
+def insert_version(version):
+    try:
+        cursor.execute('''INSERT INTO version_control (version) VALUES (?)''', (version,))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        logger.warning(f"Failed to insert: {version} as it already exists.")
+        return False
+
+
+def search_version_db():
+    cursor.execute('''
+    SELECT id, version FROM version_control
+    ''')
+    rows = cursor.fetchall()
+    return rows
 
 
 def remove_task_db(task='', discord_id=0, db_id=0):
@@ -809,6 +826,16 @@ class SubscriptionTask(Extension):
     @listen()
     async def tasks_startup(self, event: Startup):
         init_msg = bool(os.getenv('INITIALIZED_MSG', False))
+        # Check if new version
+        version_result = search_version_db()
+        version_list = [v[1] for v in version_result]
+        print("Saved Versions: ", version_result)
+        print("Current Version: ", s.versionNumber)
+        if s.versionNumber not in version_list:
+            logger.warning("New version detected! To ensure this module functions properly remove any existing tasks!")
+            await event.bot.owner.send('New version detected! To ensure the task subscription module functions properly remove any existing tasks with command `/remove-task`!')
+            insert_version(s.versionNumber)
+
         result = search_task_db(
             override_response="Initialized subscription task module, verifying if any tasks are enabled...")
         task_name = "new-book-check"
