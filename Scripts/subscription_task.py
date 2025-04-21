@@ -262,6 +262,7 @@ class SubscriptionTask(Extension):
         self.embedColor = None
         self.admin_token = None
         self.previous_token = None
+        self.bot.admin_token = None
 
     async def get_server_name_db(self, discord_id=0, task='new-book-check'):
         cursor.execute('''
@@ -500,17 +501,19 @@ class SubscriptionTask(Extension):
             if len(new_titles) > 10:
                 logger.warning("Found more than 10 titles")
 
-            embeds = await self.NewBookCheckEmbed(enable_notifications=True)
             self.previous_token = os.getenv('bookshelfToken')
-            if embeds:
-                for result in search_result:
-                    channel_id = int(result[1])
 
-                    self.admin_token = result[3]
-                    print("admin token: ", self.admin_token)
-                    masked = len(self.admin_token)
-                    logger.info(f"Appending Active Token! {masked}")
-                    os.environ['bookshelfToken'] = self.admin_token
+            for result in search_result:
+                channel_id = int(result[1])
+
+                self.admin_token = result[3]
+                print("admin token: ", self.admin_token)
+                masked = len(self.admin_token)
+                logger.info(f"Appending Active Token! {masked}")
+                os.environ['bookshelfToken'] = self.admin_token
+
+                embeds = await self.NewBookCheckEmbed(enable_notifications=True)
+                if embeds:
 
                     channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
                     if channel_query:
@@ -525,8 +528,8 @@ class SubscriptionTask(Extension):
                             for embed in embeds:
                                 await channel_query.send(embed=embed)
 
-                        # Reset admin token
-                        self.admin_token = None
+                            # Reset admin token
+                            self.admin_token = None
 
                 # Reset Vars
                 os.environ['bookshelfToken'] = self.previous_token
@@ -551,15 +554,16 @@ class SubscriptionTask(Extension):
             if book_list:
                 logger.info('Finished books found! Creating embeds.')
 
-                embeds = await self.FinishedBookEmbeds(book_list)
-                if embeds:
-                    for result in search_result:
-                        channel_id = int(result[1])
-                        logger.info(f'Channel ID: {channel_id}')
-                        self.admin_token = result[3]
-                        masked = len(self.admin_token)
-                        logger.info(f"Appending Active Token! {masked}")
-                        os.environ['bookshelfToken'] = self.admin_token
+                for result in search_result:
+                    channel_id = int(result[1])
+                    logger.info(f'Channel ID: {channel_id}')
+                    self.admin_token = result[3]
+                    masked = len(self.admin_token)
+                    logger.info(f"Appending Active Token! {masked}")
+                    os.environ['bookshelfToken'] = self.admin_token
+                    # Any Bookshelf Related Calls Need to be made below
+                    embeds = await self.FinishedBookEmbeds(book_list)
+                    if embeds:
 
                         channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
                         if channel_query:
@@ -575,8 +579,9 @@ class SubscriptionTask(Extension):
                                     content="These books have been recently finished in your library!")
                                 for embed in embeds:
                                     await channel_query.send(embed=embed)
-                        # Reset admin token
-                        self.admin_token = None
+
+                    # Reset admin token
+                    self.admin_token = None
 
                     # Reset Vars
                     os.environ['bookshelfToken'] = self.previous_token
