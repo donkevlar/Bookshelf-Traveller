@@ -510,7 +510,7 @@ class SubscriptionTask(Extension):
                     self.admin_token = result[3]
                     print("admin token: ", self.admin_token)
                     masked = len(self.admin_token)
-                    logging.info(f"Appending Active Token! {masked}")
+                    logger.info(f"Appending Active Token! {masked}")
                     os.environ['bookshelfToken'] = self.admin_token
 
                     channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
@@ -559,7 +559,7 @@ class SubscriptionTask(Extension):
                         logger.info(f'Channel ID: {channel_id}')
                         self.admin_token = result[3]
                         masked = len(self.admin_token)
-                        logging.info(f"Appending Active Token! {masked}")
+                        logger.info(f"Appending Active Token! {masked}")
                         os.environ['bookshelfToken'] = self.admin_token
 
                         channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
