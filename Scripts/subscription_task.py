@@ -262,6 +262,7 @@ class SubscriptionTask(Extension):
         self.embedColor = None
         self.admin_token = None
         self.previous_token = None
+        self.bot.admin_token = None
 
     async def get_server_name_db(self, discord_id=0, task='new-book-check'):
         cursor.execute('''
@@ -494,24 +495,30 @@ class SubscriptionTask(Extension):
             if self.ServerNickName == '':
                 await self.get_server_name_db()
             logger.debug(f"search result: {search_result}")
-            new_titles = await newBookList()
-            if new_titles:
-                logger.debug(f"New Titles Found: {new_titles}")
 
-            if len(new_titles) > 10:
-                logger.warning("Found more than 10 titles")
-
-            embeds = await self.NewBookCheckEmbed(enable_notifications=True)
             self.previous_token = os.getenv('bookshelfToken')
-            if embeds:
-                for result in search_result:
-                    channel_id = int(result[1])
 
-                    self.admin_token = result[3]
-                    print("admin token: ", self.admin_token)
-                    masked = len(self.admin_token)
-                    logger.info(f"Appending Active Token! {masked}")
-                    os.environ['bookshelfToken'] = self.admin_token
+            for result in search_result:
+                channel_id = int(result[1])
+
+                self.admin_token = result[3]
+                print("admin token: ", self.admin_token)
+                masked = len(self.admin_token)
+                logger.info(f"Appending Active Token! {masked}")
+                os.environ['bookshelfToken'] = self.admin_token
+
+                new_titles = await newBookList()
+                if new_titles:
+                    logger.debug(f"New Titles Found: {new_titles}")
+                else:
+                    logger.info("No new books found, marking task as complete.")
+                    return
+
+                if len(new_titles) > 10:
+                    logger.warning("Found more than 10 titles")
+
+                embeds = await self.NewBookCheckEmbed(enable_notifications=True)
+                if embeds:
 
                     channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
                     if channel_query:
@@ -526,8 +533,8 @@ class SubscriptionTask(Extension):
                             for embed in embeds:
                                 await channel_query.send(embed=embed)
 
-                        # Reset admin token
-                        self.admin_token = None
+                            # Reset admin token
+                            self.admin_token = None
 
                 # Reset Vars
                 os.environ['bookshelfToken'] = self.previous_token
@@ -535,8 +542,6 @@ class SubscriptionTask(Extension):
                 self.previous_token = None
                 logger.info("Successfully completed new-book-check task!")
 
-            else:
-                logger.info("No new books found, marking task as complete.")
         # If active but no result, disable task and send owner message.
         else:
             logger.warning("Task 'new-book-check' was active, but setup check failed.")
@@ -545,39 +550,47 @@ class SubscriptionTask(Extension):
     @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def finishedBookTask(self):
         logger.info('Initializing Finished Book Task!')
-        book_list = await self.getFinishedBooks()
         search_result = search_task_db(task='finished-book-check')
+
         if search_result:
             self.previous_token = os.getenv('bookshelfToken')
-            if book_list:
-                logger.info('Finished books found! Creating embeds.')
+
+            for result in search_result:
+                channel_id = int(result[1])
+                logger.info(f'Channel ID: {channel_id}')
+                self.admin_token = result[3]
+                masked = len(self.admin_token)
+                logger.info(f"Appending Active Token! {masked}")
+                os.environ['bookshelfToken'] = self.admin_token
+
+                # Any Bookshelf Related Calls Need to be made below
+                book_list = await self.getFinishedBooks()
+                if book_list:
+                    logger.info('Finished books found! Creating embeds.')
+                else:
+                    logger.info('No finished books found! Aborting!')
+                    return
 
                 embeds = await self.FinishedBookEmbeds(book_list)
                 if embeds:
-                    for result in search_result:
-                        channel_id = int(result[1])
-                        logger.info(f'Channel ID: {channel_id}')
-                        self.admin_token = result[3]
-                        masked = len(self.admin_token)
-                        logger.info(f"Appending Active Token! {masked}")
-                        os.environ['bookshelfToken'] = self.admin_token
 
-                        channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
-                        if channel_query:
-                            logger.debug(f"Found Channel: {channel_id}")
-                            logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
+                    channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
+                    if channel_query:
+                        logger.debug(f"Found Channel: {channel_id}")
+                        logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
 
-                            if len(embeds) < 10:
-                                msg = await channel_query.send(
-                                    content="These books have been recently finished in your library!")
-                                await msg.edit(embeds=embeds)
-                            else:
-                                await channel_query.send(
-                                    content="These books have been recently finished in your library!")
-                                for embed in embeds:
-                                    await channel_query.send(embed=embed)
-                        # Reset admin token
-                        self.admin_token = None
+                        if len(embeds) < 10:
+                            msg = await channel_query.send(
+                                content="These books have been recently finished in your library!")
+                            await msg.edit(embeds=embeds)
+                        else:
+                            await channel_query.send(
+                                content="These books have been recently finished in your library!")
+                            for embed in embeds:
+                                await channel_query.send(embed=embed)
+
+                    # Reset admin token
+                    self.admin_token = None
 
                     # Reset Vars
                     os.environ['bookshelfToken'] = self.previous_token
@@ -585,8 +598,6 @@ class SubscriptionTask(Extension):
                     self.previous_token = None
                     logger.info("Successfully completed finished-book-check task!")
 
-            else:
-                logger.info('No finished books found! Aborting!')
         else:
             logger.warning("Task 'new-book-check' was active, but setup check failed.")
             self.finishedBookTask.stop()
@@ -835,7 +846,8 @@ class SubscriptionTask(Extension):
         print("Current Version: ", s.versionNumber)
         if s.versionNumber not in version_list:
             logger.warning("New version detected! To ensure this module functions properly remove any existing tasks!")
-            await event.bot.owner.send(f'New version detected! To ensure the task subscription module functions properly remove any existing tasks with command `/remove-task`! Current Version: **{s.versionNumber}**')
+            await event.bot.owner.send(
+                f'New version detected! To ensure the task subscription module functions properly remove any existing tasks with command `/remove-task`! Current Version: **{s.versionNumber}**')
             insert_version(s.versionNumber)
 
         result = search_task_db(
