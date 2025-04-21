@@ -833,7 +833,7 @@ class SubscriptionTask(Extension):
         print("Current Version: ", s.versionNumber)
         if s.versionNumber not in version_list:
             logger.warning("New version detected! To ensure this module functions properly remove any existing tasks!")
-            await event.bot.owner.send('New version detected! To ensure the task subscription module functions properly remove any existing tasks with command `/remove-task`!')
+            await event.bot.owner.send(f'New version detected! To ensure the task subscription module functions properly remove any existing tasks with command `/remove-task`! Current Version: **{s.versionNumber}**')
             insert_version(s.versionNumber)
 
         result = search_task_db(
