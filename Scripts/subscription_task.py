@@ -502,7 +502,6 @@ class SubscriptionTask(Extension):
                 channel_id = int(result[1])
 
                 self.admin_token = result[3]
-                print("admin token: ", self.admin_token)
                 masked = len(self.admin_token)
                 logger.info(f"Appending Active Token! {masked}")
                 os.environ['bookshelfToken'] = self.admin_token

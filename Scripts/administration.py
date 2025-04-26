@@ -52,7 +52,7 @@ class ABSAdmin(Extension):
     @slash_option(name="name", description="enter a valid username", required=True, opt_type=OptionType.STRING)
     async def search_user(self, ctx: SlashContext, name: str):
         try:
-            isFound, username, user_id, last_seen, isActive = c.bookshelf_get_users(name)
+            isFound, username, user_id, last_seen, isActive = c.bookshelf_search_users(name)
 
             if isFound:
                 formatted_data = (
@@ -172,7 +172,7 @@ class ABSAdmin(Extension):
     @search_user.autocomplete("name")
     async def user_search_autocomplete(self, ctx: AutocompleteContext):
         user_input = ctx.input_text
-        isFound, username, user_id, last_seen, isActive = await c.bookshelf_get_users(user_input)
+        isFound, username, user_id, last_seen, isActive = await c.bookshelf_search_users(user_input)
         choice = []
         if user_input.lower() == username.lower() or user_input.lower() in username.lower():
             choice = [{"name": f"{username}", "value": f"{username}"}]
