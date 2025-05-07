@@ -51,7 +51,7 @@ async def ownership_check(ctx: BaseContext):
 
 class PrimaryCommands(Extension):
     def __init__(self, bot):
-        self.ephemeral_output = True
+        self.ephemeral_output = settings.EPHEMERAL_OUTPUT
 
     # Slash Commands ----------------------------------------------------
     #
