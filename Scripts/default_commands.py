@@ -59,8 +59,11 @@ class PrimaryCommands(Extension):
     # Pings the server, can ping other servers, why? IDK, cause why not.
     @slash_command(name="ping", description="Latency of the discord bot server to the discord central shard. Default Command.")
     async def ping(self, ctx: SlashContext):
-        latency = round(self.bot.latency * 1000)
-        message = f'Discord BOT Server Latency: {latency} ms'
+        latency = self.bot.latency
+        if not latency or latency == float("inf"):
+            message = "Latency data not available yet. Please try again in a few seconds."
+        else:
+            message = f'Discord BOT Server Latency: {round(latency * 1000)} ms'
         await ctx.send(message, ephemeral=self.ephemeral_output)
         logger.debug(f' Successfully sent command: ping')
 
