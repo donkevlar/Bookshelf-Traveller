@@ -13,8 +13,11 @@ COMMAND_COUNT = 0
 # Determine Platform
 current_platform = platform.system()
 
+def str2bool(value):
+    return str(value).strip().lower() in ("1", "true", "yes")
+
 # Debug Mode
-DEBUG_MODE = os.environ.get('DEBUG_MODE', True)
+DEBUG_MODE = str2bool(os.environ.get('DEBUG_MODE', "True"))
 
 # Server URL
 # Mandatory
@@ -29,10 +32,10 @@ CLIENT_ID = os.getenv('CLIENT_ID', '')
 TIMEZONE = os.getenv("TIMEZONE", "America/Toronto")
 
 # Audio Enabled
-AUDIO_ENABLED = os.getenv('AUDIO_ENABLED', True)
+AUDIO_ENABLED = str2bool(os.getenv('AUDIO_ENABLED', "True"))
 
 # Multi-user functionality, will remove token from admin and all admin functions
-MULTI_USER = os.environ.get('MULTI_USER', True)
+MULTI_USER = str2bool(os.environ.get('MULTI_USER', "True"))
 
 # Discord token
 # Mandatory
@@ -42,10 +45,10 @@ DISCORD_API_SECRET = os.getenv("DISCORD_TOKEN")
 DEFAULT_PROVIDER = os.getenv("DEFAULT_PROVIDER", 'audible')
 
 # Controls if ALL commands are ephemeral
-EPHEMERAL_OUTPUT = os.getenv('EPHEMERAL_OUTPUT', True)
+EPHEMERAL_OUTPUT = str2bool(os.getenv('EPHEMERAL_OUTPUT', "True"))
 
 # Enables Experimental Commands
-EXPERIMENTAL = os.getenv('EXPERIMENTAL', False)
+EXPERIMENTAL = str2bool(os.getenv('EXPERIMENTAL', "False"))
 
 # Task frequency
 TASK_FREQUENCY = int(os.getenv('TASK_FREQUENCY', 5))
@@ -60,10 +63,10 @@ TEST_ENV1 = os.getenv('TEST_ENV1')
 PLAYBACK_ROLE = os.getenv('PLAYBACK_ROLE', 0)
 
 # Ownership check
-OWNER_ONLY = os.getenv('OWNER_ONLY', True)
+OWNER_ONLY = str2bool(os.getenv('OWNER_ONLY', "True"))
 
 # Initial MSG when not in debug mode
-INITIALIZED_MSG = os.getenv('INITIALIZED_MSG', True)
+INITIALIZED_MSG = str2bool(os.getenv('INITIALIZED_MSG', "True"))
 
 # Used for embed footers
 bookshelf_traveller_footer = f'Powered by Bookshelf Traveller 🕮 | {versionNumber}'
