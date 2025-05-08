@@ -727,17 +727,28 @@ class AudioPlayBack(Extension):
 
                 else:
                     titles_ = await c.bookshelf_title_search(user_input)
-                    for info in titles_:
-                        book_title = info["title"]
-                        book_id = info["id"]
-                        book_author = info["author"]
-                        name = f"{book_title} | {book_author}"
-                        if len(name) <= 100:
-                            pass
-                        else:
-                            name = book_title
+                    for book in titles_:
+                        book_title = book.get('title', 'Unknown').strip()
+                        author = book.get('author', 'Unknown').strip()
+                        book_id = book.get('id')
 
-                        choices.append({"name": name, "value": book_id})
+                        if not book_id:
+                            continue
+
+                        name = f"{book_title} | {author}"
+                        if not name.strip():
+                            name = "Untitled Book"
+
+                        if len(name) > 100:
+                            short_author = author[:20]
+                            available_len = 100 - len(short_author) - 3
+                            trimmed_title = book_title[:available_len] if available_len > 0 else "Untitled"
+                            name = f"{trimmed_title}... | {short_author}"
+
+                        name = name.encode("utf-8")[:100].decode("utf-8", "ignore")
+
+                        if 1 <= len(name) <= 100:
+                            choices.append({"name": name, "value": f"{book_id}"})
 
                 await ctx.send(choices=choices)
                 logger.info(choices)
