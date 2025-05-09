@@ -858,9 +858,8 @@ class SubscriptionTask(Extension):
             for item in result:
                 task = item[1]
                 task_list.append(task)
-                # Debug stuff
-                if s.DEBUG_MODE != "True":
-                    logger.debug(f"Tasks db search result: {task}")
+
+                logger.debug(f"Tasks db search result: {task}")
 
             # Check if new book check is running
             if not self.newBookTask.running and task_name in task_list:
@@ -869,7 +868,7 @@ class SubscriptionTask(Extension):
                 logger.info(
                     f"Enabling task: New Book Check on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
                 # Debug Stuff
-                if s.DEBUG_MODE != "True" and s.INITIALIZED_MSG == "True":
+                if s.DEBUG_MODE and s.INITIALIZED_MSG:
                     await owner.send(
                         f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
 

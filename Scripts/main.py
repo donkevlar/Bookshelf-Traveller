@@ -1,21 +1,21 @@
 import asyncio
-import os
-import settings
 import logging
+import os
 import sys
-import pytz
 import time
-
-from config import current_config
-from interactions import *
-from interactions.api.events import *
 from datetime import datetime
+
+import pytz
 from dotenv import load_dotenv
-from subscription_task import conn_test
+from interactions import *
 
 # File Imports
 import bookshelfAPI as c
 import db_additions
+import settings
+from config import current_config
+from subscription_task import conn_test
+from interactions.api.events import *
 
 # Pulls from bookshelf file
 load_dotenv()
@@ -26,25 +26,11 @@ handler = logging.StreamHandler()
 console_handler = logger.handlers[0]
 original_formatter = console_handler.formatter
 
-
-# Experimental Imports
-# enables experimental features and modules
-
-# Convert ENV string to bool
-def bool_converter(param) -> bool:
-    if param == "True":
-        return True
-    else:
-        return False
-
-
 # Global Vars
 MULTI_USER = settings.MULTI_USER
 # AUDIO_ENABLED = settings.AUDIO_ENABLED
 DEBUG_MODE = settings.DEBUG_MODE
 INITIALIZED_MSG = settings.INITIALIZED_MSG
-
-# Controls if ALL commands are ephemeral
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
 
 # Timezone
@@ -112,7 +98,7 @@ async def on_startup(event: Startup):
     if settings.EXPERIMENTAL:
         logger.warning(f'EXPERIMENTAL FEATURES ENABLED!')
 
-    if MULTI_USER == 'True':
+    if MULTI_USER:
         import multi_user as mu
         user_token = os.getenv('bookshelfToken')
         user_info = c.bookshelf_user_login(token=user_token)
