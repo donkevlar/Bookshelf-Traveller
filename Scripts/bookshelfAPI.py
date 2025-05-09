@@ -782,6 +782,7 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
     finished_book = False
     updatedTime = 0.0
     serverCurrentTime = 0.0
+    duration = 0.0
 
     if current_time > 1:
 
@@ -842,6 +843,8 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
         except Exception as e:
             logger.warning(f"Issue with sync: {e}")
 
+    # If we reach here, something went wrong - return default values
+    return updatedTime, duration, serverCurrentTime, finished_book
 
 # Need to  revisit this at some point
 async def bookshelf_close_session(session_id: str):

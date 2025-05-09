@@ -216,27 +216,48 @@ class AudioPlayBack(Extension):
     async def session_update(self):
         logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
 
-        self.current_playback_time = self.current_playback_time + updateFrequency
+        try:
+            self.current_playback_time = self.current_playback_time + updateFrequency
 
-        formatted_time = await time_converter(self.current_playback_time)
+            formatted_time = await time_converter(self.current_playback_time)
 
-        updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
-            item_id=self.bookItemID,
-            session_id=self.sessionID,
-            current_time=updateFrequency,
-            next_time=self.nextTime)  # NOQA
+            # Try to update the session
+            try:
+                updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
+                    item_id=self.bookItemID,
+                    session_id=self.sessionID,
+                    current_time=updateFrequency,
+                    next_time=self.nextTime)
 
-        logger.info(f"Successfully synced session to updated time: {updatedTime} | "
-                    f"Current Playback Time: {formatted_time} | session ID: {self.sessionID}")
+                logger.info(f"Successfully synced session to updated time: {updatedTime} | "
+                            f"Current Playback Time: {formatted_time} | session ID: {self.sessionID}")
 
-        current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(self.bookItemID,
-                                                                                                        updatedTime)
+                # Check if book is finished
+                if finished_book:
+                    logger.info("Book playback has finished based on session update")
+                    # Could add special handling for finished books if problems occur
 
-        if not isPodcast:
-            # Check if current_chapter has a title key
-            chapter_title = current_chapter.get('title', 'Unknown Chapter')
-            logger.info(f"Current Chapter Sync: {chapter_title}")
-            self.currentChapter = current_chapter
+            except TypeError as e:
+                logger.warning(f"Session update error: {e} - session may be invalid or closed")
+                # Continue with task to allow chapter update even if session update fails
+
+            # Try to get current chapter
+            try:
+                current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(
+                    self.bookItemID, updatedTime if 'updatedTime' in locals() else None)
+
+                if not isPodcast:
+                    # Check if current_chapter has a title key
+                    chapter_title = current_chapter.get('title', 'Unknown Chapter')
+                    logger.info(f"Current Chapter Sync: {chapter_title}")
+                    self.currentChapter = current_chapter
+
+            except Exception as e:
+                logger.warning(f"Error getting current chapter: {e}")
+
+        except Exception as e:
+            logger.error(f"Unhandled error in session_update task: {e}")
+            # Don't stop the task on errors, let it continue for the next interval
 
     @Task.create(trigger=IntervalTrigger(minutes=4))
     async def auto_kill_session(self):
@@ -740,18 +761,23 @@ class AudioPlayBack(Extension):
                     itemID = sessions.get('libraryItemId')
                     name = f"{title} | {display_author}"
 
-                    if len(name) <= 100:
-                        pass
-                    elif len(title) <= 100:
-                        name = title
-                    else:
-                        logger.debug(f"Title and Full name were longer than 100 characters, attempting subtitle.")
-                        name = f"{subtitle} | {display_author}"
+                    # Handle None values 
+                    if title is None:
+                        title = 'Untitled Book'
+                    if display_author is None:
+                        display_author = 'Unknown Author'
+                    if subtitle is None:
+                        subtitle = ''
 
-                        if len(name) <= 100:
-                            pass
-                        else:
-                            name = "Recent Book Title Too Long :("
+                    name = f"{title} | {display_author}"
+                
+                    if len(name) > 100:
+                        short_author = display_author[:20]
+                        available_len = 100 - len(short_author) - 3
+                        trimmed_title = title[:available_len] if available_len > 0 else "Untitled"
+                        name = f"{trimmed_title}... | {short_author}"
+
+                        name = name.encode("utf-8")[:100].decode("utf-8", "ignore")
 
                     formatted_item = {"name": name, "value": itemID}
 
@@ -831,6 +857,12 @@ class AudioPlayBack(Extension):
 
                     if not book_id:
                         continue
+
+                    # Handle None values
+                    if book_title is None:
+                        book_title = 'Untitled Book'
+                    if author is None:
+                        author = 'Unknown Author'
 
                     name = f"{book_title} | {author}"
                     if not name.strip():
