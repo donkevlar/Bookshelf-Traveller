@@ -747,54 +747,93 @@ class AudioPlayBack(Extension):
     async def search_media_auto_complete(self, ctx: AutocompleteContext):
         user_input = ctx.input_text
         choices = []
-        print(user_input)
+        logger.info(f"Autocomplete input: '{user_input}'")
+
         if user_input == "":
             try:
+                # Add "Random" as the first option
+                choices.append({"name": "📚 Random Book (Surprise me!)", "value": "random"})
+
+                # Get recent sessions
                 formatted_sessions_string, data = await c.bookshelf_listening_stats()
+                valid_session_count = 0
+                skipped_session_count = 0
 
-                for sessions in data['recentSessions']:
-                    bookID = sessions['bookId']
-                    mediaMetadata = sessions['mediaMetadata']
-                    title = sessions.get('displayTitle')
-                    subtitle = mediaMetadata.get('subtitle')
-                    display_author = sessions.get('displayAuthor')
-                    itemID = sessions.get('libraryItemId')
-                    name = f"{title} | {display_author}"
+                for session in data.get('recentSessions', []):
+                    try:
+                        # Get essential IDs
+                        bookID = session.get('bookId')
+                        itemID = session.get('libraryItemId')
 
-                    # Handle None values 
-                    if title is None:
-                        title = 'Untitled Book'
-                    if display_author is None:
-                        display_author = 'Unknown Author'
-                    if subtitle is None:
-                        subtitle = ''
+                        # Skip sessions with missing essential data
+                        if not itemID or not bookID:
+                            logger.info(f"Skipping session with missing itemID or bookID")
+                            skipped_session_count += 1
+                            continue
 
-                    name = f"{title} | {display_author}"
-                
-                    if len(name) > 100:
-                        short_author = display_author[:20]
-                        available_len = 100 - len(short_author) - 3
-                        trimmed_title = title[:available_len] if available_len > 0 else "Untitled"
-                        name = f"{trimmed_title}... | {short_author}"
+                        # Extract metadata
+                        mediaMetadata = session.get('mediaMetadata', {})
+                        title = session.get('displayTitle')
+                        subtitle = mediaMetadata.get('subtitle', '')
+                        display_author = session.get('displayAuthor')
 
+                        # Skip if both title and author are None (likely deleted item)
+                        if title is None and display_author is None:
+                            logger.info(f"Skipping session with no title or author for itemID: {itemID}")
+                            skipped_session_count += 1
+                            continue
+
+                        # Log and handle None title case specifically
+                        if title is None:
+                            logger.info(f"Found session with None title for itemID: {itemID}, author: {display_author}")
+                            title = 'Untitled Book'
+
+                        # Apply default value for None author
+                        if display_author is None:
+                            logger.info(f"Found session with None author for itemID: {itemID}, title: {title}")
+                            display_author = 'Unknown Author'
+
+                        # Format name with smart truncation
+                        name = f"{title} | {display_author}"
+                        if len(name) > 100:
+                            # First try title only
+                            if len(title) <= 100:
+                                name = title
+                                logger.info(f"Truncated name to title only: {title}")
+                            else:
+                                # Try smart truncation with author
+                                short_author = display_author[:20]
+                                available_len = 100 - len(short_author) - 5  # Allow for "... | "
+                                trimmed_title = title[:available_len] if available_len > 0 else "Untitled"
+                                name = f"{trimmed_title}... | {short_author}"
+                                logger.info(f"Smart truncated long title: {title} -> {trimmed_title}...")
+
+                        # Ensure we don't exceed Discord limit
                         name = name.encode("utf-8")[:100].decode("utf-8", "ignore")
 
-                    formatted_item = {"name": name, "value": itemID}
+                        # Add to choices if not already there
+                        formatted_item = {"name": name, "value": itemID}
+                        if formatted_item not in choices:
+                            choices.append(formatted_item)
+                            valid_session_count += 1
 
-                    if formatted_item not in choices and bookID is not None:
-                        choices.append(formatted_item)
+                    except Exception as e:
+                        logger.info(f"Error processing recent session: {e}")
+                        skipped_session_count += 1
+                        continue
 
-                # Add "Random" as a special option at the top
-                choices.insert(0, {"name": "📚 Random Book (Surprise me!)", "value": "random"})
+                logger.info(f"Recent sessions processing complete - Valid: {valid_session_count}, Skipped: {skipped_session_count}")
+
+                if not choices or len(choices) == 1:  # Only random option
+                    logger.info("No valid recent sessions found, only showing random option")
+                    choices = [{"name": "📚 Random Book (Surprise me!)", "value": "random"}]
 
                 await ctx.send(choices=choices)
-                logger.info(choices)
 
             except Exception as e:
-                # Add "Random" option even if other options fail
-                choices.append({"name": "📚 Random Book (Surprise me!)", "value": "random"})
+                logger.error(f"Error retrieving recent sessions: {e}")
+                choices = [{"name": "📚 Random Book (Surprise me!)", "value": "random"}]
                 await ctx.send(choices=choices)
-                print(e)
 
         else:
             # Handle user input search
