@@ -681,9 +681,18 @@ async def bookshelf_get_current_chapter(item_id: str, current_time=0):
             if chapter_array and foundChapter is not None:
                 return foundChapter, chapter_array, book_finished, isPodcast
 
-    except requests.RequestException as e:
-        print("Could not retrieve item", e)
+            # If no matching chapter found but chapters exist, use the first chapter
+            if chapter_array:
+                foundChapter = chapter_array[0]
+                return foundChapter, chapter_array, book_finished, isPodcast
+            
+            # If no chapters at all
+            return {}, [], book_finished, isPodcast
 
+    except Exception as e:
+        logger.error(f"Error in bookshelf_get_current_chapter for item {item_id}: {e}")
+        # Return default values instead of None
+        return {}, [], False, False  # Default empty values that are unpacked correctly
 
 async def bookshelf_audio_obj(item_id: str, index_id: int = 1):
     """

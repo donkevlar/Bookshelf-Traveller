@@ -233,7 +233,9 @@ class AudioPlayBack(Extension):
                                                                                                         updatedTime)
 
         if not isPodcast:
-            logger.info("Current Chapter Sync: " + current_chapter['title'])
+            # Check if current_chapter has a title key
+            chapter_title = current_chapter.get('title', 'Unknown Chapter')
+            logger.info(f"Current Chapter Sync: {chapter_title}")
             self.currentChapter = current_chapter
 
     @Task.create(trigger=IntervalTrigger(minutes=4))
@@ -425,132 +427,143 @@ class AudioPlayBack(Extension):
                 await ctx.send(content="Error selecting a random book. Please try again.", ephemeral=True)
                 return
 
-        # Proceed with the normal playback flow using the book ID
-        current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(item_id=book)
+        try:
+            # Proceed with the normal playback flow using the book ID
+            current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(item_id=book)
 
-        if bookFinished and startover is False:
-            await ctx.send(content="This book is marked as finished. Use the `startover: True` option to play it from the beginning.", ephemeral=True)
-            return
+            if current_chapter is None:
+                await ctx.send(content="Error retrieving chapter information. The item may be invalid or inaccessible.", ephemeral=True)
+                return
 
-        if isPodcast:
-            await ctx.send(content="The content you attempted to play is currently not supported, aborting.",
-                          ephemeral=True)
-            return
+            if isPodcast:
+                await ctx.send(content="The content you attempted to play is currently not supported, aborting.",
+                              ephemeral=True)
+                return
 
-        if self.activeSessions >= 1:
-            await ctx.send(content=f"Bot can only play one session at a time, please stop your other active session and try again! Current session owner: {self.sessionOwner}", ephemeral=True)
-            return
+            if bookFinished and startover is False:
+                await ctx.send(content="This book is marked as finished. Use the `startover: True` option to play it from the beginning.", ephemeral=True)
+                return
 
-        # Get Bookshelf Playback URI, Starts new session
-        audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(book)
+            if self.activeSessions >= 1:
+                await ctx.send(content=f"Bot can only play one session at a time, please stop your other active session and try again! Current session owner: {self.sessionOwner}", ephemeral=True)
+                return
 
-        if startover:
-            logger.info(f"startover flag is true, setting currentTime to 0 instead of {currentTime}")
-            currentTime = 0
-            # Also find the first chapter
-            if chapter_array and len(chapter_array) > 0:
-                # Sort chapters by start time if needed
-                chapter_array.sort(key=lambda x: float(x.get('start', 0)))
-                # Get the first chapter
-                first_chapter = chapter_array[0]
-                self.currentChapter = first_chapter
-                self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
-                logger.info(f"Setting to first chapter: {self.currentChapterTitle}")
+            # Get Bookshelf Playback URI, Starts new session
+            audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(book)
 
-        # Get Book Cover URL
-        cover_image = await c.bookshelf_cover_image(book)
+            if startover:
+                logger.info(f"startover flag is true, setting currentTime to 0 instead of {currentTime}")
+                currentTime = 0
+                # Also find the first chapter
+                if chapter_array and len(chapter_array) > 0:
+                    # Sort chapters by start time if needed
+                    chapter_array.sort(key=lambda x: float(x.get('start', 0)))
+                    # Get the first chapter
+                    first_chapter = chapter_array[0]
+                    self.currentChapter = first_chapter
+                    self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
+                    logger.info(f"Setting to first chapter: {self.currentChapterTitle}")
 
-        # Retrieve current user information
-        username, user_type, user_locked = await c.bookshelf_auth_test()
+            # Get Book Cover URL
+            cover_image = await c.bookshelf_cover_image(book)
 
-        # Audio Object Arguments
-        audio = AudioVolume(audio_obj)
-        audio.buffer_seconds = 5
-        audio.locked_stream = True
-        self.volume = audio.volume
-        audio.ffmpeg_before_args = f"-ss {currentTime}"
-        audio.ffmpeg_args = f"-ar 44100 -acodec aac -re"
-        audio.bitrate = self.bitrate
+            # Retrieve current user information
+            username, user_type, user_locked = await c.bookshelf_auth_test()
 
-        # Class VARS
+            # Audio Object Arguments
+            audio = AudioVolume(audio_obj)
+            audio.buffer_seconds = 5
+            audio.locked_stream = True
+            self.volume = audio.volume
+            audio.ffmpeg_before_args = f"-ss {currentTime}"
+            audio.ffmpeg_args = f"-ar 44100 -acodec aac -re"
+            audio.bitrate = self.bitrate
 
-        # ABS User Vars
-        self.username = username
-        self.user_type = user_type
-        self.cover_image = cover_image
+            # Class VARS
 
-        # Session Vars
-        self.sessionID = sessionID
-        self.sessionOwner = ctx.author.username
-        self.bookItemID = book
-        self.bookTitle = bookTitle
-        self.audioObj = audio
-        self.currentTime = currentTime
-        self.current_playback_time = 0
-        self.audio_context = ctx
-        self.active_guild_id = ctx.guild_id
-        self.bookDuration = bookDuration
+            # ABS User Vars
+            self.username = username
+            self.user_type = user_type
+            self.cover_image = cover_image
 
-        # Chapter Vars
-        self.isPodcast = isPodcast
-        self.currentChapter = current_chapter if not startover else self.currentChapter  # Use first chapter if startover
-        self.currentChapterTitle = current_chapter.get('title') if not startover else self.currentChapterTitle
-        self.chapterArray = chapter_array
-        self.bookFinished = bookFinished
-        self.current_channel = ctx.channel_id
-        self.play_state = 'playing'
+            # Session Vars
+            self.sessionID = sessionID
+            self.sessionOwner = ctx.author.username
+            self.bookItemID = book
+            self.bookTitle = bookTitle
+            self.audioObj = audio
+            self.currentTime = currentTime
+            self.current_playback_time = 0
+            self.audio_context = ctx
+            self.active_guild_id = ctx.guild_id
+            self.bookDuration = bookDuration
 
-        # Create embedded message
-        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
+            # Chapter Vars
+            self.isPodcast = isPodcast
+            self.currentChapter = current_chapter if not startover else self.currentChapter  # Use first chapter if startover
+            self.currentChapterTitle = current_chapter.get('title') if not startover else self.currentChapterTitle
+            self.chapterArray = chapter_array
+            self.bookFinished = bookFinished
+            self.current_channel = ctx.channel_id
+            self.play_state = 'playing'
 
-        # check if bot currently connected to voice
-        if not ctx.voice_state:
-            # if we haven't already joined a voice channel
-            try:
-                # Connect to voice channel
-                await ctx.author.voice.channel.connect()
+            # Create embedded message
+            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
 
-                # Start Tasks
-                self.session_update.start()
+            # check if bot currently connected to voice
+            if not ctx.voice_state:
+                # if we haven't already joined a voice channel
+                try:
+                    # Connect to voice channel
+                    await ctx.author.voice.channel.connect()
 
-                # Customize message based on whether we're using random and/or startover
-                start_message = "Beginning audio stream"
-                if random_selected:
-                    start_message = f"🎲 Randomly selected: **{random_book_title}**\n{start_message}"
-                if startover:
-                    start_message += " from the beginning!"
-                else:
-                    start_message += "!"
+                    # Start Tasks
+                    self.session_update.start()
 
-                # Stop auto kill session task
-                if self.auto_kill_session.running:
-                    self.auto_kill_session.stop()
+                    # Customize message based on whether we're using random and/or startover
+                    start_message = "Beginning audio stream"
+                    if random_selected:
+                        start_message = f"🎲 Randomly selected: **{random_book_title}**\n{start_message}"
+                    if startover:
+                        start_message += " from the beginning!"
+                    else:
+                        start_message += "!"
 
-                self.audio_message = await ctx.send(content=start_message, embed=embed_message,
-                                                    components=component_rows_initial)
+                    # Stop auto kill session task
+                    if self.auto_kill_session.running:
+                        self.auto_kill_session.stop()
 
-                logger.info(f"Beginning audio stream" + (" from the beginning" if startover else ""))
+                    self.audio_message = await ctx.send(content=start_message, embed=embed_message,
+                                                        components=component_rows_initial)
 
-                self.activeSessions += 1
+                    logger.info(f"Beginning audio stream" + (" from the beginning" if startover else ""))
 
-                await self.client.change_presence(activity=Activity.create(name=f"{self.bookTitle}",
-                                                                           type=ActivityType.LISTENING))
+                    self.activeSessions += 1
 
-                # Start audio playback
-                await ctx.voice_state.play(audio)
+                    await self.client.change_presence(activity=Activity.create(name=f"{self.bookTitle}",
+                                                                               type=ActivityType.LISTENING))
 
-            except Exception as e:
-                # Stop Any Associated Tasks
-                self.session_update.stop()
-                # Close ABS session
-                await c.bookshelf_close_session(sessionID)  # NOQA
-                # Cleanup discord interactions
-                if ctx.voice_state:
-                    await ctx.author.voice.channel.disconnect()
-                audio.cleanup()  # NOQA
+                    # Start audio playback
+                    await ctx.voice_state.play(audio)
 
-                logger.error(f"Error starting playback: {e}")
-                await ctx.send(content=f"Error starting playback: {str(e)}")
+                except Exception as e:
+                    # Stop Any Associated Tasks
+                    if self.session_update.running:
+                        self.session_update.stop()
+                    # Close ABS session
+                    await c.bookshelf_close_session(sessionID)  # NOQA
+                    # Cleanup discord interactions
+                    if ctx.voice_state:
+                        await ctx.author.voice.channel.disconnect()
+                    if audio:
+                        audio.cleanup()  # NOQA
+
+                    logger.error(f"Error starting playback: {e}")
+                    await ctx.send(content=f"Error starting playback: {str(e)}")
+
+        except Exception as e:
+            logger.error(f"Unhandled error in play_audio: {e}")
+            await ctx.send(content=f"An error occurred while trying to play this content: {str(e)}", ephemeral=True)
 
     # Pause audio, stops tasks, keeps session active.
     @slash_command(name="pause", description="pause audio", dm_permission=False)
