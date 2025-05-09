@@ -28,7 +28,7 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 **Important note regarding `HTTPS` connections. I've experienced a lot of issues when streaming audio from my server to discord using a https connection as the source. I have yet to confirm if this is a double NAT issue, a reverse proxy issue or otherwise. I suggest you utilize a direct connection to your server i.e. `http://127.0.0.1:13378` if you intend to listen to an audiobook for more than 15 minutes at a time. As a workaround for including images, I've added the `OPT_IMAGE_URL` env variable. If this is utilized (With an https connection) the bot will use this link for all images instead of the initial server url.**
 
 ### Troubleshooting
-**Before reporting an issue, please make sure that you enable `DEBUG_MODE=True`. You can use this when reporting an issue as it will describe all backend services and any script-related problems.**
+**Before reporting an issue, please make sure that you enable `DEBUG_MODE=true`. You can use this when reporting an issue as it will describe all backend services and any script-related problems.**
 
 ### Environmental Variables
 
@@ -46,7 +46,7 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 | `OPT_IMAGE_URL`    | Optional HTTPS URL for generating cover images and sending them to the discord API. This is primarily if you experience similar issues as mentioned above. | *String*  | **NO**    |
 | `TIMEZONE`         | Default set to `America/Toronto`                                                                                                                           | *String*  | **NO**    |
 | `DEFAULT_PROVIDER` | Experimental, set the default search provider for certain commands.                                                                                        | *String*  | **NO**    |
-| `DEBUG_MODE`       | By default, set to `False`. It enables verbose logs and also disables all notifications.                                                                   | *String*  | **NO**    |
+| `DEBUG_MODE`       | By default, set to `False`. It enables verbose logs and also disables all notifications.                                                                   | *Boolean*  | **NO**    |
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**
@@ -74,8 +74,8 @@ docker run -d \
 -e bookshelfURL="http://myurl.domain.com" \
 -e CLIENT_ID="CLIENTID" \
 -e AUDIO_ENABLED="True" \
--e MULTI_USER="True" \
-
+-e MULTI_USER="false" \
+-v ./bookshelf-traveller:/ABSBOT/db \
 donkevlar/bookshelf-traveller:latest
 ```
 
@@ -92,8 +92,9 @@ services:
       - DISCORD_TOKEN=INSERT_TOKEN
       - bookshelfToken=INSERT_TOKEN
       - bookshelfURL=http://myurl.domain.com
-    restart: always  # Optional: ensures the container restarts on failure or system reboot
-    detach: true    # Optional: runs the container in detached mode
+    volumes:
+      - ./bookshelf-traveller:/ABSBOT/db
+    restart: always
 ```
 
 ### Unraid
@@ -148,7 +149,7 @@ Here's the list of commands sorted alphabetically:
 | Command               | Description                                                                                                | Arguments                                          | Additional Information                                                                                                                                                                                                                        | Additional Functionality                                                                                                     |
 |-----------------------|------------------------------------------------------------------------------------------------------------|----------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
 | `/active-task`        | Pulls all active tasks, this is a server wide command. (Sees all users, channels, etc)                     |                                                    |                                                                                                                                                                                                                                               |                                                                                                                              |
-| `add-book`            | Add a book to your wishlist, this command is open server wide.                                             | `title`, `provider`, `force`                       | Most successful searches will appear on audible, but others are available by default. Note that even if a title is specific, sometimes that can result in too many options and the bot returning nothing. Use a series name when this occurs. | **Autocomplete**                                                                                                             |
+| `/add-book`           | Add a book to your wishlist, this command is open server wide.                                             | `title`, `provider`, `force`                       | Most successful searches will appear on audible, but others are available by default. Note that even if a title is specific, sometimes that can result in too many options and the bot returning nothing. Use a series name when this occurs. | **Autocomplete**                                                                                                             |
 | `/add-user`           | Will create a user, requires username, password                                                            | `name`, `password`, `user_type`, optional: `email` | only with ABS admin token. Otherwise disabled. *MULTI_USER must be False.                                                                                                                                                                     |
 | `/all-libraries`      | Displays all current libraries with their ID                                                               |                                                    |                                                                                                                                                                                                                                               |
 | `/book-list-csv`      | Get complete list of items in a given library, outputs a csv                                               | `libraryid`                                        | only with ABS admin token. Otherwise disabled. *MULTI_USER must be False.                                                                                                                                                                     | **Autocomplete Enabled & Cover Images**                                                                                      |
