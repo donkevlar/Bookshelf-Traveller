@@ -713,8 +713,7 @@ class AudioPlayBack(Extension):
     async def search_media_auto_complete(self, ctx: AutocompleteContext):
         user_input = ctx.input_text
         choices = []
-
-        # When input is empty, show recent sessions
+        print(user_input)
         if user_input == "":
             try:
                 formatted_sessions_string, data = await c.bookshelf_listening_stats()
@@ -766,9 +765,53 @@ class AudioPlayBack(Extension):
                 if user_input == "random":
                     choices.append({"name": "📚 Random Book (Surprise me!)", "value": "random"})
 
-                # Normal title search
-                titles_ = await c.bookshelf_title_search(user_input)
-                for book in titles_:
+                libraries = await c.bookshelf_libraries()
+                valid_libraries = []
+                found_titles = []
+
+                # Get valid libraries
+                for name, (library_id, audiobooks_only) in libraries.items():
+                    valid_libraries.append({"id": library_id, "name": name})
+                    logger.debug(f"Valid Library Found: {name} | {library_id}")
+
+                # Search across all libraries, accumulating results
+                for lib_id in valid_libraries:
+                    library_iD = lib_id.get('id')
+                    logger.debug(f"Searching library: {lib_id.get('name')} | {library_iD}")
+
+                    try:
+                        limit = 10
+                        endpoint = f"/libraries/{library_iD}/search"
+                        params = f"&q={user_input}&limit={limit}"
+                        r = await c.bookshelf_conn(endpoint=endpoint, GET=True, params=params)
+
+                        if r.status_code == 200:
+                            data = r.json()
+                            dataset = data.get('book', [])
+
+                            for book in dataset:
+                                authors_list = []
+                                title = book['libraryItem']['media']['metadata']['title']
+                                authors_raw = book['libraryItem']['media']['metadata']['authors']
+
+                                for author in authors_raw:
+                                    name = author.get('name')
+                                    authors_list.append(name)
+
+                                author = ', '.join(authors_list)
+                                book_id = book['libraryItem']['id']
+
+                                # Add to list if not already present (avoid duplicates)
+                                new_item = {'id': book_id, 'title': title, 'author': author}
+                                if not any(item['id'] == book_id for item in found_titles):
+                                    found_titles.append(new_item)
+
+                    except Exception as e:
+                        logger.error(f"Error searching library {library_iD}: {e}")
+                        continue  # Continue to next library even if this one fails
+
+                # Process all found titles into choices for autocomplete
+                for book in found_titles:
                     book_title = book.get('title', 'Unknown').strip()
                     author = book.get('author', 'Unknown').strip()
                     book_id = book.get('id')
