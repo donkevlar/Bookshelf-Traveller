@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # Version Info
-versionNumber = 'V1.3.2c'
+versionNumber = 'V1.3.3 '
 
 COMMAND_COUNT = 0
 
