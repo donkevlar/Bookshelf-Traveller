@@ -373,13 +373,14 @@ class AudioPlayBack(Extension):
 
     # Main play command, place class variables here since this is required to play audio
     @slash_command(name="play", description="Play audio from ABS server", dm_permission=False)
-    @slash_option(name="book", description="Enter a book title. type 'random' for a surprise.", required=True,
+    @slash_option(name="book", description="Enter a book title or 'random' for a surprise", required=True,
                   opt_type=OptionType.STRING,
                   autocomplete=True)
-    @slash_option(name="force",
-                  description="Force start an item which might of already been marked as finished. IMPORTANT: THIS CAN FAIL!",
+    @slash_option(name="startover",
+                  description="Start the book from the beginning instead of resuming",
                   opt_type=OptionType.BOOLEAN)
-    async def play_audio(self, ctx: SlashContext, book: str, force=False):
+    async def play_audio(self, ctx: SlashContext, book: str, startover=False):
+        # Check for ownership if enabled
         if ownership:
             if ctx.author.id not in ctx.bot.owners:
                 logger.warning(f'User {ctx.author} attempted to use /play, and OWNER_ONLY is enabled!')
@@ -395,15 +396,45 @@ class AudioPlayBack(Extension):
 
         logger.info(f"executing command /play")
 
+        # Defer the response right away to prevent "interaction already responded to" errors
+        await ctx.defer(ephemeral=True)
+
+        # Handle 'random' book selection here
+        random_selected = False
+        random_book_title = None
+        if book.lower() == 'random':
+            logger.info('Random book option selected, selecting a surprise book!')
+            try:
+                titles_ = await c.bookshelf_get_valid_books()
+                titles_count = len(titles_)
+                logger.info(f"Total Title Count: {titles_count}")
+
+                if titles_count == 0:
+                    await ctx.send(content="No books found in your library to play randomly.", ephemeral=True)
+                    return
+
+                random_title_index = random.randint(0, titles_count - 1)
+                random_book = titles_[random_title_index]
+                random_book_title = random_book.get('title')
+                book = random_book.get('id')
+                random_selected = True
+
+                logger.info(f'Surprise! {random_book_title} has been selected to play')
+            except Exception as e:
+                logger.error(f"Error selecting random book: {e}")
+                await ctx.send(content="Error selecting a random book. Please try again.", ephemeral=True)
+                return
+
+        # Proceed with the normal playback flow using the book ID
         current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(item_id=book)
 
-        if bookFinished and force is False:
-            await ctx.send(content="Book finished, please mark it as unfinished in UI. Aborting.", ephemeral=True)
+        if bookFinished and startover is False:
+            await ctx.send(content="This book is marked as finished. Use the `startover: True` option to play it from the beginning.", ephemeral=True)
             return
 
         if isPodcast:
             await ctx.send(content="The content you attempted to play is currently not supported, aborting.",
-                           ephemeral=True)
+                          ephemeral=True)
             return
 
         if self.activeSessions >= 1:
@@ -412,6 +443,19 @@ class AudioPlayBack(Extension):
 
         # Get Bookshelf Playback URI, Starts new session
         audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(book)
+
+        if startover:
+            logger.info(f"startover flag is true, setting currentTime to 0 instead of {currentTime}")
+            currentTime = 0
+            # Also find the first chapter
+            if chapter_array and len(chapter_array) > 0:
+                # Sort chapters by start time if needed
+                chapter_array.sort(key=lambda x: float(x.get('start', 0)))
+                # Get the first chapter
+                first_chapter = chapter_array[0]
+                self.currentChapter = first_chapter
+                self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
+                logger.info(f"Setting to first chapter: {self.currentChapterTitle}")
 
         # Get Book Cover URL
         cover_image = await c.bookshelf_cover_image(book)
@@ -449,8 +493,8 @@ class AudioPlayBack(Extension):
 
         # Chapter Vars
         self.isPodcast = isPodcast
-        self.currentChapter = current_chapter
-        self.currentChapterTitle = current_chapter.get('title')
+        self.currentChapter = current_chapter if not startover else self.currentChapter  # Use first chapter if startover
+        self.currentChapterTitle = current_chapter.get('title') if not startover else self.currentChapterTitle
         self.chapterArray = chapter_array
         self.bookFinished = bookFinished
         self.current_channel = ctx.channel_id
@@ -461,7 +505,6 @@ class AudioPlayBack(Extension):
 
         # check if bot currently connected to voice
         if not ctx.voice_state:
-
             # if we haven't already joined a voice channel
             try:
                 # Connect to voice channel
@@ -469,18 +512,24 @@ class AudioPlayBack(Extension):
 
                 # Start Tasks
                 self.session_update.start()
-                # self.terminal_clearer.start()
 
-                # Start Voice Check
-                await ctx.defer(ephemeral=True)
+                # Customize message based on whether we're using random and/or startover
+                start_message = "Beginning audio stream"
+                if random_selected:
+                    start_message = f"🎲 Randomly selected: **{random_book_title}**\n{start_message}"
+                if startover:
+                    start_message += " from the beginning!"
+                else:
+                    start_message += "!"
+
                 # Stop auto kill session task
                 if self.auto_kill_session.running:
                     self.auto_kill_session.stop()
 
-                self.audio_message = await ctx.send(content="Beginning audio stream!", embed=embed_message,
-                                                    ephemeral=True, components=component_rows_initial)
+                self.audio_message = await ctx.send(content=start_message, embed=embed_message,
+                                                    components=component_rows_initial)
 
-                logger.info(f"Beginning audio stream")
+                logger.info(f"Beginning audio stream" + (" from the beginning" if startover else ""))
 
                 self.activeSessions += 1
 
@@ -493,14 +542,15 @@ class AudioPlayBack(Extension):
             except Exception as e:
                 # Stop Any Associated Tasks
                 self.session_update.stop()
-                # self.terminal_clearer.stop()
                 # Close ABS session
                 await c.bookshelf_close_session(sessionID)  # NOQA
                 # Cleanup discord interactions
-                await ctx.author.voice.channel.disconnect()
+                if ctx.voice_state:
+                    await ctx.author.voice.channel.disconnect()
                 audio.cleanup()  # NOQA
 
-                print(e)
+                logger.error(f"Error starting playback: {e}")
+                await ctx.send(content=f"Error starting playback: {str(e)}")
 
     # Pause audio, stops tasks, keeps session active.
     @slash_command(name="pause", description="pause audio", dm_permission=False)
@@ -663,6 +713,8 @@ class AudioPlayBack(Extension):
     async def search_media_auto_complete(self, ctx: AutocompleteContext):
         user_input = ctx.input_text
         choices = []
+
+        # When input is empty, show recent sessions
         if user_input == "":
             try:
                 formatted_sessions_string, data = await c.bookshelf_listening_stats()
@@ -694,68 +746,57 @@ class AudioPlayBack(Extension):
                     if formatted_item not in choices and bookID is not None:
                         choices.append(formatted_item)
 
+                # Add "Random" as a special option at the top
+                choices.insert(0, {"name": "📚 Random Book (Surprise me!)", "value": "random"})
+
                 await ctx.send(choices=choices)
                 logger.info(choices)
 
             except Exception as e:
+                # Add "Random" option even if other options fail
+                choices.append({"name": "📚 Random Book (Surprise me!)", "value": "random"})
                 await ctx.send(choices=choices)
                 print(e)
 
         else:
+            # Handle user input search
             ctx.deferred = True
             try:
-                # Random - Sometimes a little surprise is noice!
-                if user_input.lower() == 'random':
-                    logger.info('User input includes random, time for a surprise! :)')
-                    titles_ = await c.bookshelf_get_valid_books()
-                    titles_count = len(titles_)
-                    logger.info(f"Total Title Count: {titles_count}")
-                    random_title_index = random.randint(1, titles_count)
-                    random_book = titles_[random_title_index]
-                    book_title = random_book.get('title')
-                    book_id = random_book.get('id')
-                    author = random_book.get('author')
+                # Add the random option if typing something that could be "random"
+                if user_input == "random":
+                    choices.append({"name": "📚 Random Book (Surprise me!)", "value": "random"})
+
+                # Normal title search
+                titles_ = await c.bookshelf_title_search(user_input)
+                for book in titles_:
+                    book_title = book.get('title', 'Unknown').strip()
+                    author = book.get('author', 'Unknown').strip()
+                    book_id = book.get('id')
+
+                    if not book_id:
+                        continue
 
                     name = f"{book_title} | {author}"
-                    if len(name) <= 100:
-                        pass
-                    else:
-                        name = book_title
+                    if not name.strip():
+                        name = "Untitled Book"
 
-                    logger.info(f'Surprise! {book_title} has been selected as tribute!')
-                    choices.append({"name": name, "value": f"{book_id}"})
+                    if len(name) > 100:
+                        short_author = author[:20]
+                        available_len = 100 - len(short_author) - 3
+                        trimmed_title = book_title[:available_len] if available_len > 0 else "Untitled"
+                        name = f"{trimmed_title}... | {short_author}"
 
-                else:
-                    titles_ = await c.bookshelf_title_search(user_input)
-                    for book in titles_:
-                        book_title = book.get('title', 'Unknown').strip()
-                        author = book.get('author', 'Unknown').strip()
-                        book_id = book.get('id')
+                    name = name.encode("utf-8")[:100].decode("utf-8", "ignore")
 
-                        if not book_id:
-                            continue
-
-                        name = f"{book_title} | {author}"
-                        if not name.strip():
-                            name = "Untitled Book"
-
-                        if len(name) > 100:
-                            short_author = author[:20]
-                            available_len = 100 - len(short_author) - 3
-                            trimmed_title = book_title[:available_len] if available_len > 0 else "Untitled"
-                            name = f"{trimmed_title}... | {short_author}"
-
-                        name = name.encode("utf-8")[:100].decode("utf-8", "ignore")
-
-                        if 1 <= len(name) <= 100:
-                            choices.append({"name": name, "value": f"{book_id}"})
+                    if 1 <= len(name) <= 100:
+                        choices.append({"name": name, "value": f"{book_id}"})
 
                 await ctx.send(choices=choices)
                 logger.info(choices)
 
             except Exception as e:  # NOQA
                 await ctx.send(choices=choices)
-                print(e)
+                logger.error(f"Error in autocomplete: {e}")
 
     @change_chapter.autocomplete("option")
     async def chapter_option_autocomplete(self, ctx: AutocompleteContext):
