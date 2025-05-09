@@ -762,42 +762,41 @@ class AudioPlayBack(Extension):
             # Handle user input search
             ctx.deferred = True
             try:
-                # Special handling for 'random' input - just suggest it directly
-                # rather than doing random selection in autocomplete
-                if 'random'.startswith(user_input.lower()):
+                # Add the random option if typing something that could be "random"
+                if user_input == "random":
                     choices.append({"name": "📚 Random Book (Surprise me!)", "value": "random"})
-                else:
-                    # Normal title search
-                    titles_ = await c.bookshelf_title_search(user_input)
-                    for book in titles_:
-                        book_title = book.get('title', 'Unknown').strip()
-                        author = book.get('author', 'Unknown').strip()
-                        book_id = book.get('id')
 
-                        if not book_id:
-                            continue
+                # Normal title search
+                titles_ = await c.bookshelf_title_search(user_input)
+                for book in titles_:
+                    book_title = book.get('title', 'Unknown').strip()
+                    author = book.get('author', 'Unknown').strip()
+                    book_id = book.get('id')
 
-                        name = f"{book_title} | {author}"
-                        if not name.strip():
-                            name = "Untitled Book"
+                    if not book_id:
+                        continue
 
-                        if len(name) > 100:
-                            short_author = author[:20]
-                            available_len = 100 - len(short_author) - 3
-                            trimmed_title = book_title[:available_len] if available_len > 0 else "Untitled"
-                            name = f"{trimmed_title}... | {short_author}"
+                    name = f"{book_title} | {author}"
+                    if not name.strip():
+                        name = "Untitled Book"
 
-                        name = name.encode("utf-8")[:100].decode("utf-8", "ignore")
+                    if len(name) > 100:
+                        short_author = author[:20]
+                        available_len = 100 - len(short_author) - 3
+                        trimmed_title = book_title[:available_len] if available_len > 0 else "Untitled"
+                        name = f"{trimmed_title}... | {short_author}"
 
-                        if 1 <= len(name) <= 100:
-                            choices.append({"name": name, "value": f"{book_id}"})
+                    name = name.encode("utf-8")[:100].decode("utf-8", "ignore")
+
+                    if 1 <= len(name) <= 100:
+                        choices.append({"name": name, "value": f"{book_id}"})
 
                 await ctx.send(choices=choices)
                 logger.info(choices)
 
             except Exception as e:  # NOQA
                 await ctx.send(choices=choices)
-                print(e)
+                logger.error(f"Error in autocomplete: {e}")
 
     @change_chapter.autocomplete("option")
     async def chapter_option_autocomplete(self, ctx: AutocompleteContext):
