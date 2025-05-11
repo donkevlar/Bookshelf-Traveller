@@ -268,6 +268,91 @@ class PrimaryCommands(Extension):
                 f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occurred: {e} | Command Name: recent-sessions')
             print("Error: ", e)
 
+    @slash_command(name="recently-added", description="Display the most recently added media items. Default Command.")
+    @slash_option(name="count", description="Number of items to display (1-20, default: 10)", 
+                 opt_type=OptionType.INTEGER, min_value=1, max_value=20)
+    async def recently_added(self, ctx: SlashContext, count=10):
+        try:
+            await ctx.defer(ephemeral=self.ephemeral_output)
+        
+            libraries = await c.bookshelf_libraries()
+            all_items = []
+        
+            # Gather items from all libraries
+            for name, (lib_id, audiobooks_only) in libraries.items():
+                # Get items sorted by addedAt, most recent first
+                items = await c.bookshelf_all_library_items(lib_id, params="sort=addedAt&desc=1&limit=20")
+                all_items.extend(items)
+        
+            # Sort all items by addedTime and get the most recent ones
+            items_sorted = sorted(all_items, key=lambda x: x.get('addedTime', 0), reverse=True)[:count]
+        
+            if not items_sorted:
+                await ctx.send("No recently added items found.", ephemeral=self.ephemeral_output)
+                return
+        
+            # Create embeds for each item
+            embeds = []
+            img_url = os.getenv('OPT_IMAGE_URL')
+            bookshelf_url = os.getenv('bookshelfURL')
+        
+            for index, item in enumerate(items_sorted, 1):
+                title = item.get('title', 'Unknown Title')
+                author = item.get('author', 'Unknown Author')
+                item_id = item.get('id')
+                media_type = item.get('mediaType', 'book')
+                added_time = item.get('addedTime', 0)
+            
+                # Convert timestamp to readable date
+                if added_time:
+                    date_added = datetime.fromtimestamp(added_time / 1000)
+                    formatted_date = date_added.strftime('%Y-%m-%d %H:%M')
+                else:
+                    formatted_date = 'Unknown Date'
+            
+                # Get cover image
+                cover_link = await c.bookshelf_cover_image(item_id)
+            
+                # Create embed
+                embed_message = Embed(
+                    title=f"{index}. {title}",
+                    description=f"Recently added to your library",
+                    color=ctx.author.accent_color
+                )
+            
+                embed_message.add_field(name="Author", value=author, inline=True)
+                embed_message.add_field(name="Added", value=formatted_date, inline=True)
+                embed_message.add_field(name="Media Type", value=media_type.title(), inline=True)
+            
+                # Add cover image if available
+                if cover_link:
+                    embed_message.add_image(cover_link)
+            
+                # Set proper URL
+                if img_url and "https" in img_url:
+                    bookshelf_url = img_url
+                embed_message.url = f"{bookshelf_url}/item/{item_id}"
+            
+                # Add footer
+                embed_message.footer = f"{settings.bookshelf_traveller_footer} | Recently Added"
+            
+                embeds.append(embed_message)
+        
+            # Send embeds using paginator if multiple
+            if len(embeds) > 1:
+                paginator = Paginator.create_from_embeds(self.bot, *embeds, timeout=120)
+                await paginator.send(ctx, ephemeral=self.ephemeral_output)
+            else:
+                await ctx.send(embed=embeds[0], ephemeral=self.ephemeral_output)
+            
+            logger.info('Successfully sent command: recently-added')
+        
+        except Exception as e:
+            await ctx.send("Could not complete this at the moment, please try again later.", 
+                          ephemeral=self.ephemeral_output)
+            logger.warning(
+                f'User:{ctx.user} (ID: {ctx.user.id}) | Error occurred: {e} | Command Name: recently-added')
+
     @slash_command(name="search-book", description="Search for a book in your libraries. Default Command.")
     @slash_option(name="book", description="Book Title", autocomplete=True, required=True, opt_type=OptionType.STRING)
     async def search_book(self, ctx: SlashContext, book):
