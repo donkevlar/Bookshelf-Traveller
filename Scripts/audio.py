@@ -285,7 +285,6 @@ class AudioPlayBack(Extension):
 
                 # Reset Vars and close out loops
                 self.current_channel = None
-                self.current_channel = None
                 self.play_state = 'stopped'
                 self.audio_message = None
                 self.activeSessions -= 1
