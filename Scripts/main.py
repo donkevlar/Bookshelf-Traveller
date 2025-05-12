@@ -13,7 +13,6 @@ from interactions import *
 import bookshelfAPI as c
 import db_additions
 import settings
-from config import current_config
 from subscription_task import conn_test
 from interactions.api.events import *
 
@@ -63,7 +62,7 @@ logger.warning('Please wait for this process to finish prior to use, you have be
 logger.info("Current config to follow!")
 # Should initial msg be sent
 logger.info(f"Initialization MSGs Enabled: {INITIALIZED_MSG}")
-for key, value in current_config.items():
+for key, value in settings.current_config.items():
     if value != '' and value is not None:
         logger.info(f"{key}: {value}")
 

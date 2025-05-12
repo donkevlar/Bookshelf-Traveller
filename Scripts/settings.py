@@ -68,6 +68,18 @@ OWNER_ONLY = str2bool(os.getenv('OWNER_ONLY', "True"))
 # Initial MSG when not in debug mode
 INITIALIZED_MSG = str2bool(os.getenv('INITIALIZED_MSG', "True"))
 
+current_config = {
+    "VERSION": versionNumber,
+    "SERVER_URL": SERVER_URL,
+    "OPT_IMAGE_URL": OPT_IMAGE_URL,
+    "TIMEZONE": TIMEZONE,
+    "PLAYBACK_ROLE": PLAYBACK_ROLE,
+    "OWNER_ONLY": OWNER_ONLY,
+    "TASK_FREQUENCY": TASK_FREQUENCY,
+    "AUDIO_ENABLED": AUDIO_ENABLED,
+    "MULTI_USER": MULTI_USER
+}
+
 # Used for embed footers
 bookshelf_traveller_footer = f'Powered by Bookshelf Traveller 🕮 | {versionNumber}'
 
