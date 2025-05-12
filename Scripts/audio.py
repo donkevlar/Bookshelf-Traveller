@@ -29,88 +29,34 @@ timeZone = pytz.timezone(TIMEZONE)
 # Button Vars
 # Initial components loaded when play is first initialized
 component_rows_initial: list[ActionRow] = [
+    # Row 1: Volume and playback controls
     ActionRow(
+        Button(
+            style=ButtonStyle.DANGER,
+            label="-",
+            custom_id='volume_down_button'
+        ),
+        Button(
+            style=ButtonStyle.SUCCESS,
+            label="+",
+            custom_id='volume_up_button'
+        ),
         Button(
             style=ButtonStyle.SECONDARY,
             label="Pause",
             custom_id='pause_audio_button'
         ),
         Button(
-            style=ButtonStyle.SUCCESS,
-            label="+",
-            custom_id='volume_up_button'
-        ),
-        Button(
-            style=ButtonStyle.RED,
-            label="-",
-            custom_id='volume_down_button')),
-    ActionRow(
-        Button(
-            style=ButtonStyle.SECONDARY,
-            label="- 30s",
-            custom_id='rewind_button'
-        ),
-        Button(
-            style=ButtonStyle.SECONDARY,
-            label="+ 30s",
-            custom_id='forward_button'
-        )
-    ),
-    ActionRow(
-        Button(
-            style=ButtonStyle.PRIMARY,
-            label="Previous Chapter",
-            custom_id='previous_chapter_button'
-        ),
-        Button(
-            style=ButtonStyle.PRIMARY,
-            label="Next Chapter",
-            custom_id='next_chapter_button'
-        )
-    ),
-    ActionRow(
-        Button(
-            style=ButtonStyle.RED,
+            style=ButtonStyle.DANGER,
             label="Stop",
             custom_id='stop_audio_button'
         )
-    )
-]
-# Components when the audio is paused
-component_rows_paused: list[ActionRow] = [
-    ActionRow(
-        Button(
-            style=ButtonStyle.PRIMARY.SUCCESS,
-            label='Play',
-            custom_id='play_audio_button'
-        ),
-        Button(
-            style=ButtonStyle.SUCCESS,
-            label="+",
-            custom_id='volume_up_button'
-        ),
-        Button(
-            style=ButtonStyle.RED,
-            label="-",
-            custom_id='volume_down_button'
-        )
     ),
-    ActionRow(
-        Button(
-            style=ButtonStyle.SECONDARY,
-            label="- 30s",
-            custom_id='rewind_button'
-        ),
-        Button(
-            style=ButtonStyle.SECONDARY,
-            label="+ 30s",
-            custom_id='forward_button'
-        )
-    ),
+    # Row 2: Chapter navigation
     ActionRow(
         Button(
             style=ButtonStyle.PRIMARY,
-            label="Previous Chapter",
+            label="Prior Chapter",
             custom_id='previous_chapter_button'
         ),
         Button(
@@ -119,14 +65,73 @@ component_rows_paused: list[ActionRow] = [
             custom_id='next_chapter_button'
         )
     ),
+    # Row 3: Time controls
     ActionRow(
         Button(
-            style=ButtonStyle.RED,
+            style=ButtonStyle.SECONDARY,
+            label="-30s",
+            custom_id='rewind_button'
+        ),
+        Button(
+            style=ButtonStyle.SECONDARY,
+            label="+30s",
+            custom_id='forward_button'
+        )
+    )
+]
+
+# Components when the audio is paused
+component_rows_paused: list[ActionRow] = [
+    # Row 1: Volume and playback controls
+    ActionRow(
+        Button(
+            style=ButtonStyle.DANGER,
+            label="-",
+            custom_id='volume_down_button'
+        ),
+        Button(
+            style=ButtonStyle.SUCCESS,
+            label="+",
+            custom_id='volume_up_button'
+        ),
+        Button(
+            style=ButtonStyle.SUCCESS,
+            label='Resume',
+            custom_id='play_audio_button'
+        ),
+        Button(
+            style=ButtonStyle.DANGER,
             label='Stop',
             custom_id='stop_audio_button'
         )
-    )]
-
+    ),
+    # Row 2: Chapter navigation
+    ActionRow(
+        Button(
+            style=ButtonStyle.PRIMARY,
+            label="Prior Chapter",
+            custom_id='previous_chapter_button'
+        ),
+        Button(
+            style=ButtonStyle.PRIMARY,
+            label="Next Chapter",
+            custom_id='next_chapter_button'
+        )
+    ),
+    # Row 3: Time controls
+    ActionRow(
+        Button(
+            style=ButtonStyle.SECONDARY,
+            label="-30s",
+            custom_id='rewind_button'
+        ),
+        Button(
+            style=ButtonStyle.SECONDARY,
+            label="+30s",
+            custom_id='forward_button'
+        )
+    )
+]
 
 # Voice Status Check
 
@@ -363,6 +368,17 @@ class AudioPlayBack(Extension):
             color=color,
         )
 
+        # Calculate progress percentage and time progressed
+        progress_percentage = 0
+        if self.bookDuration and self.bookDuration > 0:
+            # Ensure currentTime doesn't exceed bookDuration
+            safe_current_time = min(self.currentTime, self.bookDuration)
+            progress_percentage = (safe_current_time / self.bookDuration) * 100
+            # Round to 1 decimal place for more precision
+            progress_percentage = round(progress_percentage, 1)
+            # Ensure it's between 0 and 100
+            progress_percentage = max(0, min(100, progress_percentage))
+
         # Convert book duration into appropriate times
         duration = self.bookDuration
         TimeState = 'Seconds'
@@ -381,6 +397,7 @@ class AudioPlayBack(Extension):
         embed_message.add_field(name='ABS Information', value=user_info)
 
         embed_message.add_field(name='Playback Information', value=f"Current State: **{self.play_state.upper()}**"
+                                                                   f"\nProgress: **{round(progress_percentage)}%**"
                                                                    f"\nCurrent Chapter: **{chapter}**"
                                                                    f"\nBook Duration: **{formatted_duration}**"
                                                                    f"\nCurrent volume: **{round(self.volume * 100)}%**")  # NOQA
@@ -388,7 +405,7 @@ class AudioPlayBack(Extension):
         # Add media image (If using HTTPS)
         embed_message.add_image(self.cover_image)
 
-        embed_message.footer = f'Powered by Bookshelf Traveller 🕮 | {s.versionNumber} | Last Update: {formatted_time}'
+        embed_message.footer = f'Powered by Bookshelf Traveller 🕮 | {s.versionNumber}\nDisplay Last Updated: {formatted_time}'
 
         return embed_message
 
