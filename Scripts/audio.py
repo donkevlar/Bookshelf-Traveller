@@ -11,6 +11,13 @@ from datetime import datetime
 from dotenv import load_dotenv
 import random
 
+# Import UI component functions
+from ui_components import (
+    get_playback_rows,
+    get_series_playback_rows,
+    get_podcast_playback_rows,
+    create_playback_embed
+)
 
 load_dotenv()
 
@@ -25,115 +32,6 @@ ownership = s.OWNER_ONLY
 
 # Timezone
 timeZone = pytz.timezone(TIMEZONE)
-
-# Button Vars
-# Initial components loaded when play is first initialized
-component_rows_initial: list[ActionRow] = [
-    # Row 1: Volume and playback controls
-    ActionRow(
-        Button(
-            style=ButtonStyle.DANGER,
-            label="-",
-            custom_id='volume_down_button'
-        ),
-        Button(
-            style=ButtonStyle.SUCCESS,
-            label="+",
-            custom_id='volume_up_button'
-        ),
-        Button(
-            style=ButtonStyle.SECONDARY,
-            label="Pause",
-            custom_id='pause_audio_button'
-        ),
-        Button(
-            style=ButtonStyle.DANGER,
-            label="Stop",
-            custom_id='stop_audio_button'
-        )
-    ),
-    # Row 2: Chapter navigation
-    ActionRow(
-        Button(
-            style=ButtonStyle.PRIMARY,
-            label="Prior Chapter",
-            custom_id='previous_chapter_button'
-        ),
-        Button(
-            style=ButtonStyle.PRIMARY,
-            label="Next Chapter",
-            custom_id='next_chapter_button'
-        )
-    ),
-    # Row 3: Time controls
-    ActionRow(
-        Button(
-            style=ButtonStyle.SECONDARY,
-            label="-30s",
-            custom_id='rewind_button'
-        ),
-        Button(
-            style=ButtonStyle.SECONDARY,
-            label="+30s",
-            custom_id='forward_button'
-        )
-    )
-]
-
-# Components when the audio is paused
-component_rows_paused: list[ActionRow] = [
-    # Row 1: Volume and playback controls
-    ActionRow(
-        Button(
-            style=ButtonStyle.DANGER,
-            label="-",
-            custom_id='volume_down_button'
-        ),
-        Button(
-            style=ButtonStyle.SUCCESS,
-            label="+",
-            custom_id='volume_up_button'
-        ),
-        Button(
-            style=ButtonStyle.SUCCESS,
-            label='Resume',
-            custom_id='play_audio_button'
-        ),
-        Button(
-            style=ButtonStyle.DANGER,
-            label='Stop',
-            custom_id='stop_audio_button'
-        )
-    ),
-    # Row 2: Chapter navigation
-    ActionRow(
-        Button(
-            style=ButtonStyle.PRIMARY,
-            label="Prior Chapter",
-            custom_id='previous_chapter_button'
-        ),
-        Button(
-            style=ButtonStyle.PRIMARY,
-            label="Next Chapter",
-            custom_id='next_chapter_button'
-        )
-    ),
-    # Row 3: Time controls
-    ActionRow(
-        Button(
-            style=ButtonStyle.SECONDARY,
-            label="-30s",
-            custom_id='rewind_button'
-        ),
-        Button(
-            style=ButtonStyle.SECONDARY,
-            label="+30s",
-            custom_id='forward_button'
-        )
-    )
-]
-
-# Voice Status Check
 
 # Custom check for ownership
 async def ownership_check(ctx: BaseContext):  # NOQA
@@ -215,7 +113,6 @@ class AudioPlayBack(Extension):
         self.active_guild_id = None
 
     # Tasks ---------------------------------
-    #
 
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
@@ -403,25 +300,15 @@ class AudioPlayBack(Extension):
     def modified_message(self, color, chapter):
         now = datetime.now(tz=timeZone)
         formatted_time = now.strftime("%m-%d %H:%M:%S")
-        # Create embedded message
-        embed_message = Embed(
-            title=f"{self.bookTitle}",
-            description=f"Currently playing {self.bookTitle}",
-            color=color,
-        )
 
         # Calculate progress percentage and time progressed
         progress_percentage = 0
         if self.bookDuration and self.bookDuration > 0:
-            # Ensure currentTime doesn't exceed bookDuration
             safe_current_time = min(self.currentTime, self.bookDuration)
             progress_percentage = (safe_current_time / self.bookDuration) * 100
-            # Round to 1 decimal place for more precision
             progress_percentage = round(progress_percentage, 1)
-            # Ensure it's between 0 and 100
             progress_percentage = max(0, min(100, progress_percentage))
 
-        # Convert book duration into appropriate times
         duration = self.bookDuration
         TimeState = 'Seconds'
         _time = duration
@@ -433,23 +320,22 @@ class AudioPlayBack(Extension):
             TimeState = 'Hours'
 
         formatted_duration = f"{_time} {TimeState}"
+        formatted_current = f"{round(self.currentTime / 60, 2)} Minutes"
 
-        # Add ABS user info
-        user_info = f"Username: **{self.username}**\nUser Type: **{self.user_type}**"
-        embed_message.add_field(name='ABS Information', value=user_info)
-
-        embed_message.add_field(name='Playback Information', value=f"Current State: **{self.play_state.upper()}**"
-                                                                   f"\nProgress: **{round(progress_percentage)}%**"
-                                                                   f"\nCurrent Chapter: **{chapter}**"
-                                                                   f"\nBook Duration: **{formatted_duration}**"
-                                                                   f"\nCurrent volume: **{round(self.volume * 100)}%**")  # NOQA
-
-        # Add media image (If using HTTPS)
-        embed_message.add_image(self.cover_image)
-
-        embed_message.footer = f'Powered by Bookshelf Traveller 🕮 | {s.versionNumber}\nDisplay Last Updated: {formatted_time}'
-
-        return embed_message
+        return create_playback_embed(
+            book_title=self.bookTitle,
+            chapter_title=chapter,
+            progress=f"{progress_percentage}%",
+            current_time=formatted_current,
+            duration=formatted_duration,
+            username=self.username,
+            user_type=self.user_type,
+            cover_image=self.cover_image,
+            color=color,
+            volume=self.volume,
+            timestamp=formatted_time,
+            version=s.versionNumber
+        )
 
     # Commands --------------------------------
 
@@ -470,7 +356,6 @@ class AudioPlayBack(Extension):
                     content="Ownership enabled and you are not authorized to use this command. Contact bot owner.")
                 return
 
-        # Check bot is ready, if not exit command
         if not self.bot.is_ready or not ctx.author.voice:
             await ctx.send(content="Bot is not ready or author not in voice channel, please try again later.",
                            ephemeral=True)
@@ -520,7 +405,7 @@ class AudioPlayBack(Extension):
                               ephemeral=True)
                 return
 
-            if bookFinished and startover is False:
+            if bookFinished and not startover:
                 await ctx.send(content="This book is marked as finished. Use the `startover: True` option to play it from the beginning.", ephemeral=True)
                 return
 
@@ -536,9 +421,8 @@ class AudioPlayBack(Extension):
                 currentTime = 0
                 # Also find the first chapter
                 if chapter_array and len(chapter_array) > 0:
-                    # Sort chapters by start time if needed
+                    # Sort chapters by start time
                     chapter_array.sort(key=lambda x: float(x.get('start', 0)))
-                    # Get the first chapter
                     first_chapter = chapter_array[0]
                     self.currentChapter = first_chapter
                     self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
@@ -594,10 +478,8 @@ class AudioPlayBack(Extension):
             if not ctx.voice_state:
                 # if we haven't already joined a voice channel
                 try:
-                    # Connect to voice channel
+                    # Connect to voice channel and start task
                     await ctx.author.voice.channel.connect()
-
-                    # Start Tasks
                     self.session_update.start()
 
                     # Customize message based on whether we're using random and/or startover
@@ -613,8 +495,11 @@ class AudioPlayBack(Extension):
                     if self.auto_kill_session.running:
                         self.auto_kill_session.stop()
 
-                    self.audio_message = await ctx.send(content=start_message, embed=embed_message,
-                                                        components=component_rows_initial)
+                    self.audio_message = await ctx.send(
+                        content=start_message,
+                        embed=embed_message,
+                        components=get_playback_rows("playing")
+                    )
 
                     logger.info(f"Beginning audio stream" + (" from the beginning" if startover else ""))
 
@@ -654,11 +539,9 @@ class AudioPlayBack(Extension):
             ctx.voice_state.pause()
             logger.info("Pausing Audio")
             self.play_state = 'paused'
-            # Stop Any Tasks Running
+            # Stop Any Tasks Running and start autokill task
             if self.session_update.running:
                 self.session_update.stop()
-                # self.terminal_clearer.stop()
-            # Start auto kill session check
             self.auto_kill_session.start()
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
@@ -673,17 +556,14 @@ class AudioPlayBack(Extension):
                 # Resume Audio Stream
                 ctx.voice_state.resume()
                 logger.info("Resuming Audio")
-                # Stop auto kill session task
+                # Stop auto kill session task and start session
                 if self.auto_kill_session.running:
                     logger.info("Stopping auto kill session backend task.")
                     self.auto_kill_session.stop()
-                # Start session
                 self.play_state = 'playing'
                 self.session_update.start()
-                # self.terminal_clearer.start()
             else:
-                await ctx.send(content="Bot or author isn't connected to channel, aborting.",
-                               ephemeral=True)
+                await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
     @check(ownership_check)
     @slash_command(name="change-chapter", description="play next chapter, if available.", dm_permission=False)
@@ -792,12 +672,11 @@ class AudioPlayBack(Extension):
 
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
             if self.play_state == "playing":
-                await ctx.send(embed=embed_message, components=component_rows_initial, ephemeral=True)
+                await ctx.send(embed=embed_message, components=get_playback_rows("playing"), ephemeral=True)
             elif self.play_state == "paused":
-                await ctx.send(embed=embed_message, components=component_rows_paused, ephemeral=True)
+                await ctx.send(embed=embed_message, components=get_playback_rows("paused"), ephemeral=True)
         else:
-            return await ctx.send("Bot not in voice channel or an error has occured. Please try again later!",
-                                  ephemeral=True)
+            return await ctx.send("Bot not in voice channel or an error has occured. Please try again later!", ephemeral=True)
 
     # -----------------------------
     # Auto complete options below
@@ -1002,7 +881,7 @@ class AudioPlayBack(Extension):
             logger.warning("Auto session kill task running... Checking for inactive session in 5 minutes!")
             self.auto_kill_session.start()
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            await ctx.edit_origin(content="Play", components=component_rows_paused, embed=embed_message)
+            await ctx.edit_origin(content="Play", components=get_playback_rows("paused"), embed=embed_message)
 
     @component_callback('play_audio_button')
     async def callback_play_button(self, ctx: ComponentContext):
@@ -1018,7 +897,7 @@ class AudioPlayBack(Extension):
                 logger.info("Stopping auto kill session backend task.")
                 self.auto_kill_session.stop()
 
-            await ctx.edit_origin(components=component_rows_initial, embed=embed_message)
+            await ctx.edit_origin(components=get_playback_rows("playing"), embed=embed_message)
 
     @component_callback('next_chapter_button')
     async def callback_next_chapter_button(self, ctx: ComponentContext):
@@ -1027,11 +906,11 @@ class AudioPlayBack(Extension):
             await ctx.defer(edit_origin=True)
 
             if self.play_state == 'playing':
-                await ctx.edit_origin(components=component_rows_initial)
+                await ctx.edit_origin(components=get_playback_rows("playing"))
                 ctx.voice_state.channel.voice_state.player.stop()
             elif self.play_state == 'paused':
-                await ctx.edit_origin(components=component_rows_paused)
-                ctx.voice_state.channel.voice_state.player.stop()
+                await ctx.edit_origin(components=get_playback_rows("paused"))
+            ctx.voice_state.channel.voice_state.player.stop()
 
             # Find next chapter
             await self.move_chapter(option='next')
@@ -1059,14 +938,13 @@ class AudioPlayBack(Extension):
             await ctx.defer(edit_origin=True)
 
             if self.play_state == 'playing':
-                await ctx.edit_origin(components=component_rows_initial)
+                await ctx.edit_origin(components=get_playback_rows("playing"))
                 ctx.voice_state.channel.voice_state.player.stop()
             elif self.play_state == 'paused':
-                await ctx.edit_origin(components=component_rows_paused)
+                await ctx.edit_origin(components=get_playback_rows("paused"))
                 ctx.voice_state.channel.voice_state.player.stop()
             else:
-                await ctx.send(content='Error with previous chapter command, bot not active or voice not connected!',
-                               ephemeral=True)
+                await ctx.send(content='Error with previous chapter command, bot not active or voice not connected!', ephemeral=True)
                 return
 
             # Find previous chapter
