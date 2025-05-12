@@ -220,7 +220,6 @@ class AudioPlayBack(Extension):
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
         logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
-
         try:
             self.current_playback_time = self.current_playback_time + updateFrequency
 
@@ -234,6 +233,7 @@ class AudioPlayBack(Extension):
                     current_time=updateFrequency,
                     next_time=self.nextTime)
 
+                self.currentTime = updatedTime
                 logger.info(f"Successfully synced session to updated time: {updatedTime} | "
                             f"Current Playback Time: {formatted_time} | session ID: {self.sessionID}")
 
@@ -251,12 +251,13 @@ class AudioPlayBack(Extension):
                 current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(
                     self.bookItemID, updatedTime if 'updatedTime' in locals() else None)
 
-                if not isPodcast:
+                if not isPodcast and current_chapter:
                     # Check if current_chapter has a title key
                     chapter_title = current_chapter.get('title', 'Unknown Chapter')
                     logger.info(f"Current Chapter Sync: {chapter_title}")
                     self.currentChapter = current_chapter
-
+                    self.currentChapterTitle = chapter_title
+                
             except Exception as e:
                 logger.warning(f"Error getting current chapter: {e}")
 
@@ -315,12 +316,17 @@ class AudioPlayBack(Extension):
         bookFinished = self.bookFinished
 
         if not bookFinished:
-
             currentChapterID = int(CurrentChapter.get('id'))
             if option == 'next':
                 nextChapterID = currentChapterID + 1
             else:
                 nextChapterID = currentChapterID - 1
+
+            # Check if we're going below Chapter 1 (index 0)
+            if nextChapterID < 0 and option == 'previous':
+                logger.info("Attempting to go before Chapter 1, will restart the book instead")
+                # Just use the first chapter (index 0)
+                nextChapterID = 0
 
             for chapter in ChapterArray:
                 chapterID = int(chapter.get('id'))
@@ -332,13 +338,20 @@ class AudioPlayBack(Extension):
                     chapterStart = float(chapter.get('start'))
                     self.newChapterTitle = chapter.get('title')
 
+                    self.currentTime = chapterStart
+
                     logger.info(f"Selected Chapter: {self.newChapterTitle}, Starting at: {chapterStart}")
 
                     audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(
                         self.bookItemID)
+
                     self.sessionID = sessionID
                     self.currentTime = currentTime
                     self.bookDuration = bookDuration
+
+                    self.currentChapter = chapter
+                    self.currentChapterTitle = chapter.get('title')
+                    logger.info(f"Updated current chapter to: {self.currentChapterTitle}")
 
                     audio = AudioVolume(audio_obj)
                     audio.ffmpeg_before_args = f"-ss {chapterStart}"
@@ -348,14 +361,44 @@ class AudioPlayBack(Extension):
                     # Set next time to new chapter time
                     self.nextTime = chapterStart
 
-                    # Send manual next chapter sync
-                    await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
-                                                     current_time=updateFrequency - 0.5, next_time=self.nextTime)
+                    # Send manual next chapter sync with new session ID
+                    logger.info(f"Updating new session {sessionID} to position {chapterStart}")
+                    try:
+                        updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
+                            item_id=self.bookItemID, 
+                            session_id=self.sessionID,
+                            current_time=updateFrequency - 0.5, 
+                            next_time=self.nextTime)
+                    
+                        self.currentTime = updatedTime
+                        logger.info(f"Session update successful: {updatedTime}")
+                    except Exception as e:
+                        logger.error(f"Error updating session: {e}")
+
                     # Reset Next Time to None before starting task again
                     self.nextTime = None
+                    logger.info(f"Verifying session ID is set to {self.sessionID} before starting update task")
+
+                    try:
+                        verified_chapter, _, _, _ = await c.bookshelf_get_current_chapter(
+                            item_id=self.bookItemID, current_time=chapterStart)
+                    
+                        if verified_chapter:
+                            verified_title = verified_chapter.get('title')
+                            logger.info(f"Server verified chapter title: {verified_title}")
+                        
+                            # If there's a mismatch, update to the server's version
+                            if verified_title != self.currentChapterTitle:
+                                logger.warning(f"Chapter title mismatch! Local: {self.currentChapterTitle}, Server: {verified_title}")
+                                self.currentChapter = verified_chapter
+                                self.currentChapterTitle = verified_title
+                    except Exception as e:
+                        logger.error(f"Error verifying chapter info: {e}")
+
                     self.session_update.start()
-                    # self.terminal_clearer.start()
+
                     self.found_next_chapter = True
+                    return
 
     def modified_message(self, color, chapter):
         now = datetime.now(tz=timeZone)
