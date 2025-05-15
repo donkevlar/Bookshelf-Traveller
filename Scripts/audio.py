@@ -1149,76 +1149,175 @@ class AudioPlayBack(Extension):
     @component_callback('forward_button')
     async def callback_forward_button(self, ctx: ComponentContext):
         await ctx.defer(edit_origin=True)
-        self.session_update.stop()
         ctx.voice_state.channel.voice_state.player.stop()
-        await c.bookshelf_close_session(self.sessionID)
-        self.audioObj.cleanup()  # NOQA
 
-        audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(self.bookItemID)
+        # Use the unified method for forward seeking
+        await self.shared_seek(30.0, is_forward=True)
 
-        self.sessionID = sessionID
-        self.currentTime = currentTime
-
-        print(self.currentTime)
-
-        self.nextTime = self.currentTime + 30.0
-        logger.info(f"Moving to time using forward:  {self.nextTime}")
-
-        audio = AudioVolume(audio_obj)
-
-        audio.ffmpeg_before_args = f"-ss {self.nextTime}"
-        audio.ffmpeg_args = f"-ar 44100 -acodec aac"
-
-        # Send manual next chapter sync
-        await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
-                                         current_time=updateFrequency - 0.5, next_time=self.nextTime)
-
-        self.audioObj = audio
+        # Start the session update task
         self.session_update.start()
-        self.nextTime = None
+
+        # Update the embedded message with new info
+        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
 
         # Stop auto kill session task
         if self.auto_kill_session.running:
             logger.info("Stopping auto kill session backend task.")
             self.auto_kill_session.stop()
 
-        await ctx.edit_origin()
+        await ctx.edit_origin(embed=embed_message)
         await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
 
     @component_callback('rewind_button')
     async def callback_rewind_button(self, ctx: ComponentContext):
         await ctx.defer(edit_origin=True)
-        self.session_update.stop()
         ctx.voice_state.channel.voice_state.player.stop()
-        await c.bookshelf_close_session(self.sessionID)
-        self.audioObj.cleanup()  # NOQA
-        audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(self.bookItemID)
 
-        self.currentTime = currentTime
-        self.sessionID = sessionID
-        self.nextTime = self.currentTime - 30.0
-        logger.info(f"Moving to time using rewind: {self.nextTime}")
+        # Use the unified method for backward seeking
+        await self.shared_seek(30.0, is_forward=False)
 
-        audio = AudioVolume(audio_obj)
-
-        audio.ffmpeg_before_args = f"-ss {self.nextTime}"
-        audio.ffmpeg_args = f"-ar 44100 -acodec aac"
-
-        # Send manual next chapter sync
-        await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
-                                         current_time=updateFrequency - 0.5, next_time=self.nextTime)
-
-        self.audioObj = audio
+        # Start the session update task
         self.session_update.start()
-        self.nextTime = None
+
+        # Update the embedded message with new info
+        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
 
         # Stop auto kill session task
         if self.auto_kill_session.running:
             logger.info("Stopping auto kill session backend task.")
             self.auto_kill_session.stop()
 
-        await ctx.edit_origin()
+        await ctx.edit_origin(embed=embed_message)
         await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
+
+    async def shared_seek(self, seek_amount, is_forward=True):
+        """
+        Move playback forward or backward with chapter boundary awareness.
+
+        Parameters:
+        - seek_amount: Number of seconds to seek (positive value)
+        - is_forward: True for forward seeking, False for rewinding
+
+        Returns audio object ready for playback.
+        """
+        # Stop current playback and session
+        self.session_update.stop()
+        await c.bookshelf_close_session(self.sessionID)
+
+        # Get updated audio info
+        audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(self.bookItemID)
+
+        self.sessionID = sessionID
+        self.currentTime = currentTime
+
+        # Format timestamps for better readability in logs
+        def format_time(seconds):
+            minutes = int(seconds) // 60
+            secs = int(seconds) % 60
+            return f"{minutes}m {secs}s ({seconds:.2f}s)"
+
+        if self.currentChapter is None or self.chapterArray is None:
+            # If we don't have chapter info, do simple seeking
+            if is_forward:
+                self.nextTime = self.currentTime + seek_amount
+            else:
+                self.nextTime = max(0, self.currentTime - seek_amount)
+
+            logger.info(f"No chapter info available. {'Moving forward' if is_forward else 'Moving backward'} "
+                       f"to time: {format_time(self.nextTime)}")
+        else:
+            current_chapter_id = int(self.currentChapter.get('id', 0))
+
+            if is_forward:
+                # Forward seeking logic
+                chapter_end = float(self.currentChapter.get('end', 0))
+                next_chapter = None
+
+                # Find the next chapter
+                for chapter in self.chapterArray:
+                    if int(chapter.get('id', 0)) == current_chapter_id + 1:
+                        next_chapter = chapter
+                        break
+
+                # If seeking would cross chapter boundary and next chapter exists
+                if next_chapter and (chapter_end - self.currentTime) < seek_amount:
+                    next_start = float(next_chapter.get('start', 0))
+                    logger.info(f"Near chapter boundary. Current time: {format_time(self.currentTime)}, "
+                               f"Chapter end: {format_time(chapter_end)}")
+                    logger.info(f"Moving to next chapter at time: {format_time(next_start)}")
+
+                    self.nextTime = next_start
+                    self.currentChapter = next_chapter
+                    self.currentChapterTitle = next_chapter.get('title')
+                    self.newChapterTitle = next_chapter.get('title')
+
+                    logger.info(f"Updated current chapter to: {self.currentChapterTitle}")
+                else:
+                    # Standard forward seeking
+                    self.nextTime = self.currentTime + seek_amount
+                    logger.info(f"Moving forward {format_time(seek_amount)} to time: {format_time(self.nextTime)}")
+            else:
+                # Backward seeking logic
+                chapter_start = float(self.currentChapter.get('start', 0))
+                prev_chapter = None
+
+                # Find the previous chapter
+                if current_chapter_id > 0:  # Not the first chapter
+                    for chapter in self.chapterArray:
+                        if int(chapter.get('id', 0)) == current_chapter_id - 1:
+                            prev_chapter = chapter
+                            break
+
+                # If seeking would cross chapter boundary and previous chapter exists
+                if prev_chapter and (self.currentTime - chapter_start) < seek_amount:
+                    prev_end = float(prev_chapter.get('end', 0))
+                    offset = 15.0  # 15 seconds before the end of the previous chapter
+
+                    logger.info(f"Near chapter boundary. Current time: {format_time(self.currentTime)}, "
+                               f"Chapter start: {format_time(chapter_start)}")
+                    logger.info(f"Moving to previous chapter at time: {format_time(prev_end - offset)}")
+
+                    self.nextTime = max(0, prev_end - offset)
+                    self.currentChapter = prev_chapter
+                    self.currentChapterTitle = prev_chapter.get('title')
+                    self.newChapterTitle = prev_chapter.get('title')
+
+                    logger.info(f"Updated current chapter to: {self.currentChapterTitle}")
+                else:
+                    # Standard backward seeking
+                    self.nextTime = max(0, self.currentTime - seek_amount)
+                    logger.info(f"Moving backward {format_time(seek_amount)} to time: {format_time(self.nextTime)}")
+
+        # Update the current time to match where we're seeking
+        self.currentTime = self.nextTime
+
+        # Prepare audio object
+        audio = AudioVolume(audio_obj)
+        audio.ffmpeg_before_args = f"-ss {self.nextTime}"
+        audio.ffmpeg_args = f"-ar 44100 -acodec aac"
+
+        # Send manual session sync
+        await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
+                                    current_time=updateFrequency - 0.5, next_time=self.nextTime)
+
+        # Do an explicit check to make sure we have the latest chapter info
+        # This is especially important after moving across chapter boundaries
+        if not self.isPodcast:
+            try:
+                current_chapter, _, _, _ = await c.bookshelf_get_current_chapter(
+                    item_id=self.bookItemID, current_time=self.currentTime)
+
+                if current_chapter:
+                    self.currentChapter = current_chapter
+                    self.currentChapterTitle = current_chapter.get('title', 'Unknown Chapter')
+                    logger.info(f"Final chapter verification: {self.currentChapterTitle}")
+            except Exception as e:
+                logger.error(f"Error in final chapter verification: {e}")
+
+        self.audioObj = audio
+        self.nextTime = None
+
+        return audio
 
     # ----------------------------
     # Other non discord related functions
