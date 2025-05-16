@@ -1227,6 +1227,7 @@ class AudioPlayBack(Extension):
                        f"to time: {format_time(self.nextTime)}")
         else:
             current_chapter_id = int(self.currentChapter.get('id', 0))
+            chapter_start = float(self.currentChapter.get('start', 0))
 
             if is_forward:
                 # Forward seeking logic
@@ -1258,7 +1259,7 @@ class AudioPlayBack(Extension):
                     logger.info(f"Moving forward {format_time(seek_amount)} to time: {format_time(self.nextTime)}")
             else:
                 # Backward seeking logic
-                chapter_start = float(self.currentChapter.get('start', 0))
+                time_from_chapter_start = self.currentTime - chapter_start
                 prev_chapter = None
 
                 # Find the previous chapter
@@ -1268,25 +1269,33 @@ class AudioPlayBack(Extension):
                             prev_chapter = chapter
                             break
 
-                # If seeking would cross chapter boundary and previous chapter exists
-                if prev_chapter and (self.currentTime - chapter_start) < seek_amount:
-                    prev_end = float(prev_chapter.get('end', 0))
-                    offset = 15.0  # 15 seconds before the end of the previous chapter
-
-                    logger.info(f"Near chapter boundary. Current time: {format_time(self.currentTime)}, "
-                               f"Chapter start: {format_time(chapter_start)}")
-                    logger.info(f"Moving to previous chapter at time: {format_time(prev_end - offset)}")
-
-                    self.nextTime = max(0, prev_end - offset)
-                    self.currentChapter = prev_chapter
-                    self.currentChapterTitle = prev_chapter.get('title')
-                    self.newChapterTitle = prev_chapter.get('title')
-
-                    logger.info(f"Updated current chapter to: {self.currentChapterTitle}")
-                else:
-                    # Standard backward seeking
-                    self.nextTime = max(0, self.currentTime - seek_amount)
-                    logger.info(f"Moving backward {format_time(seek_amount)} to time: {format_time(self.nextTime)}")
+                # If within first 5 seconds of chapter, go back full seek_amount
+                if time_from_chapter_start <= 5:
+                    if prev_chapter and time_from_chapter_start < seek_amount:
+                        # We need to go to previous chapter
+                        prev_end = float(prev_chapter.get('end', 0))
+                        back_time = seek_amount - time_from_chapter_start
+                        target_time = prev_end - back_time
+                    
+                        logger.info(f"Within first 5 seconds of chapter. Going back {format_time(seek_amount)} across chapter boundary")
+                        logger.info(f"Moving to previous chapter at time: {format_time(target_time)}")
+                    
+                        self.nextTime = max(0, target_time)
+                        self.currentChapter = prev_chapter
+                        self.currentChapterTitle = prev_chapter.get('title')
+                        self.newChapterTitle = prev_chapter.get('title')
+                    
+                        logger.info(f"Updated current chapter to: {self.currentChapterTitle}")
+                    else:
+                        # Standard seeking, just go back seek_amount
+                        self.nextTime = max(0, self.currentTime - seek_amount)
+                        logger.info(f"Within first 5 seconds but staying in chapter. Moving back {format_time(seek_amount)} to time: {format_time(self.nextTime)}")
+            
+                # If within 5-30 seconds from start of chapter, go to beginning of chapter
+                elif time_from_chapter_start <= 30:
+                    logger.info(f"Within 5-30 seconds from chapter start. Moving to chapter beginning")
+                    self.nextTime = chapter_start
+                    logger.info(f"Moving to beginning of chapter at time: {format_time(self.nextTime)}")
 
         # Update the current time to match where we're seeking
         self.currentTime = self.nextTime
