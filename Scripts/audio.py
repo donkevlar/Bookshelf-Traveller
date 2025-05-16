@@ -209,11 +209,23 @@ class AudioPlayBack(Extension):
     async def move_chapter(self, option: str):
         logger.info(f"executing command /next-chapter")
         CurrentChapter = self.currentChapter
-        ChapterArray = self.chapterArray
-        bookFinished = self.bookFinished
 
-        if not bookFinished:
-            currentChapterID = int(CurrentChapter.get('id'))
+        # Check if chapter data exists
+        if not self.currentChapter or not self.chapterArray:
+            logger.warning("No chapter data available for this book. Cannot navigate chapters.")
+            self.found_next_chapter = False
+            return
+    
+        # Check if bookFinished flag is set
+        if self.bookFinished:
+            logger.info("Book is already finished, cannot navigate chapters.")
+            self.found_next_chapter = False
+            return
+
+        try:
+            # Safely get the current chapter ID
+            currentChapterID = int(CurrentChapter.get('id', 0))
+
             if option == 'next':
                 nextChapterID = currentChapterID + 1
             else:
@@ -225,77 +237,92 @@ class AudioPlayBack(Extension):
                 # Just use the first chapter (index 0)
                 nextChapterID = 0
 
-            for chapter in ChapterArray:
-                chapterID = int(chapter.get('id'))
+            found_next = False
+            for chapter in self.chapterArray:
+                try:
+                    chapterID = int(chapter.get('id', -1))
 
-                if nextChapterID == chapterID:
-                    self.session_update.stop()
-                    # self.terminal_clearer.stop()
-                    await c.bookshelf_close_session(self.sessionID)
-                    chapterStart = float(chapter.get('start'))
-                    self.newChapterTitle = chapter.get('title')
+                    if nextChapterID == chapterID:
+                        found_next = True
+                        self.session_update.stop()
+                        await c.bookshelf_close_session(self.sessionID)
+                        chapterStart = float(chapter.get('start'))
+                        self.newChapterTitle = chapter.get('title', 'Unknown Chapter')
 
-                    self.currentTime = chapterStart
+                        self.currentTime = chapterStart
 
-                    logger.info(f"Selected Chapter: {self.newChapterTitle}, Starting at: {chapterStart}")
+                        logger.info(f"Selected Chapter: {self.newChapterTitle}, Starting at: {chapterStart}")
 
-                    audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(
-                        self.bookItemID)
+                        audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(
+                            self.bookItemID)
 
-                    self.sessionID = sessionID
-                    self.currentTime = currentTime
-                    self.bookDuration = bookDuration
+                        self.sessionID = sessionID
+                        self.currentTime = currentTime
+                        self.bookDuration = bookDuration
 
-                    self.currentChapter = chapter
-                    self.currentChapterTitle = chapter.get('title')
-                    logger.info(f"Updated current chapter to: {self.currentChapterTitle}")
+                        self.currentChapter = chapter
+                        self.currentChapterTitle = chapter.get('title', 'Unknown Chapter')
+                        logger.info(f"Updated current chapter to: {self.currentChapterTitle}")
 
-                    audio = AudioVolume(audio_obj)
-                    audio.ffmpeg_before_args = f"-ss {chapterStart}"
-                    audio.ffmpeg_args = f"-ar 44100 -acodec aac -re"
-                    self.audioObj = audio
+                        audio = AudioVolume(audio_obj)
+                        audio.ffmpeg_before_args = f"-ss {chapterStart}"
+                        audio.ffmpeg_args = f"-ar 44100 -acodec aac -re"
+                        self.audioObj = audio
 
-                    # Set next time to new chapter time
-                    self.nextTime = chapterStart
+                        # Set next time to new chapter time
+                        self.nextTime = chapterStart
 
-                    # Send manual next chapter sync with new session ID
-                    logger.info(f"Updating new session {sessionID} to position {chapterStart}")
-                    try:
-                        updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
-                            item_id=self.bookItemID, 
-                            session_id=self.sessionID,
-                            current_time=updateFrequency - 0.5, 
-                            next_time=self.nextTime)
+                        # Send manual next chapter sync with new session ID
+                        logger.info(f"Updating new session {sessionID} to position {chapterStart}")
+                        try:
+                            updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
+                                item_id=self.bookItemID, 
+                                session_id=self.sessionID,
+                                current_time=updateFrequency - 0.5, 
+                                next_time=self.nextTime)
                     
-                        self.currentTime = updatedTime
-                        logger.info(f"Session update successful: {updatedTime}")
-                    except Exception as e:
-                        logger.error(f"Error updating session: {e}")
+                            self.currentTime = updatedTime
+                            logger.info(f"Session update successful: {updatedTime}")
+                        except Exception as e:
+                            logger.error(f"Error updating session: {e}")
 
-                    # Reset Next Time to None before starting task again
-                    self.nextTime = None
-                    logger.info(f"Verifying session ID is set to {self.sessionID} before starting update task")
+                        # Reset Next Time to None before starting task again
+                        self.nextTime = None
+                        logger.info(f"Verifying session ID is set to {self.sessionID} before starting update task")
 
-                    try:
-                        verified_chapter, _, _, _ = await c.bookshelf_get_current_chapter(
-                            item_id=self.bookItemID, current_time=chapterStart)
+                        try:
+                            verified_chapter, _, _, _ = await c.bookshelf_get_current_chapter(
+                                item_id=self.bookItemID, current_time=chapterStart)
                     
-                        if verified_chapter:
-                            verified_title = verified_chapter.get('title')
-                            logger.info(f"Server verified chapter title: {verified_title}")
+                            if verified_chapter:
+                                verified_title = verified_chapter.get('title')
+                                logger.info(f"Server verified chapter title: {verified_title}")
                         
-                            # If there's a mismatch, update to the server's version
-                            if verified_title != self.currentChapterTitle:
-                                logger.warning(f"Chapter title mismatch! Local: {self.currentChapterTitle}, Server: {verified_title}")
-                                self.currentChapter = verified_chapter
-                                self.currentChapterTitle = verified_title
-                    except Exception as e:
-                        logger.error(f"Error verifying chapter info: {e}")
+                                # If there's a mismatch, update to the server's version
+                                if verified_title != self.currentChapterTitle:
+                                    logger.warning(f"Chapter title mismatch! Local: {self.currentChapterTitle}, Server: {verified_title}")
+                                    self.currentChapter = verified_chapter
+                                    self.currentChapterTitle = verified_title
+                        except Exception as e:
+                            logger.error(f"Error verifying chapter info: {e}")
 
-                    self.session_update.start()
+                        self.session_update.start()
 
-                    self.found_next_chapter = True
-                    return
+                        self.found_next_chapter = True
+                        return
+
+                except (TypeError, ValueError) as e:
+                    logger.error(f"Error processing chapter ID for chapter: {e}")
+                    continue
+                
+            # If we get here, we didn't find the next chapter
+            if not found_next:
+                logger.warning(f"Could not find chapter with ID {nextChapterID}")
+                self.found_next_chapter = False
+            
+        except (TypeError, ValueError) as e:
+            logger.error(f"Error in move_chapter: {e}")
+            self.found_next_chapter = False
 
     def modified_message(self, color, chapter):
         now = datetime.now(tz=timeZone)
@@ -582,13 +609,13 @@ class AudioPlayBack(Extension):
                 logger.info("Stopping auto kill session backend task.")
                 self.auto_kill_session.stop()
 
-            await ctx.send(content=f"Moving to chapter: {self.newChapterTitle}", ephemeral=True)
+            if self.found_next_chapter:
+                await ctx.send(content=f"Moving to chapter: {self.newChapterTitle}", ephemeral=True)
+                await ctx.voice_state.play(self.audioObj)
+            else:
+                await ctx.send(content=f"Cannot navigate chapters - either the book has no chapter information, is finished, or no chapter was found in the requested direction.",
+                              ephemeral=True)
 
-            await ctx.voice_state.play(self.audioObj)
-
-            if not self.found_next_chapter:
-                await ctx.send(content=f"Book Finished or No New Chapter Found, aborting",
-                               ephemeral=True)
             # Resetting Variable
             self.found_next_chapter = False
         else:
@@ -903,7 +930,16 @@ class AudioPlayBack(Extension):
     async def callback_next_chapter_button(self, ctx: ComponentContext):
         if ctx.voice_state:
             logger.info('Moving to next chapter!')
+
+            # Check if chapter data exists before attempting navigation
+            if not self.currentChapter or not self.chapterArray:
+                logger.warning("No chapter data available for this book. Cannot navigate chapters.")
+                await ctx.send(content="This book doesn't have chapter information. Chapter navigation is not available.", 
+                              ephemeral=True)
+                return  # Return early without stopping playback
+
             await ctx.defer(edit_origin=True)
+
 
             if self.play_state == 'playing':
                 await ctx.edit_origin(components=get_playback_rows("playing"))
@@ -915,26 +951,41 @@ class AudioPlayBack(Extension):
             # Find next chapter
             await self.move_chapter(option='next')
 
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
-
-            # Stop auto kill session task
-            if self.auto_kill_session.running:
-                logger.info("Stopping auto kill session backend task.")
-                self.auto_kill_session.stop()
-
+            # Check if move_chapter succeeded before proceeding
             if self.found_next_chapter:
+                embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
+
+                # Stop auto kill session task
+                if self.auto_kill_session.running:
+                    logger.info("Stopping auto kill session backend task.")
+                    self.auto_kill_session.stop()
+
                 await ctx.edit(embed=embed_message)
                 await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
             else:
-                await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
+                # This shouldn't be reached since we check earlier, but just in case
+                await ctx.send(content=f"No next chapter found.", ephemeral=True)
+                # Restart playback since we stopped it
+                if ctx.voice_state and ctx.voice_state.channel:
+                    await ctx.voice_state.channel.voice_state.play(self.audioObj)
 
             # Resetting Variable
             self.found_next_chapter = False
+        else:
+            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
     @component_callback('previous_chapter_button')
     async def callback_previous_chapter_button(self, ctx: ComponentContext):
         if ctx.voice_state:
             logger.info('Moving to previous chapter!')
+
+            # Check if chapter data exists before attempting navigation
+            if not self.currentChapter or not self.chapterArray:
+                logger.warning("No chapter data available for this book. Cannot navigate chapters.")
+                await ctx.send(content="This book doesn't have chapter information. Chapter navigation is not available.", 
+                              ephemeral=True)
+                return  # Return early without stopping playback
+
             await ctx.defer(edit_origin=True)
 
             if self.play_state == 'playing':
@@ -950,23 +1001,29 @@ class AudioPlayBack(Extension):
             # Find previous chapter
             await self.move_chapter(option='previous')
 
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
-
+            # Check if move_chapter succeeded before proceeding
             if self.found_next_chapter:
-                await ctx.edit(embed=embed_message)
+                embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
 
                 # Stop auto kill session task
                 if self.auto_kill_session.running:
                     logger.info("Stopping auto kill session backend task.")
                     self.auto_kill_session.stop()
 
-                # Resetting Variable
-                self.found_next_chapter = False
+                await ctx.edit(embed=embed_message)
                 ctx.voice_state.channel.voice_state.player.stop()
                 await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
-
             else:
-                await ctx.send(content=f"Book Finished or No New Chapter Found, aborting", ephemeral=True)
+                # This shouldn't be reached since we check earlier, but just in case
+                await ctx.send(content=f"No previous chapter found.", ephemeral=True)
+                # Restart playback since we stopped it
+                if ctx.voice_state and ctx.voice_state.channel:
+                    await ctx.voice_state.channel.voice_state.play(self.audioObj)
+
+            # Resetting Variable
+            self.found_next_chapter = False
+        else:
+            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
     @component_callback('stop_audio_button')
     async def callback_stop_button(self, ctx: ComponentContext):
