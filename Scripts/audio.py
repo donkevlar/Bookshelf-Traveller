@@ -1151,86 +1151,46 @@ class AudioPlayBack(Extension):
             secs = int(seconds) % 60
             return f"{minutes}m {secs}s ({seconds:.2f}s)"
 
+        if self.currentTime is None:
+            raise RuntimeError("shared_seek called with currentTime=None")
+
         if self.currentChapter is None or self.chapterArray is None:
-            # If we don't have chapter info, do simple seeking
-            if is_forward:
-                self.nextTime = self.currentTime + seek_amount
-            else:
-                self.nextTime = max(0, self.currentTime - seek_amount)
-
-            logger.info(f"No chapter info available. {'Moving forward' if is_forward else 'Moving backward'} "
-                       f"to time: {format_time(self.nextTime)}")
+            # No chapter data, perform simple seek
+            logger.warning("No chapter metadata, falling back to simple seek.")
+            self.nextTime = max(0.0, self.currentTime + seek_amount) if is_forward else max(0.0, self.currentTime - seek_amount)
         else:
-            current_chapter_id = int(self.currentChapter.get('id', 0))
-            chapter_start = float(self.currentChapter.get('start', 0))
+            current_chapter = self.currentChapter
+            current_index = next((i for i, ch in enumerate(self.chapterArray) if ch.get('id') == current_chapter.get('id')), None)
+            prev_chapter = self.chapterArray[current_index - 1] if current_index is not None and current_index > 0 else None
+            next_chapter = self.chapterArray[current_index + 1] if current_index is not None and current_index < len(self.chapterArray) - 1 else None
+
+            chapter_start = float(current_chapter.get("start", 0.0))
+            time_from_chapter_start = self.currentTime - chapter_start
 
             if is_forward:
-                # Forward seeking logic
-                chapter_end = float(self.currentChapter.get('end', 0))
-                next_chapter = None
-
-                # Find the next chapter
-                for chapter in self.chapterArray:
-                    if int(chapter.get('id', 0)) == current_chapter_id + 1:
-                        next_chapter = chapter
-                        break
-
-                # If seeking would cross chapter boundary and next chapter exists
-                if next_chapter and (chapter_end - self.currentTime) < seek_amount:
-                    next_start = float(next_chapter.get('start', 0))
-                    logger.info(f"Near chapter boundary. Current time: {format_time(self.currentTime)}, "
-                               f"Chapter end: {format_time(chapter_end)}")
-                    logger.info(f"Moving to next chapter at time: {format_time(next_start)}")
-
-                    self.nextTime = next_start
+                if next_chapter and (chapter_start + seek_amount) > float(next_chapter.get("start", 0.0)):
+                    self.nextTime = float(next_chapter.get("start", 0.0))
                     self.currentChapter = next_chapter
-                    self.currentChapterTitle = next_chapter.get('title')
-                    self.newChapterTitle = next_chapter.get('title')
-
-                    logger.info(f"Updated current chapter to: {self.currentChapterTitle}")
+                    self.currentChapterTitle = next_chapter.get("title", "Unknown Chapter")
+                    logger.debug("Forward: crossing into next chapter")
                 else:
-                    # Standard forward seeking
-                    self.nextTime = self.currentTime + seek_amount
-                    logger.info(f"Moving forward {format_time(seek_amount)} to time: {format_time(self.nextTime)}")
-            else:
-                # Backward seeking logic
-                time_from_chapter_start = self.currentTime - chapter_start
-                prev_chapter = None
-
-                # Find the previous chapter
-                if current_chapter_id > 0:  # Not the first chapter
-                    for chapter in self.chapterArray:
-                        if int(chapter.get('id', 0)) == current_chapter_id - 1:
-                            prev_chapter = chapter
-                            break
-
-                # If within first 5 seconds of chapter, go back full seek_amount
-                if time_from_chapter_start <= 5:
-                    if prev_chapter and time_from_chapter_start < seek_amount:
-                        # We need to go to previous chapter
-                        prev_end = float(prev_chapter.get('end', 0))
-                        back_time = seek_amount - time_from_chapter_start
-                        target_time = prev_end - back_time
-                    
-                        logger.info(f"Within first 5 seconds of chapter. Going back {format_time(seek_amount)} across chapter boundary")
-                        logger.info(f"Moving to previous chapter at time: {format_time(target_time)}")
-                    
-                        self.nextTime = max(0, target_time)
-                        self.currentChapter = prev_chapter
-                        self.currentChapterTitle = prev_chapter.get('title')
-                        self.newChapterTitle = prev_chapter.get('title')
-                    
-                        logger.info(f"Updated current chapter to: {self.currentChapterTitle}")
-                    else:
-                        # Standard seeking, just go back seek_amount
-                        self.nextTime = max(0, self.currentTime - seek_amount)
-                        logger.info(f"Within first 5 seconds but staying in chapter. Moving back {format_time(seek_amount)} to time: {format_time(self.nextTime)}")
-            
-                # If within 5-30 seconds from start of chapter, go to beginning of chapter
-                elif time_from_chapter_start <= 30:
-                    logger.info(f"Within 5-30 seconds from chapter start. Moving to chapter beginning")
-                    self.nextTime = chapter_start
-                    logger.info(f"Moving to beginning of chapter at time: {format_time(self.nextTime)}")
+                    self.nextTime = min(self.bookDuration, self.currentTime + seek_amount)
+                    logger.debug("Forward: simple time advance")
+            else: #is_reverse
+                if time_from_chapter_start <= 5.0 and prev_chapter:
+                    prev_start = float(prev_chapter.get("start", 0.0))
+                    prev_end = chapter_start
+                    back_time = seek_amount - time_from_chapter_start
+                    self.nextTime = max(0.0, prev_end - back_time)
+                    self.currentChapter = prev_chapter
+                    self.currentChapterTitle = prev_chapter.get("title", "Unknown Chapter")
+                    logger.debug("Rewind: jumping into previous chapter")
+                elif time_from_chapter_start <= 30.0:
+                    self.nextTime = max(0.0, chapter_start)
+                    logger.debug("Rewind: returning to start of current chapter")
+                else:
+                    self.nextTime = max(0.0, self.currentTime - seek_amount)
+                    logger.debug("Rewind: simple time rewind")
 
         # Update the current time to match where we're seeking
         self.currentTime = self.nextTime
