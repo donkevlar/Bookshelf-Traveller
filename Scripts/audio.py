@@ -85,6 +85,7 @@ class AudioPlayBack(Extension):
         self.currentTime = 0.0
         self.activeSessions = 0
         self.sessionOwner = None
+        self.announcement_message = None
         # Chapter VARS
         self.currentChapter = None
         self.chapterArray = None
@@ -158,6 +159,24 @@ class AudioPlayBack(Extension):
             except Exception as e:
                 logger.warning(f"Error getting current chapter: {e}")
 
+            # Update announcement message if it exists  
+            if self.announcement_message and self.context_voice_channel:
+                try:
+                    voice_channel = self.context_voice_channel
+                    guild_name = self.announcement_message.guild.name if self.announcement_message.guild else "Unknown Server"
+        
+                    updated_embed = self.create_announcement_embed(voice_channel, guild_name)
+                    updated_announcement = await self.announcement_message.edit(embed=updated_embed)
+        
+                    self.announcement_message = updated_announcement
+                    logger.debug("Updated announcement card")
+        
+                except Exception as e:
+                    logger.warning(f"Failed to update announcement card: {e}")
+                    if "Unknown Message" in str(e) or "Not Found" in str(e) or "404" in str(e):
+                        logger.info("Announcement message no longer exists, clearing reference")
+                        self.announcement_message = None
+
         except Exception as e:
             logger.error(f"Unhandled error in session_update task: {e}")
             # Don't stop the task on errors, let it continue for the next interval
@@ -188,6 +207,8 @@ class AudioPlayBack(Extension):
                 self.activeSessions -= 1
                 self.sessionOwner = None
                 self.audioObj.cleanup()  # NOQA
+                self.announcement_message = None
+                self.context_voice_channel = None
 
                 if self.session_update.running:
                     self.session_update.stop()
@@ -198,11 +219,6 @@ class AudioPlayBack(Extension):
 
             # End loop
             self.auto_kill_session.stop()
-
-        # elif self.play_state == 'playing':
-        #     logger.info('Verifying if session should be active')
-        #     if self.current_channel is not None:
-        #         channel = self.bot.fetch_channel(self.current_channel)
 
     # Random Functions ------------------------
     # Change Chapter Function
@@ -528,6 +544,10 @@ class AudioPlayBack(Extension):
                         components=get_playback_rows("playing")
                     )
 
+                    logger.info(f"Created audio message with ID: {self.audio_message.id} in channel: {self.audio_message.channel.id}")
+                    # Store reference to voice channel for updates
+                    self.context_voice_channel = ctx.author.voice.channel
+
                     logger.info(f"Beginning audio stream" + (" from the beginning" if startover else ""))
 
                     self.activeSessions += 1
@@ -549,6 +569,9 @@ class AudioPlayBack(Extension):
                         await ctx.author.voice.channel.disconnect()
                     if audio:
                         audio.cleanup()  # NOQA
+                    self.audio_message = None
+                    self.announcement_message = None
+                    self.context_voice_channel = None
 
                     logger.error(f"Error starting playback: {e}")
                     await ctx.send(content=f"Error starting playback: {str(e)}")
@@ -654,6 +677,9 @@ class AudioPlayBack(Extension):
             self.current_playback_time = 0
             self.activeSessions -= 1
             self.sessionOwner = None
+            self.audio_message = None
+            self.announcement_message = None
+            self.context_voice_channel = None
 
             # Stop auto kill session task
             if self.auto_kill_session.running:
@@ -704,6 +730,110 @@ class AudioPlayBack(Extension):
                 await ctx.send(embed=embed_message, components=get_playback_rows("paused"), ephemeral=True)
         else:
             return await ctx.send("Bot not in voice channel or an error has occured. Please try again later!", ephemeral=True)
+
+    @check(ownership_check)
+    @slash_command(name="announce", description="Create a public announcement card for the current playback session")
+    async def announce_playback(self, ctx: SlashContext):
+        """
+        Creates a public (non-ephemeral) playbook card to invite others to join the listening session.
+        Only available to bot owner and when audio is actively playing.
+        """
+    
+        # Check if bot owner
+        if ctx.author.id not in [ctx.bot.owner.id] + [owner.id for owner in ctx.bot.owners]:
+            await ctx.send("Only the bot owner can use this command.", ephemeral=True)
+            return
+    
+        # Check if bot is in voice and playing
+        if not ctx.voice_state or self.play_state == 'stopped':
+            await ctx.send("No active playback session found. Start playing audio first.", ephemeral=True)
+            return
+    
+        # Get current voice channel
+        voice_channel = ctx.voice_state.channel
+        if not voice_channel:
+            await ctx.send("Unable to determine current voice channel.", ephemeral=True)
+            return
+    
+        # Create the announcement embed
+        embed_message = self.create_announcement_embed(voice_channel, ctx.guild.name)
+    
+        announcement_content = f"📢 **Now Playing**\nJoin us in {voice_channel.mention}!"
+
+        self.announcement_message = await ctx.send(
+            content=announcement_content,
+            embed=embed_message,
+            ephemeral=False
+        )
+    
+        logger.info(f"Announce command used by {ctx.author} for book: {self.bookTitle}")
+
+    def create_announcement_embed(self, voice_channel, guild_name):
+        """Create the announcement embed with current playback info"""
+        now = datetime.now(tz=timeZone)
+        formatted_time = now.strftime("%m-%d %H:%M:%S")
+    
+        # Calculate progress percentage
+        progress_percentage = 0
+        if self.bookDuration and self.bookDuration > 0:
+            safe_current_time = min(self.currentTime, self.bookDuration)
+            progress_percentage = (safe_current_time / self.bookDuration) * 100
+            progress_percentage = round(progress_percentage, 1)
+            progress_percentage = max(0, min(100, progress_percentage))
+    
+        # Format duration and current time
+        duration = self.bookDuration
+        TimeState = 'Seconds'
+        _time = duration
+        if self.bookDuration >= 60 and self.bookDuration < 3600:
+            _time = round(duration / 60, 2)
+            TimeState = 'Minutes'
+        elif self.bookDuration >= 3600:
+            _time = round(duration / 3600, 2)
+            TimeState = 'Hours'
+    
+        formatted_duration = f"{_time} {TimeState}"
+        formatted_current = f"{round(self.currentTime / 60, 2)} Minutes"
+    
+        # Create announcement embed
+        embed_message = Embed(
+            title=f"🎧 {self.bookTitle}",
+            description=f"Currently playing in **{voice_channel.name}** • {self.play_state.title()}",
+            color=0x3498db if self.play_state == 'playing' else 0xe67e22
+        )
+    
+        # Add playbook information
+        playback_info = (
+            f"**Chapter:** {self.currentChapterTitle}\n"
+            f"**Progress:** {progress_percentage}%\n"
+            f"**Current Time:** {formatted_current}\n"
+            f"**Total Duration:** {formatted_duration}"
+        )
+        embed_message.add_field(name="📖 Playback Status", value=playback_info, inline=True)
+    
+        try:
+            listener_count = len(voice_channel.voice_members) if voice_channel else 0
+            channel_info = (
+                f"**Channel:** {voice_channel.mention if voice_channel else 'Unknown'}\n"
+                f"**Server:** {guild_name}\n"
+                f"**Listeners:** {listener_count}\n"
+                f"Click channel name above to join!"
+            )
+        except Exception:
+            channel_info = (
+                f"**Channel:** Voice channel unavailable\n"
+                f"**Server:** {guild_name}\n" 
+                f"**Status:** Playback active"
+            )
+    
+        # Add cover image if available
+        if self.cover_image:
+            embed_message.add_image(self.cover_image)
+    
+        # Add footer
+        embed_message.footer = f"{s.bookshelf_traveller_footer} | Updated {formatted_time}"
+    
+        return embed_message
 
     # -----------------------------
     # Auto complete options below
@@ -900,6 +1030,11 @@ class AudioPlayBack(Extension):
     # Component Callbacks ---------------------------
     @component_callback('pause_audio_button')
     async def callback_pause_button(self, ctx: ComponentContext):
+        # Check if this is the active audio message to prevent conflicts
+        if self.audio_message and ctx.message.id != self.audio_message.id:
+            await ctx.send("This playback card is no longer active.", ephemeral=True)
+            return
+
         if ctx.voice_state:
             logger.info('Pausing Playback!')
             self.play_state = 'paused'
@@ -912,6 +1047,11 @@ class AudioPlayBack(Extension):
 
     @component_callback('play_audio_button')
     async def callback_play_button(self, ctx: ComponentContext):
+        # Check if this is the active audio message to prevent conflicts
+        if self.audio_message and ctx.message.id != self.audio_message.id:
+            await ctx.send("This playback card is no longer active.", ephemeral=True)
+            return
+
         if ctx.voice_state:
             logger.info('Resuming Playback!')
             self.play_state = 'playing'
@@ -928,6 +1068,11 @@ class AudioPlayBack(Extension):
 
     @component_callback('next_chapter_button')
     async def callback_next_chapter_button(self, ctx: ComponentContext):
+        # Check if this is the active audio message to prevent conflicts
+        if self.audio_message and ctx.message.id != self.audio_message.id:
+            await ctx.send("This playback card is no longer active.", ephemeral=True)
+            return
+
         if ctx.voice_state:
             logger.info('Moving to next chapter!')
 
@@ -976,6 +1121,11 @@ class AudioPlayBack(Extension):
 
     @component_callback('previous_chapter_button')
     async def callback_previous_chapter_button(self, ctx: ComponentContext):
+        # Check if this is the active audio message to prevent conflicts
+        if self.audio_message and ctx.message.id != self.audio_message.id:
+            await ctx.send("This playback card is no longer active.", ephemeral=True)
+            return
+
         if ctx.voice_state:
             logger.info('Moving to previous chapter!')
 
@@ -1027,13 +1177,19 @@ class AudioPlayBack(Extension):
 
     @component_callback('stop_audio_button')
     async def callback_stop_button(self, ctx: ComponentContext):
+        # Check if this is the active audio message to prevent conflicts
+        if self.audio_message and ctx.message.id != self.audio_message.id:
+            await ctx.send("This playback card is no longer active.", ephemeral=True)
+            return
+
         if ctx.voice_state:
             logger.info('Stopping Playback!')
             await ctx.voice_state.channel.voice_state.stop()
             await ctx.edit_origin()
             await ctx.delete()
-            # Class VARS
-            self.audioObj.cleanup()  # NOQA
+
+            # Initiate cleanup
+            self.audioObj.cleanup()
             self.session_update.stop()
             self.current_playback_time = 0
             self.activeSessions -= 1
@@ -1041,8 +1197,15 @@ class AudioPlayBack(Extension):
             self.play_state = 'stopped'
             await ctx.voice_state.channel.disconnect()
             await self.client.change_presence(activity=None)
+
+            # Clear message references
+            self.audio_message = None
+            self.announcement_message = None
+            self.context_voice_channel = None
+
             # Cleanup Session
             await c.bookshelf_close_session(self.sessionID)
+
             # Stop auto kill session task
             if self.auto_kill_session.running:
                 logger.info("Stopping auto kill session backend task.")
@@ -1050,6 +1213,11 @@ class AudioPlayBack(Extension):
 
     @component_callback('volume_up_button')
     async def callback_volume_up_button(self, ctx: ComponentContext):
+        # Check if this is the active audio message to prevent conflicts
+        if self.audio_message and ctx.message.id != self.audio_message.id:
+            await ctx.send("This playback card is no longer active.", ephemeral=True)
+            return
+
         if ctx.voice_state and ctx.author.voice:
             adjustment = 0.1
             # Update Audio OBJ
@@ -1060,12 +1228,17 @@ class AudioPlayBack(Extension):
 
             # Create embedded message
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-
             await ctx.edit_origin(embed=embed_message)
+
             logger.info(f"Set Volume {round(self.volume * 100)}")  # NOQA
 
     @component_callback('volume_down_button')
     async def callback_volume_down_button(self, ctx: ComponentContext):
+        # Check if this is the active audio message to prevent conflicts
+        if self.audio_message and ctx.message.id != self.audio_message.id:
+            await ctx.send("This playbook card is no longer active.", ephemeral=True)
+            return
+
         if ctx.voice_state and ctx.author.voice:
             adjustment = 0.1
 
@@ -1076,13 +1249,17 @@ class AudioPlayBack(Extension):
 
             # Create embedded message
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-
             await ctx.edit_origin(embed=embed_message)
 
             logger.info(f"Set Volume {round(self.volume * 100)}")  # NOQA
 
     @component_callback('forward_button')
     async def callback_forward_button(self, ctx: ComponentContext):
+        # Check if this is the active audio message to prevent conflicts
+        if self.audio_message and ctx.message.id != self.audio_message.id:
+            await ctx.send("This playback card is no longer active.", ephemeral=True)
+            return
+
         await ctx.defer(edit_origin=True)
         ctx.voice_state.channel.voice_state.player.stop()
 
@@ -1105,6 +1282,11 @@ class AudioPlayBack(Extension):
 
     @component_callback('rewind_button')
     async def callback_rewind_button(self, ctx: ComponentContext):
+        # Check if this is the active audio message to prevent conflicts
+        if self.audio_message and ctx.message.id != self.audio_message.id:
+            await ctx.send("This playback card is no longer active.", ephemeral=True)
+            return
+
         await ctx.defer(edit_origin=True)
         ctx.voice_state.channel.voice_state.player.stop()
 
