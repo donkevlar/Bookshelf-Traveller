@@ -117,7 +117,7 @@ class AudioPlayBack(Extension):
 
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
-        logger.info(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
+        logger.debug(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
         try:
             self.current_playback_time = self.current_playback_time + updateFrequency
 
@@ -132,7 +132,7 @@ class AudioPlayBack(Extension):
                     next_time=self.nextTime)
 
                 self.currentTime = updatedTime
-                logger.info(f"Successfully synced session to updated time: {updatedTime} | "
+                logger.info(f"Session sync successful: {updatedTime} | Duration: {duration} | "
                             f"Current Playback Time: {formatted_time} | session ID: {self.sessionID}")
 
                 # Check if book is finished
@@ -152,7 +152,7 @@ class AudioPlayBack(Extension):
                 if not isPodcast and current_chapter:
                     # Check if current_chapter has a title key
                     chapter_title = current_chapter.get('title', 'Unknown Chapter')
-                    logger.info(f"Current Chapter Sync: {chapter_title}")
+                    logger.debug(f"Current Chapter Sync: {chapter_title}")
                     self.currentChapter = current_chapter
                     self.currentChapterTitle = chapter_title
                 
