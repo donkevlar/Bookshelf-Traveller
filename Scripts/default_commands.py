@@ -120,10 +120,10 @@ class PrimaryCommands(Extension):
             totalDuration = formatted_data.get('totalDuration', 0)
             lastUpdated = formatted_data.get('lastUpdated', 'N/A')
 
-            media_progress = (f"Progress: **{progress}**\nChapter Title: **{chapterTitle}**\n "
-                              f"Time Progressed: **{currentTime}** Hours\n "
+            media_progress = (f"Progress: **{progress}**\nChapter Title: **{chapterTitle}**\n"
+                              f"Time Progressed: **{currentTime}** Hours\n"
                               f"Total Duration: **{totalDuration}** Hours\n")
-            media_status = f"Is Finished: **{finished}**\n Last Updated: **{lastUpdated}**\n"
+            media_status = f"Is Finished: **{finished}**\nLast Updated: **{lastUpdated}**\n"
 
             # Create Embed Message
             embed_message = Embed(
