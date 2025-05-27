@@ -736,12 +736,15 @@ class AudioPlayBack(Extension):
     async def announce_playback(self, ctx: SlashContext):
         """
         Creates a public (non-ephemeral) playbook card to invite others to join the listening session.
-        Only available to bot owner and when audio is actively playing.
+        Available to bot owner and the user who started the current playback session.
         """
     
-        # Check if bot owner
-        if ctx.author.id not in [ctx.bot.owner.id] + [owner.id for owner in ctx.bot.owners]:
-            await ctx.send("Only the bot owner can use this command.", ephemeral=True)
+        # Check if bot owner OR session owner
+        is_bot_owner = ctx.author.id in [ctx.bot.owner.id] + [owner.id for owner in ctx.bot.owners]
+        is_session_owner = self.sessionOwner == ctx.author.username
+    
+        if not (is_bot_owner or is_session_owner):
+            await ctx.send("Only the bot owner or the person who started this playback session can use this command.", ephemeral=True)
             return
     
         # Check if bot is in voice and playing
