@@ -24,6 +24,15 @@ keep_active = False
 
 optional_image_url = OPT_IMAGE_URL
 
+def time_converter(time_sec: int) -> str:
+    """
+    :param time_sec:
+    :return: a formatted string w/ time_sec + time_format(H,M,S)
+    """
+    hours = int(time_sec // 3600)
+    minutes = int((time_sec % 3600) // 60)
+    seconds = int(time_sec % 60)
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 # Simple Success Message
 def successMSG(endpoint, status):
@@ -389,12 +398,14 @@ async def bookshelf_item_progress(item_id):
 
         progress = round(data['progress'] * 100)
         isFinished = data['isFinished']
-        currentTime = data['currentTime'] / 3600
-        duration = data['duration'] / 3600
+
+        # Keep as seconds and format with time_converter
+        currentTime_seconds = int(data['currentTime'])
+        duration_seconds = int(data['duration'])
+        
         lastUpdate = data['lastUpdate'] / 1000
 
         # Convert lastUpdate Time from unix to standard time
-        # Conversions Below
         lastUpdate = datetime.fromtimestamp(lastUpdate)
         converted_lastUpdate = lastUpdate.strftime('%Y-%m-%d %H:%M')
 
@@ -409,8 +420,8 @@ async def bookshelf_item_progress(item_id):
             'title': title,
             'progress': f'{progress}%',
             'finished': f'{isFinished}',
-            'currentTime': f'{round(currentTime, 2)}',
-            'totalDuration': f'{round(duration, 2)}',
+            'currentTime': time_converter(currentTime_seconds),
+            'totalDuration': time_converter(duration_seconds),
             'lastUpdated': f'{converted_lastUpdate}'
         }
 

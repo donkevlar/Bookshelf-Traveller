@@ -7,7 +7,7 @@ import bookshelfAPI as c
 import settings as s
 from settings import TIMEZONE
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import random
 
@@ -53,25 +53,15 @@ async def ownership_check(ctx: BaseContext):  # NOQA
         return True
 
 
-async def time_converter(time_sec: int) -> str:
+def time_converter(time_sec: int) -> str:
     """
     :param time_sec:
     :return: a formatted string w/ time_sec + time_format(H,M,S)
     """
-    formatted_time = time_sec
-    playbackTimeState = 'Seconds'
-
-    if time_sec >= 60 and time_sec < 3600:
-        formatted_time = round(time_sec / 60, 2)
-        playbackTimeState = 'Minutes'
-    elif time_sec >= 3600:
-        formatted_time = round(time_sec / 3600, 2)
-        playbackTimeState = 'Hours'
-
-    formatted_string = f"{formatted_time} {playbackTimeState}"
-
-    return formatted_string
-
+    hours = int(time_sec // 3600)
+    minutes = int((time_sec % 3600) // 60)
+    seconds = int(time_sec % 60)
+    return f"{hours:02}:{minutes:02}:{seconds:02}"
 
 class AudioPlayBack(Extension):
     def __init__(self, bot):
@@ -121,7 +111,7 @@ class AudioPlayBack(Extension):
         try:
             self.current_playback_time = self.current_playback_time + updateFrequency
 
-            formatted_time = await time_converter(self.current_playback_time)
+            formatted_time = time_converter(self.current_playback_time)
 
             # Try to update the session
             try:
@@ -352,18 +342,8 @@ class AudioPlayBack(Extension):
             progress_percentage = round(progress_percentage, 1)
             progress_percentage = max(0, min(100, progress_percentage))
 
-        duration = self.bookDuration
-        TimeState = 'Seconds'
-        _time = duration
-        if self.bookDuration >= 60 and self.bookDuration < 3600:
-            _time = round(duration / 60, 2)
-            TimeState = 'Minutes'
-        elif self.bookDuration >= 3600:
-            _time = round(duration / 3600, 2)
-            TimeState = 'Hours'
-
-        formatted_duration = f"{_time} {TimeState}"
-        formatted_current = f"{round(self.currentTime / 60, 2)} Minutes"
+        formatted_duration = time_converter(self.bookDuration)
+        formatted_current = time_converter(self.currentTime)
 
         return create_playback_embed(
             book_title=self.bookTitle,
@@ -785,30 +765,29 @@ class AudioPlayBack(Extension):
             progress_percentage = max(0, min(100, progress_percentage))
     
         # Format duration and current time
-        duration = self.bookDuration
-        TimeState = 'Seconds'
-        _time = duration
-        if self.bookDuration >= 60 and self.bookDuration < 3600:
-            _time = round(duration / 60, 2)
-            TimeState = 'Minutes'
-        elif self.bookDuration >= 3600:
-            _time = round(duration / 3600, 2)
-            TimeState = 'Hours'
-    
-        formatted_duration = f"{_time} {TimeState}"
-        formatted_current = f"{round(self.currentTime / 60, 2)} Minutes"
-    
+        formatted_duration = time_converter(self.bookDuration)
+        formatted_current = time_converter(self.currentTime)
+
+        # Dynamic status for title
+        status_emoji = {
+            'playing': '▶️',
+            'paused': '⏸️',
+            'stopped': '⏹️'
+        }
+        current_emoji = status_emoji.get(self.play_state, '🎧')
+
         # Create announcement embed
         embed_message = Embed(
-            title=f"🎧 {self.bookTitle}",
-            description=f"Currently playing in **{voice_channel.name}** • {self.play_state.title()}",
-            color=0x3498db if self.play_state == 'playing' else 0xe67e22
+            title=f"{current_emoji} {self.play_state.upper()}",
+            description=f"**{self.bookTitle}**",
+            color=0x3498db if self.play_state == 'playing' else (0xe67e22 if self.play_state == 'paused' else 0x95a5a6)
         )
     
         # Add playbook information
         playback_info = (
-            f"**Chapter:** {self.currentChapterTitle}\n"
+            f"**Status:** {self.play_state.title()}\n"
             f"**Progress:** {progress_percentage}%\n"
+            f"**Chapter:** {self.currentChapterTitle}\n"
             f"**Current Time:** {formatted_current}\n"
             f"**Total Duration:** {formatted_duration}"
         )
@@ -822,12 +801,14 @@ class AudioPlayBack(Extension):
                 f"**Listeners:** {listener_count}\n"
                 f"Click channel name above to join!"
             )
+            embed_message.add_field(name="🔊 Channel Info", value=channel_info, inline=True)
         except Exception:
             channel_info = (
                 f"**Channel:** Voice channel unavailable\n"
                 f"**Server:** {guild_name}\n" 
                 f"**Status:** Playback active"
             )
+            embed_message.add_field(name="🔊 Channel Info", value=channel_info, inline=True)
     
         # Add cover image if available
         if self.cover_image:
