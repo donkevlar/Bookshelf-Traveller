@@ -808,9 +808,6 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
                         updatedTime = serverCurrentTime + current_time
                         print("Error, nextTime was not valid")
 
-                logger.info(
-                    f"Duration: {duration}, Current Time: {serverCurrentTime}, Updated Time: {updatedTime}")
-
                 # Check if session matches the current item playing
                 if item_id == session_itemID and updatedTime <= duration:
                     sessionOK = True
@@ -831,7 +828,7 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
                 r_session_update = await bookshelf_conn(POST=True, endpoint=sync_endpoint,
                                                         Data=session_update, Headers=headers)
                 if r_session_update.status_code == 200:
-                    logger.info(f'session sync successful. {updatedTime}')
+                    logger.debug(f'bookshelf session sync successful. {updatedTime}')
                     return updatedTime, duration, serverCurrentTime, finished_book
             else:
                 print(f"Session sync failed, sync status: {sessionOK}")
