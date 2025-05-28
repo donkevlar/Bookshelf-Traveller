@@ -1023,11 +1023,6 @@ class AudioPlayBack(Extension):
     # Component Callbacks ---------------------------
     @component_callback('pause_audio_button')
     async def callback_pause_button(self, ctx: ComponentContext):
-        # Check if this is the active audio message to prevent conflicts
-        if self.audio_message and ctx.message.id != self.audio_message.id:
-            await ctx.send("This playback card is no longer active.", ephemeral=True)
-            return
-
         if ctx.voice_state:
             logger.info('Pausing Playback!')
             self.play_state = 'paused'
@@ -1040,11 +1035,6 @@ class AudioPlayBack(Extension):
 
     @component_callback('play_audio_button')
     async def callback_play_button(self, ctx: ComponentContext):
-        # Check if this is the active audio message to prevent conflicts
-        if self.audio_message and ctx.message.id != self.audio_message.id:
-            await ctx.send("This playback card is no longer active.", ephemeral=True)
-            return
-
         if ctx.voice_state:
             logger.info('Resuming Playback!')
             self.play_state = 'playing'
@@ -1061,11 +1051,6 @@ class AudioPlayBack(Extension):
 
     @component_callback('next_chapter_button')
     async def callback_next_chapter_button(self, ctx: ComponentContext):
-        # Check if this is the active audio message to prevent conflicts
-        if self.audio_message and ctx.message.id != self.audio_message.id:
-            await ctx.send("This playback card is no longer active.", ephemeral=True)
-            return
-
         if ctx.voice_state:
             logger.info('Moving to next chapter!')
 
@@ -1114,11 +1099,6 @@ class AudioPlayBack(Extension):
 
     @component_callback('previous_chapter_button')
     async def callback_previous_chapter_button(self, ctx: ComponentContext):
-        # Check if this is the active audio message to prevent conflicts
-        if self.audio_message and ctx.message.id != self.audio_message.id:
-            await ctx.send("This playback card is no longer active.", ephemeral=True)
-            return
-
         if ctx.voice_state:
             logger.info('Moving to previous chapter!')
 
@@ -1170,11 +1150,6 @@ class AudioPlayBack(Extension):
 
     @component_callback('stop_audio_button')
     async def callback_stop_button(self, ctx: ComponentContext):
-        # Check if this is the active audio message to prevent conflicts
-        if self.audio_message and ctx.message.id != self.audio_message.id:
-            await ctx.send("This playback card is no longer active.", ephemeral=True)
-            return
-
         if ctx.voice_state:
             logger.info('Stopping Playback!')
             await ctx.voice_state.channel.voice_state.stop()
@@ -1206,11 +1181,6 @@ class AudioPlayBack(Extension):
 
     @component_callback('volume_up_button')
     async def callback_volume_up_button(self, ctx: ComponentContext):
-        # Check if this is the active audio message to prevent conflicts
-        if self.audio_message and ctx.message.id != self.audio_message.id:
-            await ctx.send("This playback card is no longer active.", ephemeral=True)
-            return
-
         if ctx.voice_state and ctx.author.voice:
             adjustment = 0.1
             # Update Audio OBJ
@@ -1227,11 +1197,6 @@ class AudioPlayBack(Extension):
 
     @component_callback('volume_down_button')
     async def callback_volume_down_button(self, ctx: ComponentContext):
-        # Check if this is the active audio message to prevent conflicts
-        if self.audio_message and ctx.message.id != self.audio_message.id:
-            await ctx.send("This playbook card is no longer active.", ephemeral=True)
-            return
-
         if ctx.voice_state and ctx.author.voice:
             adjustment = 0.1
 
@@ -1248,11 +1213,6 @@ class AudioPlayBack(Extension):
 
     @component_callback('forward_button')
     async def callback_forward_button(self, ctx: ComponentContext):
-        # Check if this is the active audio message to prevent conflicts
-        if self.audio_message and ctx.message.id != self.audio_message.id:
-            await ctx.send("This playback card is no longer active.", ephemeral=True)
-            return
-
         await ctx.defer(edit_origin=True)
         ctx.voice_state.channel.voice_state.player.stop()
 
@@ -1275,11 +1235,6 @@ class AudioPlayBack(Extension):
 
     @component_callback('rewind_button')
     async def callback_rewind_button(self, ctx: ComponentContext):
-        # Check if this is the active audio message to prevent conflicts
-        if self.audio_message and ctx.message.id != self.audio_message.id:
-            await ctx.send("This playback card is no longer active.", ephemeral=True)
-            return
-
         await ctx.defer(edit_origin=True)
         ctx.voice_state.channel.voice_state.player.stop()
 
