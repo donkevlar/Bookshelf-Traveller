@@ -156,10 +156,19 @@ class AudioPlayBack(Extension):
                     guild_name = self.announcement_message.guild.name if self.announcement_message.guild else "Unknown Server"
         
                     updated_embed = self.create_announcement_embed(voice_channel, guild_name)
-                    updated_announcement = await self.announcement_message.edit(embed=updated_embed)
-        
-                    self.announcement_message = updated_announcement
-                    logger.debug("Updated announcement card")
+
+                    # Rate limit updating the card to 10 seconds
+                    now = datetime.now()
+                    msg_id = self.announcement_message.id
+                    if not hasattr(self, '_last_patch_timestamps'):
+                        self._last_patch_timestamps = {}
+                    last_update = self._last_patch_timestamps.get(msg_id, now.replace(second=0, microsecond=0) - timedelta(seconds=10))
+
+                    if (now - last_update).total_seconds() >= 10:
+                        updated_announcement = await self.announcement_message.edit(embed=updated_embed)
+                        self.announcement_message = updated_announcement
+                        self._last_patch_timestamps[msg_id] = now
+                        logger.debug("Updated announcement card")
         
                 except Exception as e:
                     logger.warning(f"Failed to update announcement card: {e}")
