@@ -451,6 +451,7 @@ class AudioPlayBack(Extension):
             if startover:
                 logger.info(f"startover flag is true, setting currentTime to 0 instead of {currentTime}")
                 currentTime = 0
+
                 # Also find the first chapter
                 if chapter_array and len(chapter_array) > 0:
                     # Sort chapters by start time
@@ -499,7 +500,7 @@ class AudioPlayBack(Extension):
             self.currentChapter = current_chapter if not startover else self.currentChapter  # Use first chapter if startover
             self.currentChapterTitle = current_chapter.get('title') if not startover else self.currentChapterTitle
             self.chapterArray = chapter_array
-            self.bookFinished = bookFinished
+            self.bookFinished = False  # Force locally to False. If it were True, it would've exited sooner. Startover needs this to be False.
             self.current_channel = ctx.channel_id
             self.play_state = 'playing'
 
