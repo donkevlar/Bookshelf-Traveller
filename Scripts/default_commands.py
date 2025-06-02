@@ -356,52 +356,98 @@ class PrimaryCommands(Extension):
     @slash_command(name="search-book", description="Search for a book in your libraries. Default Command.")
     @slash_option(name="book", description="Book Title", autocomplete=True, required=True, opt_type=OptionType.STRING)
     async def search_book(self, ctx: SlashContext, book):
-        book_details = await c.bookshelf_get_item_details(book)
+        try:
+            book_details = await c.bookshelf_get_item_details(book)
 
-        title = book_details['title']
-        author = book_details['author']
-        series = book_details['series']
-        narrators = book_details['narrator']
-        duration_seconds = book_details['duration']
-        publisher = book_details['publisher']
-        publishedYear = book_details['publishedYear']
-        genre = book_details['genres']
-        language = book_details['language']
-        addedDate = book_details['addedDate'] / 1000
+            title = book_details.get('title', 'Unknown Title')
+            author = book_details.get('author', 'Unknown Author')
+            series = book_details.get('series', '')
+            narrators = book_details.get('narrator', 'Unknown Narrator')
+            duration_seconds = book_details.get('duration', 0)
+            publisher = book_details.get('publisher', 'Unknown Publisher')
+            publishedYear = book_details.get('publishedYear', 'Unknown Year')
+            genre = book_details.get('genres', 'Unknown Genre')
+            language = book_details.get('language', 'Unknown Language')
+            addedDate = book_details.get('addedDate', 0)
 
-        converted_added_date = datetime.utcfromtimestamp(addedDate)
-        formatted_addedDate = converted_added_date.strftime('%Y-%m-%d')
+            # Handle addedDate conversion safely
+            if addedDate and addedDate != 0:
+                try:
+                    if isinstance(addedDate, str):
+                        # If it's already a string, try to parse it
+                        from datetime import datetime
+                        converted_added_date = datetime.fromisoformat(addedDate.replace('Z', '+00:00'))
+                        formatted_addedDate = converted_added_date.strftime('%Y-%m-%d')
+                    else:
+                        # If it's a timestamp
+                        converted_added_date = datetime.utcfromtimestamp(addedDate / 1000)
+                        formatted_addedDate = converted_added_date.strftime('%Y-%m-%d')
+                except:
+                    formatted_addedDate = 'Unknown Date'
+            else:
+                formatted_addedDate = 'Unknown Date'
 
-        if duration_seconds >= 3600:
-            duration = round(duration_seconds / 3600, 2)
-            duration = str(duration) + " Hours"
+            # Format duration safely
+            if duration_seconds and duration_seconds > 0:
+                if duration_seconds >= 3600:
+                    duration = round(duration_seconds / 3600, 2)
+                    duration = str(duration) + " Hours"
+                elif duration_seconds >= 60:
+                    duration = round(duration_seconds / 60, 2)
+                    duration = str(duration) + " Minutes"
+                else:
+                    duration = str(duration_seconds) + " Seconds"
+            else:
+                duration = "Unknown Duration"
 
-        elif duration_seconds >= 60 < 3600:
-            duration = duration_seconds / 60
-            duration = str(duration) + " Minutes"
+            cover = await c.bookshelf_cover_image(book)
 
-        else:
-            duration = str(duration_seconds) + " Seconds"
+            embed_message = Embed(
+                title=title,
+                description=series if series else "Author: " + author,
+                color=ctx.author.accent_color
+            )
 
-        add_info = f"Genres: *{genre}*\nDuration: *{duration}*\nLanguage: *{language}*"
-        release_info = f"Publisher: *{publisher}*\nPublished Year: *{publishedYear}*\nAdded Date: *{formatted_addedDate}*"
+            # Only add series field if series exists and we have a description
+            if series:
+                embed_message.add_field(name='Author(s)', value=author or 'Unknown Author', inline=False)
 
-        cover = await c.bookshelf_cover_image(book)
+            # Only add fields that have actual data
+            if narrators and narrators != 'Unknown Narrator':
+                embed_message.add_field(name='Narrator(s)', value=narrators, inline=False)
 
-        embed_message = Embed(
-            title=title,
-            description=series if series != '' else "Author: " + author
-        )
+            # Build release info only with available data
+            release_parts = []
+            if publisher and publisher != 'Unknown Publisher':
+                release_parts.append(f"Publisher: *{publisher}*")
+            if publishedYear and publishedYear != 'Unknown Year':
+                release_parts.append(f"Published Year: *{publishedYear}*")
+            if formatted_addedDate != 'Unknown Date':
+                release_parts.append(f"Added Date: *{formatted_addedDate}*")
+        
+            if release_parts:
+                embed_message.add_field(name="Release Information", value="\n".join(release_parts), inline=False)
 
-        if series:
-            embed_message.add_field(name='Author(s)', value=author)
+            # Build additional info only with available data
+            add_parts = []
+            if genre and genre != 'Unknown Genre':
+                add_parts.append(f"Genres: *{genre}*")
+            if duration != "Unknown Duration":
+                add_parts.append(f"Duration: *{duration}*")
+            if language and language != 'Unknown Language':
+                add_parts.append(f"Language: *{language}*")
 
-        embed_message.add_field(name='Narrator(s)', value=narrators)
-        embed_message.add_field(name="Release Information", value=release_info)
-        embed_message.add_field(name="Additional Information", value=add_info)
-        embed_message.add_image(cover)
+            if add_parts:
+                embed_message.add_field(name="Additional Information", value="\n".join(add_parts), inline=False)
+        
+            if cover:
+                embed_message.add_image(cover)
 
-        await ctx.send(content=f"Book details for **{title}**", ephemeral=self.ephemeral_output, embed=embed_message)
+            await ctx.send(content=f"Book details for **{title}**", ephemeral=self.ephemeral_output, embed=embed_message)
+
+        except Exception as e:
+            logger.error(f"Error in search_book command: {e}")
+            await ctx.send("Could not retrieve book details. Please try again later.", ephemeral=True)
 
     @check(ownership_check)
     @slash_command(name="setup-default-commands", description="Override optional command arguments. Note only affects default commands.")
