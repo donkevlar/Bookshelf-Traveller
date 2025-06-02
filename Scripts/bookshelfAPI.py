@@ -428,6 +428,117 @@ async def bookshelf_item_progress(item_id):
         return formatted_info
 
 
+async def bookshelf_mark_book_finished(item_id: str, session_id: str):
+    """
+    Explicitly mark a book as finished by setting progress to 100% and isFinished to True
+    :param item_id: The library item ID
+    :param session_id: The current session ID
+    :return: True if successful, False otherwise
+    """
+    try:
+        # First, get the book's total duration
+        endpoint = f"/items/{item_id}"
+        r = await bookshelf_conn(GET=True, endpoint=endpoint)
+
+        if r.status_code != 200:
+            logger.error(f"Failed to get book details for {item_id}")
+            return False
+
+        data = r.json()
+
+        # Calculate total duration from audio files
+        files_raw = data['media'].get('audioFiles', [])
+        total_duration = sum(int(file.get('duration', 0)) for file in files_raw)
+
+        if total_duration <= 0:
+            logger.error(f"Invalid total duration for book {item_id}")
+            return False
+
+        # Update session to mark as finished
+        sync_endpoint = f"/session/{session_id}/sync"
+        headers = {'Content-Type': 'application/json'}
+
+        # Set the current time to the very end and mark as finished
+        session_update = {
+            'currentTime': float(total_duration),
+            'timeListened': 1.0,  # Small amount to trigger the update
+            'duration': float(total_duration)
+        }
+
+        r_session_update = await bookshelf_conn(POST=True, endpoint=sync_endpoint,
+                                              Data=session_update, Headers=headers)
+
+        if r_session_update.status_code == 200:
+            logger.info(f"Successfully marked book {item_id} as finished")
+
+            # Now explicitly set the progress to finished via the progress endpoint
+            progress_endpoint = f"/me/progress/{item_id}"
+            progress_update = {
+                'isFinished': True,
+                'progress': 1.0,
+                'currentTime': float(total_duration)
+            }
+
+            # Use PATCH method for progress update
+            async with httpx.AsyncClient() as client:
+                bookshelfURL = os.environ.get("bookshelfURL")
+                bookshelfToken = os.environ.get("bookshelfToken") 
+                api_url = f"{bookshelfURL}/api{progress_endpoint}?token={bookshelfToken}"
+
+                progress_response = await client.patch(api_url, json=progress_update, 
+                                                     headers={'Content-Type': 'application/json'})
+
+                if progress_response.status_code == 200:
+                    logger.info(f"Successfully updated progress for book {item_id} to finished")
+                    return True
+                else:
+                    logger.warning(f"Failed to update progress endpoint, but session was updated. Status: {progress_response.status_code}")
+                    return True  # Session update worked, so consider it successful
+        else:
+            logger.error(f"Failed to update session for finished book. Status: {r_session_update.status_code}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Error marking book as finished: {e}")
+        return False
+
+
+async def bookshelf_mark_book_unfinished(item_id: str):
+    """
+    Mark a book as not finished by setting progress and resetting isFinished to False
+    :param item_id: The library item ID
+    :return: True if successful, False otherwise
+    """
+    try:
+        # Update progress to mark as not finished
+        progress_endpoint = f"/me/progress/{item_id}"
+        progress_update = {
+            'isFinished': False,
+            'progress': 0.0,
+            'currentTime': 0.0
+        }
+
+        # Use PATCH method for progress update
+        async with httpx.AsyncClient() as client:
+            bookshelfURL = os.environ.get("bookshelfURL")
+            bookshelfToken = os.environ.get("bookshelfToken") 
+            api_url = f"{bookshelfURL}/api{progress_endpoint}?token={bookshelfToken}"
+
+            progress_response = await client.patch(api_url, json=progress_update, 
+                                                 headers={'Content-Type': 'application/json'})
+
+            if progress_response.status_code == 200:
+                logger.info(f"Successfully marked book {item_id} as not finished")
+                return True
+            else:
+                logger.error(f"Failed to mark book as not finished. Status: {progress_response.status_code}")
+                return False
+
+    except Exception as e:
+        logger.error(f"Error marking book as not finished: {e}")
+        return False
+
+
 async def bookshelf_title_search(display_title: str) -> list:
     """
     :param display_title:
@@ -777,12 +888,13 @@ async def bookshelf_audio_obj(item_id: str, index_id: int = 1):
     return onlineURL, currentTime, session_id, bookTitle, bookDuration
 
 
-async def bookshelf_session_update(session_id: str, item_id: str, current_time: float, next_time=None):
+async def bookshelf_session_update(session_id: str, item_id: str, current_time: float, next_time=None, mark_finished=False):
     """
     :param session_id:
     :param item_id:
     :param current_time:
     :param next_time:
+    :param mark_finished: If True, explicitly mark the book as finished
     :return: if successful: updatedTime, duration, serverCurrentTime, finished_book
     """
     get_session_endpoint = f"/session/{session_id}"
@@ -795,7 +907,7 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
     serverCurrentTime = 0.0
     duration = 0.0
 
-    if current_time > 1:
+    if current_time > 1 or mark_finished:
 
         try:
 
@@ -809,22 +921,29 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
                 duration = float(data.get('duration'))
                 serverCurrentTime = float(data.get('currentTime'))
                 session_itemID = data.get('libraryItemId')
+
                 # Create Updated Time
-                if next_time is None:
-                    updatedTime = serverCurrentTime + current_time
+                if mark_finished:
+                    # Force finish the book
+                    updatedTime = duration
+                    finished_book = True
+                    sessionOK = True
                 elif next_time is not None:
                     try:
                         updatedTime = float(next_time)
-                    except TypeError:
+                    except (TypeError, ValueError):
                         updatedTime = serverCurrentTime + current_time
-                        print("Error, nextTime was not valid")
+                        logger.warning("Error, nextTime was not valid, using fallback")
+                else:
+                    updatedTime = serverCurrentTime + current_time
 
                 # Check if session matches the current item playing
-                if item_id == session_itemID and updatedTime <= duration:
+                if item_id == session_itemID and updatedTime <= duration and not mark_finished:
                     sessionOK = True
 
-                # If Updated Time is greater, make updated time duration. (Finish book)
-                elif updatedTime > duration:
+
+                # If Updated Time is greater than duration OR mark_finished is True, finish the book
+                elif updatedTime > duration or mark_finished:
                     sessionOK = True
                     updatedTime = duration
                     finished_book = True
@@ -836,17 +955,22 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
                     'timeListened': float(current_time),
                     'duration': float(duration)  # NOQA
                 }
+
                 r_session_update = await bookshelf_conn(POST=True, endpoint=sync_endpoint,
                                                         Data=session_update, Headers=headers)
+
                 if r_session_update.status_code == 200:
                     logger.debug(f'bookshelf session sync successful. {updatedTime}')
+
+                    # If we're marking as finished, make sure to explicitly mark it
+                    if finished_book and mark_finished:
+                        success = await bookshelf_mark_book_finished(item_id, session_id)
+                        if not success:
+                            logger.warning("Failed to explicitly mark book as finished, but session was updated")
+
                     return updatedTime, duration, serverCurrentTime, finished_book
             else:
-                print(f"Session sync failed, sync status: {sessionOK}")
-
-        except requests.RequestException as e:
-            logger.warning(f"Issue with sync post request: {e}")
-            print(e)
+                logger.warning(f"Session sync failed, sync status: {sessionOK}")
 
         except Exception as e:
             logger.warning(f"Issue with sync: {e}")

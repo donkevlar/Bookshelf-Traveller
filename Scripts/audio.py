@@ -110,7 +110,6 @@ class AudioPlayBack(Extension):
         logger.debug(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
         try:
             self.current_playback_time = self.current_playback_time + updateFrequency
-
             formatted_time = time_converter(self.current_playback_time)
 
             # Try to update the session
@@ -122,13 +121,26 @@ class AudioPlayBack(Extension):
                     next_time=self.nextTime)
 
                 self.currentTime = updatedTime
+
                 logger.info(f"Session sync successful: {updatedTime} | Duration: {duration} | "
                             f"Current Playback Time: {formatted_time} | session ID: {self.sessionID}")
 
-                # Check if book is finished
+                # If ABS marked it finished, check if we should let it finish naturally
                 if finished_book:
-                    logger.info("Book playback has finished based on session update")
-                    # Could add special handling for finished books if problems occur
+                    time_remaining = duration - updatedTime if duration > 0 else 0
+                
+                    if time_remaining <= 30.0:
+                        if time_remaining <= 0:
+                            logger.info("Stream has reached the end - cleaning up")
+                            await self.cleanup_session("natural audio completion")
+                            return
+                        else:
+                            logger.info(f"ABS marked book finished with {time_remaining:.1f}s remaining - letting stream finish naturally")
+                            # Don't cleanup yet, let it play out
+                    else:
+                        logger.info("ABS marked book as finished - cleaning up")
+                        await self.cleanup_session("book completed by ABS")
+                        return
 
             except TypeError as e:
                 logger.warning(f"Session update error: {e} - session may be invalid or closed")
@@ -179,6 +191,143 @@ class AudioPlayBack(Extension):
         except Exception as e:
             logger.error(f"Unhandled error in session_update task: {e}")
             # Don't stop the task on errors, let it continue for the next interval
+
+    async def cleanup_session(self, reason="unknown"):
+        """Cleanup method that handles all session ending scenarios"""
+        logger.info(f"Cleaning up session - {reason}")
+
+        # Update the announcement card if it exists 
+        if self.announcement_message:
+            try:
+                now = datetime.now(tz=timeZone)
+                formatted_time = now.strftime("%m-%d %H:%M:%S")
+
+                # Calculate final progress if we have the data
+                final_progress = "Unknown"
+                if self.bookDuration and self.currentTime:
+                    progress_percentage = min(100, (self.currentTime / self.bookDuration) * 100)
+                    final_progress = f"{progress_percentage:.1f}%"
+
+                formatted_duration = time_converter(self.bookDuration) if self.bookDuration else "Unknown"
+                formatted_current = time_converter(self.currentTime) if self.currentTime else "Unknown"
+
+                stopped_embed = Embed(
+                    title="⏹️ Playback Stopped",
+                    description=f"**{self.bookTitle or 'Unknown'}** playback has ended.",
+                    color=0x95a5a6  # Gray color for stopped
+                )
+
+                # Add playback summary
+                playback_summary = (
+                    f"**Final Progress:** {final_progress}\n"
+                    f"**Time Reached:** {formatted_current}\n"
+                    f"**Total Duration:** {formatted_duration}\n"
+                    f"**Ended At:** {formatted_time}"
+                )
+                stopped_embed.add_field(name="📊 Session Summary", value=playback_summary, inline=False)
+
+                # Keep the cover image
+                if self.cover_image:
+                    stopped_embed.add_image(self.cover_image)
+
+                stopped_embed.footer = f"{s.bookshelf_traveller_footer} | Playback Ended"
+
+                await self.announcement_message.edit(embed=stopped_embed)
+                logger.debug("Updated announcement card to stopped state with summary")
+            except Exception as e:
+                logger.debug(f"Error updating announcement card: {e}")
+
+        # Stop tasks
+        if self.session_update.running:
+            self.session_update.stop()
+            logger.debug("Stopped session_update task")
+
+        if self.auto_kill_session.running:
+            self.auto_kill_session.stop()
+            logger.debug("Stopped auto_kill_session task")
+
+        # Stop voice playback if active
+        try:
+            if hasattr(self, 'audio_context') and self.audio_context and self.audio_context.voice_state:
+                await self.audio_context.voice_state.channel.voice_state.stop()
+                logger.debug("Stopped voice playback")
+        except Exception as e:
+            logger.debug(f"Error stopping voice playback: {e}")
+
+        # Clean up audio object
+        try:
+            if hasattr(self, 'audioObj') and self.audioObj:
+                self.audioObj.cleanup()
+                logger.debug("Cleaned up audio object")
+        except Exception as e:
+            logger.debug(f"Error cleaning audio object: {e}")
+
+        # Disconnect from voice channel
+        try:
+            if hasattr(self, 'audio_context') and self.audio_context and self.audio_context.voice_state:
+                await self.audio_context.voice_state.channel.disconnect()
+                logger.debug("Disconnected from voice channel")
+        except Exception as e:
+            logger.debug(f"Error disconnecting from voice: {e}")
+
+        # Close ABS session and all sessions
+        if hasattr(self, 'sessionID') and self.sessionID:
+            try:
+                await c.bookshelf_close_session(self.sessionID)
+                logger.debug(f"Closed ABS session: {self.sessionID}")
+            except Exception as e:
+                logger.debug(f"Error closing ABS session: {e}")
+
+       # Clear bot presence
+        try:
+            if hasattr(self, 'client'):
+                await self.client.change_presence(activity=None)
+                logger.debug("Cleared bot presence")
+        except Exception as e:
+            logger.debug(f"Error clearing presence: {e}")
+
+        # Reset all state variables
+        try:
+            self.sessionID = ''
+            self.bookItemID = ''
+            self.bookTitle = ''
+            self.bookDuration = None
+            self.currentTime = 0.0
+            self.current_playback_time = 0
+            self.activeSessions = max(0, self.activeSessions - 1)  # Prevent negative
+            self.sessionOwner = None
+            self.play_state = 'stopped'
+
+            # Clear message references
+            self.audio_message = None
+            self.announcement_message = None
+            self.context_voice_channel = None
+            self.current_channel = None
+            self.active_guild_id = None
+
+            # Reset chapter variables
+            self.currentChapter = None
+            self.chapterArray = None
+            self.currentChapterTitle = ''
+            self.newChapterTitle = ''
+            self.found_next_chapter = False
+            self.bookFinished = False
+            self.nextTime = None
+
+            # Reset audio variables
+            self.volume = 0.0
+            self.audioObj = None
+
+            logger.debug("Reset all state variables")
+        except Exception as e:
+            logger.error(f"Error resetting state variables: {e}")
+
+
+        # Clear presence
+        try:
+            await self.client.change_presence(activity=None)
+        except:
+            pass
 
     @Task.create(trigger=IntervalTrigger(minutes=4))
     async def auto_kill_session(self):
@@ -243,6 +392,16 @@ class AudioPlayBack(Extension):
 
             if option == 'next':
                 nextChapterID = currentChapterID + 1
+
+                # Check if trying to go past last chapter
+                max_chapter_id = max(int(ch.get('id', 0)) for ch in self.chapterArray)
+                if nextChapterID > max_chapter_id:
+                    logger.info("Skipped past final chapter - marking complete and cleaning up")
+                    await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
+                    await self.cleanup_session("completed via chapter skip")
+                    self.found_next_chapter = False
+                    return
+
             else:
                 nextChapterID = currentChapterID - 1
 
@@ -658,34 +817,10 @@ class AudioPlayBack(Extension):
     async def stop_audio(self, ctx: SlashContext):
         if ctx.voice_state:
             logger.info(f"executing command /stop")
-            await ctx.send(content="Disconnected from audio channel and stopping playback.", ephemeral=True)
-            await ctx.voice_state.channel.voice_state.stop()
-            await ctx.author.voice.channel.disconnect()
-            self.audioObj.cleanup()  # NOQA
-            await self.client.change_presence(activity=None)
-            # Reset current playback time
-            self.current_playback_time = 0
-            self.activeSessions -= 1
-            self.sessionOwner = None
-            self.audio_message = None
-            self.announcement_message = None
-            self.context_voice_channel = None
-
-            # Stop auto kill session task
-            if self.auto_kill_session.running:
-                logger.info("Stopping auto kill session backend task.")
-                self.auto_kill_session.stop()
-
-            if self.session_update.running:
-                self.session_update.stop()
-                # self.terminal_clearer.stop()
-                self.play_state = 'stopped'
-                await c.bookshelf_close_session(self.sessionID)
-                await c.bookshelf_close_all_sessions(10)
-
+            await ctx.send(content="Stopping playback.", ephemeral=True)
+            await self.cleanup_session("manual stop command")
         else:
-            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
-            await c.bookshelf_close_all_sessions(10)
+            await ctx.send(content="Not connected to voice.", ephemeral=True)
 
     @check(ownership_check)
     @slash_command(name="close-all-sessions",
@@ -1075,6 +1210,11 @@ class AudioPlayBack(Extension):
             # Find next chapter
             await self.move_chapter(option='next')
 
+            # Check if session was cleaned up (book completed)
+            if not self.sessionID:
+                await ctx.edit_origin(content="📚 Book completed!")
+                return
+
             # Check if move_chapter succeeded before proceeding
             if self.found_next_chapter:
                 embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
@@ -1152,33 +1292,9 @@ class AudioPlayBack(Extension):
     @component_callback('stop_audio_button')
     async def callback_stop_button(self, ctx: ComponentContext):
         if ctx.voice_state:
-            logger.info('Stopping Playback!')
-            await ctx.voice_state.channel.voice_state.stop()
             await ctx.edit_origin()
             await ctx.delete()
-
-            # Initiate cleanup
-            self.audioObj.cleanup()
-            self.session_update.stop()
-            self.current_playback_time = 0
-            self.activeSessions -= 1
-            self.sessionOwner = None
-            self.play_state = 'stopped'
-            await ctx.voice_state.channel.disconnect()
-            await self.client.change_presence(activity=None)
-
-            # Clear message references
-            self.audio_message = None
-            self.announcement_message = None
-            self.context_voice_channel = None
-
-            # Cleanup Session
-            await c.bookshelf_close_session(self.sessionID)
-
-            # Stop auto kill session task
-            if self.auto_kill_session.running:
-                logger.info("Stopping auto kill session backend task.")
-                self.auto_kill_session.stop()
+            await self.cleanup_session("manual stop button")
 
     @component_callback('volume_up_button')
     async def callback_volume_up_button(self, ctx: ComponentContext):
@@ -1218,7 +1334,10 @@ class AudioPlayBack(Extension):
         ctx.voice_state.channel.voice_state.player.stop()
 
         # Use the unified method for forward seeking
-        await self.shared_seek(30.0, is_forward=True)
+        result = await self.shared_seek(30.0, is_forward=True)
+        if result is None:  # Book completed
+            await ctx.edit_origin(content="📚 Book completed!")
+            return
 
         # Start the session update task
         self.session_update.start()
@@ -1288,7 +1407,19 @@ class AudioPlayBack(Extension):
         if self.currentChapter is None or self.chapterArray is None:
             # No chapter data, perform simple seek
             logger.warning("No chapter metadata, falling back to simple seek.")
-            self.nextTime = max(0.0, self.currentTime + seek_amount) if is_forward else max(0.0, self.currentTime - seek_amount)
+
+            if is_forward:
+                potential_time = self.currentTime + seek_amount
+                if potential_time >= self.bookDuration:
+                    logger.info("Seeked past book end (no chapters) - marking complete and cleaning up")
+                    await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
+                    await self.cleanup_session("completed via seek past end")
+                    return None
+        
+                self.nextTime = self.currentTime + seek_amount
+            else:
+                self.nextTime = max(0.0, self.currentTime - seek_amount)
+
         else:
             current_chapter = self.currentChapter
             current_index = next((i for i, ch in enumerate(self.chapterArray) if ch.get('id') == current_chapter.get('id')), None)
@@ -1305,6 +1436,14 @@ class AudioPlayBack(Extension):
                     self.currentChapterTitle = next_chapter.get("title", "Unknown Chapter")
                     logger.debug("Forward: crossing into next chapter")
                 else:
+                    # Check if seeking would go past book end BEFORE setting nextTime
+                    potential_time = self.currentTime + seek_amount
+                    if potential_time >= self.bookDuration:
+                        logger.info("Seeked past book end - marking complete and cleaning up")
+                        await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
+                        await self.cleanup_session("completed via seek past end")
+                        return None
+            
                     self.nextTime = min(self.bookDuration, self.currentTime + seek_amount)
                     logger.debug("Forward: simple time advance")
             else: #is_reverse
