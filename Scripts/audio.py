@@ -105,6 +105,62 @@ class AudioPlayBack(Extension):
 
     # Tasks ---------------------------------
 
+    async def build_session(self, item_id: str, start_time: float = None, force_restart: bool = False):
+        """
+        Unified method to build audio session for any playback scenario.
+    
+        Parameters:
+        - item_id: The library item ID to build session for
+        - start_time: Optional time to start from (if None, uses server's current time)
+        - force_restart: If True, starts from beginning regardless of server progress
+    
+        Returns:
+        - Tuple: (audio_object, current_time, session_id, book_title, book_duration)
+        """
+        try:
+            # Get fresh audio object and session
+            audio_obj, server_current_time, session_id, book_title, book_duration = await c.bookshelf_audio_obj(item_id)
+        
+            # Determine actual start time
+            if force_restart:
+                actual_start_time = 0.0
+                logger.info("Force restart enabled - starting from beginning")
+            elif start_time is not None:
+                actual_start_time = start_time
+                logger.info(f"Using provided start time: {actual_start_time}")
+            else:
+                actual_start_time = server_current_time
+                logger.info(f"Using server current time: {actual_start_time}")
+        
+            # Build audio object with proper settings
+            audio = AudioVolume(audio_obj)
+            audio.buffer_seconds = 5
+            audio.locked_stream = True
+            audio.ffmpeg_before_args = f"-ss {actual_start_time}"
+            audio.ffmpeg_args = f"-ar 44100 -acodec aac -re"
+            audio.bitrate = self.bitrate
+            self.volume = audio.volume
+        
+            # Update instance variables
+            self.sessionID = session_id
+            self.bookItemID = item_id
+            self.bookTitle = book_title
+            self.bookDuration = book_duration
+            self.currentTime = actual_start_time
+            self.audioObj = audio
+        
+            # If we're seeking to a specific time, set nextTime for session sync
+            if start_time is not None:
+                self.nextTime = actual_start_time
+        
+            logger.info(f"Built session for '{book_title}' starting at {actual_start_time}s")
+        
+            return audio, actual_start_time, session_id, book_title, book_duration
+        
+        except Exception as e:
+            logger.error(f"Error building session for item {item_id}: {e}")
+            raise
+
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
         logger.debug(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
@@ -418,33 +474,28 @@ class AudioPlayBack(Extension):
 
                     if nextChapterID == chapterID:
                         found_next = True
+
+                        # Stop current session update task
                         self.session_update.stop()
+
+                        # Close current session
                         await c.bookshelf_close_session(self.sessionID)
+
+                        # Get chapter start time
                         chapterStart = float(chapter.get('start'))
                         self.newChapterTitle = chapter.get('title', 'Unknown Chapter')
 
-                        self.currentTime = chapterStart
-
                         logger.info(f"Selected Chapter: {self.newChapterTitle}, Starting at: {chapterStart}")
 
-                        audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(
-                            self.bookItemID)
-
-                        self.sessionID = sessionID
-                        self.currentTime = currentTime
-                        self.bookDuration = bookDuration
+                        # Use unified session builder
+                        audio, currentTime, sessionID, bookTitle, bookDuration = await self.build_session(
+                            item_id=self.bookItemID,
+                            start_time=chapterStart
+                        )
 
                         self.currentChapter = chapter
                         self.currentChapterTitle = chapter.get('title', 'Unknown Chapter')
                         logger.info(f"Updated current chapter to: {self.currentChapterTitle}")
-
-                        audio = AudioVolume(audio_obj)
-                        audio.ffmpeg_before_args = f"-ss {chapterStart}"
-                        audio.ffmpeg_args = f"-ar 44100 -acodec aac -re"
-                        self.audioObj = audio
-
-                        # Set next time to new chapter time
-                        self.nextTime = chapterStart
 
                         # Send manual next chapter sync with new session ID
                         logger.info(f"Updating new session {sessionID} to position {chapterStart}")
@@ -460,10 +511,11 @@ class AudioPlayBack(Extension):
                         except Exception as e:
                             logger.error(f"Error updating session: {e}")
 
-                        # Reset Next Time to None before starting task again
+                        # Clear nextTime to None
                         self.nextTime = None
                         logger.info(f"Verifying session ID is set to {self.sessionID} before starting update task")
 
+                        # Verify chapter information with server
                         try:
                             verified_chapter, _, _, _ = await c.bookshelf_get_current_chapter(
                                 item_id=self.bookItemID, current_time=chapterStart)
@@ -604,12 +656,12 @@ class AudioPlayBack(Extension):
                 await ctx.send(content=f"Bot can only play one session at a time, please stop your other active session and try again! Current session owner: {self.sessionOwner}", ephemeral=True)
                 return
 
-            # Get Bookshelf Playback URI, Starts new session
-            audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(book)
-
+            # Use unified session builder
             if startover:
-                logger.info(f"startover flag is true, setting currentTime to 0 instead of {currentTime}")
-                currentTime = 0
+                audio, currentTime, sessionID, bookTitle, bookDuration = await self.build_session(
+                    item_id=book, 
+                    force_restart=True
+                )
 
                 # Also find the first chapter
                 if chapter_array and len(chapter_array) > 0:
@@ -619,21 +671,16 @@ class AudioPlayBack(Extension):
                     self.currentChapter = first_chapter
                     self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
                     logger.info(f"Setting to first chapter: {self.currentChapterTitle}")
+            else:
+                audio, currentTime, sessionID, bookTitle, bookDuration = await self.build_session(
+                    item_id=book
+                )
 
             # Get Book Cover URL
             cover_image = await c.bookshelf_cover_image(book)
 
             # Retrieve current user information
             username, user_type, user_locked = await c.bookshelf_auth_test()
-
-            # Audio Object Arguments
-            audio = AudioVolume(audio_obj)
-            audio.buffer_seconds = 5
-            audio.locked_stream = True
-            self.volume = audio.volume
-            audio.ffmpeg_before_args = f"-ss {currentTime}"
-            audio.ffmpeg_args = f"-ar 44100 -acodec aac -re"
-            audio.bitrate = self.bitrate
 
             # Class VARS
 
@@ -643,16 +690,10 @@ class AudioPlayBack(Extension):
             self.cover_image = cover_image
 
             # Session Vars
-            self.sessionID = sessionID
             self.sessionOwner = ctx.author.username
-            self.bookItemID = book
-            self.bookTitle = bookTitle
-            self.audioObj = audio
-            self.currentTime = currentTime
             self.current_playback_time = 0
             self.audio_context = ctx
             self.active_guild_id = ctx.guild_id
-            self.bookDuration = bookDuration
 
             # Chapter Vars
             self.isPodcast = isPodcast
@@ -1389,11 +1430,8 @@ class AudioPlayBack(Extension):
         self.session_update.stop()
         await c.bookshelf_close_session(self.sessionID)
 
-        # Get updated audio info
-        audio_obj, currentTime, sessionID, bookTitle, bookDuration = await c.bookshelf_audio_obj(self.bookItemID)
-
-        self.sessionID = sessionID
-        self.currentTime = currentTime
+        # Use our current tracked position as the baseline for seeking
+        current_time = self.currentTime
 
         # Format timestamps for better readability in logs
         def format_time(seconds):
@@ -1446,7 +1484,8 @@ class AudioPlayBack(Extension):
             
                     self.nextTime = min(self.bookDuration, self.currentTime + seek_amount)
                     logger.debug("Forward: simple time advance")
-            else: #is_reverse
+            else:
+                # Backward seeking logic
                 if time_from_chapter_start <= 5.0 and prev_chapter:
                     prev_start = float(prev_chapter.get("start", 0.0))
                     prev_end = chapter_start
@@ -1465,10 +1504,11 @@ class AudioPlayBack(Extension):
         # Update the current time to match where we're seeking
         self.currentTime = self.nextTime
 
-        # Prepare audio object
-        audio = AudioVolume(audio_obj)
-        audio.ffmpeg_before_args = f"-ss {self.nextTime}"
-        audio.ffmpeg_args = f"-ar 44100 -acodec aac"
+        # Use unified session builder
+        audio, actual_start_time, session_id, book_title, book_duration = await self.build_session(
+            item_id=self.bookItemID,
+            start_time=self.nextTime
+        )
 
         # Send manual session sync
         await c.bookshelf_session_update(item_id=self.bookItemID, session_id=self.sessionID,
