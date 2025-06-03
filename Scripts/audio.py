@@ -657,24 +657,19 @@ class AudioPlayBack(Extension):
                 return
 
             # Use unified session builder
-            if startover:
-                audio, currentTime, sessionID, bookTitle, bookDuration = await self.build_session(
-                    item_id=book, 
-                    force_restart=True
-                )
+            audio, currentTime, sessionID, bookTitle, bookDuration = await self.build_session(
+                item_id=book, 
+                # if True, start time will be zero
+                force_restart=startover
+            )
 
-                # Also find the first chapter
-                if chapter_array and len(chapter_array) > 0:
-                    # Sort chapters by start time
-                    chapter_array.sort(key=lambda x: float(x.get('start', 0)))
-                    first_chapter = chapter_array[0]
-                    self.currentChapter = first_chapter
-                    self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
-                    logger.info(f"Setting to first chapter: {self.currentChapterTitle}")
-            else:
-                audio, currentTime, sessionID, bookTitle, bookDuration = await self.build_session(
-                    item_id=book
-                )
+            if startover and chapter_array and len(chapter_array) > 0:
+                # Sort chapters by start time
+                chapter_array.sort(key=lambda x: float(x.get('start', 0)))
+                first_chapter = chapter_array[0]
+                self.currentChapter = first_chapter
+                self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
+                logger.info(f"Setting to first chapter: {self.currentChapterTitle}")
 
             # Get Book Cover URL
             cover_image = await c.bookshelf_cover_image(book)
