@@ -1063,9 +1063,35 @@ class AudioPlayBack(Extension):
     
         # Create the announcement embed
         embed_message = self.create_announcement_embed(voice_channel, ctx.guild.name)
-    
-        announcement_content = f"📢 **Now Playing**\nJoin us in {voice_channel.mention}!"
 
+        try:
+            # Get detailed book information
+            book_details = await c.bookshelf_get_item_details(self.bookItemID)
+            author = book_details.get('author', 'Unknown Author')
+            series = book_details.get('series', '')
+            narrator = book_details.get('narrator', '')
+        
+            # Build announcement message
+            announcement_parts = ["📢 **Now Playing:**"]
+            announcement_parts.append(f"**{self.bookTitle}**")
+        
+            if series:
+                announcement_parts.append(f"*{series}*")
+        
+            announcement_parts.append(f"by {author}")
+        
+            if narrator and narrator != 'Unknown Narrator':
+                announcement_parts.append(f"Read by {narrator}")
+        
+            announcement_parts.append(f"\nJoin us in {voice_channel.mention}!")
+        
+            announcement_content = "\n".join(announcement_parts)
+        
+        except Exception as e:
+            logger.error(f"Error getting book details for announcement: {e}")
+            # Fallback to basic announcement
+            announcement_content = f"📢 **Now Playing**\n**{self.bookTitle}**\nJoin us in {voice_channel.mention}!"
+    
         self.announcement_message = await ctx.send(
             content=announcement_content,
             embed=embed_message,
@@ -1138,7 +1164,7 @@ class AudioPlayBack(Extension):
             embed_message.add_image(self.cover_image)
     
         # Add footer
-        embed_message.footer = f"{s.bookshelf_traveller_footer} | Updated {formatted_time}"
+        embed_message.footer = f"Powered by Bookshelf Traveller 🕮 | {s.versionNumber}\nDisplay Last Updated: {formatted_time}"
     
         return embed_message
 
