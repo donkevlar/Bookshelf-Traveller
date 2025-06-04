@@ -1337,9 +1337,17 @@ class AudioPlayBack(Extension):
     # Component Callbacks ---------------------------
     def get_current_playback_buttons(self):
         """Get the current playback buttons based on current state"""
+        has_chapters = bool(
+            self.currentChapter and 
+            self.chapterArray and 
+            len(self.chapterArray) > 1 and
+            not self.isPodcast
+        )
+
         return get_playback_rows(
             play_state=self.play_state,
             repeat_enabled=self.repeat_enabled,
+            has_chapters=has_chapters,
             is_podcast=self.isPodcast,
             is_series=False # Need series detection logic
         )
@@ -1525,13 +1533,24 @@ class AudioPlayBack(Extension):
 
             logger.info(f"Set Volume {round(self.volume * 100)}")  # NOQA
 
-    @component_callback('forward_button')
-    async def callback_forward_button(self, ctx: ComponentContext):
+    async def shared_seek_callback(self, ctx: ComponentContext, seek_amount: float, is_forward: bool):
+        """
+        Shared logic for all seek component callbacks.
+    
+        Parameters:
+        - ctx: ComponentContext from the button callback
+        - seek_amount: Number of seconds to seek (positive value)
+        - is_forward: True for forward seeking, False for rewinding
+        """
+        if not ctx.voice_state:
+            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
+            return
+
         await ctx.defer(edit_origin=True)
         ctx.voice_state.channel.voice_state.player.stop()
 
-        # Use the unified method for forward seeking
-        result = await self.shared_seek(30.0, is_forward=True)
+        # Use the unified method for seeking
+        result = await self.shared_seek(seek_amount, is_forward=is_forward)
 
         if result is None:  # Book completed
             await ctx.edit_origin(content="📚 Book completed!")
@@ -1546,29 +1565,27 @@ class AudioPlayBack(Extension):
             self.auto_kill_session.stop()
 
         await ctx.edit_origin(embed=embed_message)
-        await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
+        await ctx.voice_state.channel.voice_state.play(self.audioObj)
+
+    @component_callback('forward_button')
+    async def callback_forward_button(self, ctx: ComponentContext):
+        """30-second forward seek"""
+        await self.shared_seek_callback(ctx, 30.0, is_forward=True)
 
     @component_callback('rewind_button')
     async def callback_rewind_button(self, ctx: ComponentContext):
-        await ctx.defer(edit_origin=True)
-        ctx.voice_state.channel.voice_state.player.stop()
+        """30-second rewind seek"""
+        await self.shared_seek_callback(ctx, 30.0, is_forward=False)
 
-        # Use the unified method for backward seeking
-        result = await self.shared_seek(30.0, is_forward=False)
-    
-        if result is None:  # Book completed (shouldn't happen on rewind, but just in case)
-            await ctx.edit_origin(content="📚 Book completed!")
-            return
+    @component_callback('forward_button_large')
+    async def callback_forward_button_large(self, ctx: ComponentContext):
+        """5-minute forward seek"""
+        await self.shared_seek_callback(ctx, 300.0, is_forward=True)
 
-        # Update the embedded message with new info
-        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-
-        # Stop auto kill session task
-        if self.auto_kill_session.running:
-            self.auto_kill_session.stop()
-
-        await ctx.edit_origin(embed=embed_message)
-        await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
+    @component_callback('rewind_button_large')
+    async def callback_rewind_button_large(self, ctx: ComponentContext):
+        """5-minute rewind seek"""
+        await self.shared_seek_callback(ctx, 300.0, is_forward=False)
 
     async def shared_seek(self, seek_amount, is_forward=True):
         """

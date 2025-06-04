@@ -3,7 +3,7 @@ from interactions import ActionRow, Button, ButtonStyle, Embed
 # --- Playback Rows ---
 
 def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=False,
-                     is_series=False, is_first_book=False, is_last_book=False):
+                     has_chapters=True, is_series=False, is_first_book=False, is_last_book=False):
     """Build dynamic playback control rows based on state"""
     is_paused = play_state == "paused"
     rows = []
@@ -31,17 +31,26 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
         Button(style=ButtonStyle.DANGER, label="Stop", custom_id='stop_audio_button')
     ))
 
-    # Row 3: Navigation controls (chapter vs episode)
+    # Row 3: Navigation controls - dynamic based on content type and chapter availability
     if is_podcast:
         rows.append(ActionRow(
             Button(style=ButtonStyle.PRIMARY, label="Prior Episode", custom_id='previous_episode_button'),
             Button(style=ButtonStyle.PRIMARY, label="Next Episode", custom_id='next_episode_button')
         ))
     else:  # book
-        rows.append(ActionRow(
-            Button(style=ButtonStyle.PRIMARY, label="Prior Chapter", custom_id='previous_chapter_button'),
-            Button(style=ButtonStyle.PRIMARY, label="Next Chapter", custom_id='next_chapter_button')
-        ))
+        if has_chapters:
+            # Traditional chapter navigation
+            rows.append(ActionRow(
+                Button(style=ButtonStyle.PRIMARY, label="Prior Chapter", custom_id='previous_chapter_button'),
+                Button(style=ButtonStyle.PRIMARY, label="Next Chapter", custom_id='next_chapter_button')
+            ))
+        else:
+            # Large time-based navigation for books without chapters
+            rows.append(ActionRow(
+               # Uses Braille blank space (U+2800), Discord trims regular spaces
+                Button(style=ButtonStyle.PRIMARY, label="⠀⠀⠀-5m⠀⠀⠀", custom_id='rewind_button_large'),
+                Button(style=ButtonStyle.PRIMARY, label="⠀⠀⠀+5m⠀⠀⠀", custom_id='forward_button_large')
+            ))
 
     # Row 4: Series controls (only for books in a series)
     if is_series:
