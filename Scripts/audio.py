@@ -143,10 +143,10 @@ class AudioPlayBack(Extension):
         
             # Build audio object with proper settings
             audio = AudioVolume(audio_obj)
-            audio.buffer_seconds = 5
+            audio.buffer_seconds = 1
             audio.locked_stream = True
-            audio.ffmpeg_before_args = f"-ss {actual_start_time}"
-            audio.ffmpeg_args = f"-ar 44100 -acodec aac -re"
+            audio.ffmpeg_before_args = f"-re -ss {actual_start_time}"
+            audio.ffmpeg_args = f""
             audio.bitrate = self.bitrate
             self.volume = audio.volume
         
