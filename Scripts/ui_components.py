@@ -2,90 +2,88 @@ from interactions import ActionRow, Button, ButtonStyle, Embed
 
 # --- Playback Rows ---
 
-def get_playback_rows(play_state="playing"):
-    """Return the appropriate button rows for a normal book."""
+def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=False,
+                     is_series=False, is_first_book=False, is_last_book=False):
+    """Build dynamic playback control rows based on state"""
     is_paused = play_state == "paused"
-    return [
-        # Row 1: Volume and playback controls
-        ActionRow(
-            Button(style=ButtonStyle.DANGER, label="-", custom_id='volume_down_button'),
-            Button(style=ButtonStyle.SUCCESS, label="+", custom_id='volume_up_button'),
-            Button(
-                style=ButtonStyle.SECONDARY if not is_paused else ButtonStyle.SUCCESS,
-                label="Resume" if is_paused else "Pause",
-                custom_id='play_audio_button' if is_paused else 'pause_audio_button'
-            ),
-            Button(style=ButtonStyle.DANGER, label="Stop", custom_id='stop_audio_button')
-        ),
-        # Row 2: Chapter navigation
-        ActionRow(
-            Button(style=ButtonStyle.PRIMARY, label="Prior Chapter", custom_id='previous_chapter_button'),
-            Button(style=ButtonStyle.PRIMARY, label="Next Chapter", custom_id='next_chapter_button')
-        ),
-        # Row 3: Time controls
-        ActionRow(
-            Button(style=ButtonStyle.SECONDARY, label="-30s", custom_id='rewind_button'),
-            Button(style=ButtonStyle.SECONDARY, label="+30s", custom_id='forward_button')
-        )
-    ]
+    rows = []
 
-def get_series_playback_rows(play_state="playing", is_first_book=False, is_last_book=False):
-    """Return playback rows for a book in a series."""
-    rows = get_playback_rows(play_state)
-    rows.append(
-        ActionRow(
-            Button(disabled=is_first_book, style=ButtonStyle.PRIMARY, label="Prior Book", custom_id="previous_book_button"),
-            Button(disabled=is_last_book, style=ButtonStyle.PRIMARY, label="Next Book", custom_id="next_book_button")
-        )
-    )
-    return rows
+    # Row 1: Volume and time controls
+    rows.append(ActionRow(
+        Button(style=ButtonStyle.DANGER, label="-", custom_id='volume_down_button'),
+        Button(style=ButtonStyle.SUCCESS, label="+", custom_id='volume_up_button'),
+        Button(style=ButtonStyle.SECONDARY, label="-30s", custom_id='rewind_button'),
+        Button(style=ButtonStyle.SECONDARY, label="+30s", custom_id='forward_button')
+    ))
 
-def get_podcast_playback_rows(play_state="playing"):
-    """Return playback rows for podcast content."""
-    is_paused = play_state == "paused"
-    return [
-        # Row 1: Volume and playback controls
-        ActionRow(
-            Button(style=ButtonStyle.DANGER, label="-", custom_id='volume_down_button'),
-            Button(style=ButtonStyle.SUCCESS, label="+", custom_id='volume_up_button'),
-            Button(
-                style=ButtonStyle.SECONDARY if not is_paused else ButtonStyle.SUCCESS,
-                label="Resume" if is_paused else "Pause",
-                custom_id='play_audio_button' if is_paused else 'pause_audio_button'
-            ),
-            Button(style=ButtonStyle.DANGER, label="Stop", custom_id='stop_audio_button')
+    # Row 2: Main playback controls
+    rows.append(ActionRow(
+        Button(
+            style=ButtonStyle.SECONDARY if not is_paused else ButtonStyle.SUCCESS,
+            label="Resume" if is_paused else "Pause",
+            custom_id='play_audio_button' if is_paused else 'pause_audio_button'
         ),
-        # Row 2: Episode navigation (replaces chapter buttons)
-        ActionRow(
+        Button(
+            style=ButtonStyle.SUCCESS if repeat_enabled else ButtonStyle.SECONDARY,
+            label="Repeat",
+            custom_id='repeat_button'
+        ),
+        Button(style=ButtonStyle.DANGER, label="Stop", custom_id='stop_audio_button')
+    ))
+
+    # Row 3: Navigation controls (chapter vs episode)
+    if is_podcast:
+        rows.append(ActionRow(
             Button(style=ButtonStyle.PRIMARY, label="Prior Episode", custom_id='previous_episode_button'),
             Button(style=ButtonStyle.PRIMARY, label="Next Episode", custom_id='next_episode_button')
-        ),
-        # Row 3: Time controls
-        ActionRow(
-            Button(style=ButtonStyle.SECONDARY, label="-30s", custom_id='rewind_button'),
-            Button(style=ButtonStyle.SECONDARY, label="+30s", custom_id='forward_button')
-        )
-    ]
+        ))
+    else:  # book
+        rows.append(ActionRow(
+            Button(style=ButtonStyle.PRIMARY, label="Prior Chapter", custom_id='previous_chapter_button'),
+            Button(style=ButtonStyle.PRIMARY, label="Next Chapter", custom_id='next_chapter_button')
+        ))
+
+    # Row 4: Series controls (only for books in a series)
+    if is_series:
+        rows.append(ActionRow(
+            Button(
+                disabled=is_first_book, 
+                style=ButtonStyle.PRIMARY, 
+                label="Prior Book", 
+                custom_id="previous_book_button"
+            ),
+            Button(
+                disabled=is_last_book, 
+                style=ButtonStyle.PRIMARY, 
+                label="Next Book", 
+                custom_id="next_book_button"
+            )
+        ))
+
+    return rows
 
 # --- Embeds ---
 
 def create_playback_embed(book_title, chapter_title, progress, current_time, duration, 
-                           username, user_type, cover_image, color, volume, timestamp, version):
+                           username, user_type, cover_image, color, volume, timestamp, version, repeat_enabled=False):
     embed = Embed(
         title=book_title,
         description=f"Currently playing {book_title}",
         color=color
     )
 
-    user_info = f"Username: **{username}**\nUser Type: **{user_type}**"
+    user_info = f"User: **{username}** (**{user_type}**)"
     embed.add_field(name='ABS Information', value=user_info)
 
+    repeat_status = "Enabled" if repeat_enabled else "Disabled"
+
     playback_info = (
-        f"Current State: **PLAYING**\n"
+        f"Status: **Playing**\n"
         f"Progress: **{progress}**\n"
-        f"Current Time: **{current_time}**\n"
         f"Current Chapter: **{chapter_title}**\n"
+        f"Current Time: **{current_time}**\n"
         f"Book Duration: **{duration}**\n"
+#        f"Repeat: **{repeat_status}\n**"
         f"Current volume: **{round(volume * 100)}%**"
     )
     embed.add_field(name='Playback Information', value=playback_info)

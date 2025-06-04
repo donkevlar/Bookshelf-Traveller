@@ -7,18 +7,11 @@ from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
 import settings as s
 from settings import TIMEZONE
+from ui_components import get_playback_rows, create_playback_embed
 import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import random
-
-# Import UI component functions
-from ui_components import (
-    get_playback_rows,
-    get_series_playback_rows,
-    get_podcast_playback_rows,
-    create_playback_embed
-)
 
 load_dotenv()
 
@@ -77,6 +70,7 @@ class AudioPlayBack(Extension):
         self.activeSessions = 0
         self.sessionOwner = None
         self.announcement_message = None
+        self.repeat_enabled = False
         # Chapter VARS
         self.currentChapter = None
         self.chapterArray = None
@@ -586,7 +580,8 @@ class AudioPlayBack(Extension):
             color=color,
             volume=self.volume,
             timestamp=formatted_time,
-            version=s.versionNumber
+            version=s.versionNumber,
+            repeat_enabled=self.repeat_enabled
         )
 
     # Commands --------------------------------
@@ -735,7 +730,7 @@ class AudioPlayBack(Extension):
                     self.audio_message = await ctx.send(
                         content=start_message,
                         embed=embed_message,
-                        components=get_playback_rows("playing")
+                        components=self.get_current_playback_buttons()
                     )
 
                     logger.info(f"Created audio message with ID: {self.audio_message.id} in channel: {self.audio_message.channel.id}")
@@ -894,10 +889,7 @@ class AudioPlayBack(Extension):
                 logger.error(f"Error trying to fetch chapter title. {e}")
 
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            if self.play_state == "playing":
-                await ctx.send(embed=embed_message, components=get_playback_rows("playing"), ephemeral=True)
-            elif self.play_state == "paused":
-                await ctx.send(embed=embed_message, components=get_playback_rows("paused"), ephemeral=True)
+            await ctx.send(embed=embed_message, components=self.get_current_playback_buttons(), ephemeral=True)
         else:
             return await ctx.send("Bot not in voice channel or an error has occured. Please try again later!", ephemeral=True)
 
@@ -1202,6 +1194,15 @@ class AudioPlayBack(Extension):
         await ctx.send(choices=choices)
 
     # Component Callbacks ---------------------------
+    def get_current_playback_buttons(self):
+        """Get the current playback buttons based on current state"""
+        return get_playback_rows(
+            play_state=self.play_state,
+            repeat_enabled=self.repeat_enabled,
+            is_podcast=self.isPodcast,
+            is_series=False # Need series detection logic
+        )
+
     @component_callback('pause_audio_button')
     async def callback_pause_button(self, ctx: ComponentContext):
         if ctx.voice_state:
@@ -1210,9 +1211,11 @@ class AudioPlayBack(Extension):
             ctx.voice_state.channel.voice_state.pause()
             self.session_update.stop()
             logger.warning("Auto session kill task running... Checking for inactive session in 5 minutes!")
+
             self.auto_kill_session.start()
+
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            await ctx.edit_origin(content="Play", components=get_playback_rows("paused"), embed=embed_message)
+            await ctx.edit_origin(content="Play", components=self.get_current_playback_buttons(), embed=embed_message)
 
     @component_callback('play_audio_button')
     async def callback_play_button(self, ctx: ComponentContext):
@@ -1221,14 +1224,25 @@ class AudioPlayBack(Extension):
             self.play_state = 'playing'
             ctx.voice_state.channel.voice_state.resume()
             self.session_update.start()
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
 
             # Stop auto kill session task
             if self.auto_kill_session.running:
                 logger.info("Stopping auto kill session backend task.")
                 self.auto_kill_session.stop()
 
-            await ctx.edit_origin(components=get_playback_rows("playing"), embed=embed_message)
+            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
+            await ctx.edit_origin(components=self.get_current_playback_buttons(), embed=embed_message)
+
+    @component_callback('repeat_button')
+    async def callback_repeat_button(self, ctx: ComponentContext):
+        """Toggle repeat mode on/off"""
+        self.repeat_enabled = not self.repeat_enabled
+
+        status = "enabled" if self.repeat_enabled else "disabled"
+        logger.info(f'Repeat mode {status}')
+
+        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
+        await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
 
     @component_callback('next_chapter_button')
     async def callback_next_chapter_button(self, ctx: ComponentContext):
@@ -1244,12 +1258,8 @@ class AudioPlayBack(Extension):
 
             await ctx.defer(edit_origin=True)
 
+            await ctx.edit_origin(components=self.get_current_playback_buttons())
 
-            if self.play_state == 'playing':
-                await ctx.edit_origin(components=get_playback_rows("playing"))
-                ctx.voice_state.channel.voice_state.player.stop()
-            elif self.play_state == 'paused':
-                await ctx.edit_origin(components=get_playback_rows("paused"))
             ctx.voice_state.channel.voice_state.player.stop()
 
             # Find next chapter
@@ -1298,10 +1308,10 @@ class AudioPlayBack(Extension):
             await ctx.defer(edit_origin=True)
 
             if self.play_state == 'playing':
-                await ctx.edit_origin(components=get_playback_rows("playing"))
+                await ctx.edit_origin(components=self.get_current_playback_buttons())
                 ctx.voice_state.channel.voice_state.player.stop()
             elif self.play_state == 'paused':
-                await ctx.edit_origin(components=get_playback_rows("paused"))
+                await ctx.edit_origin(components=self.get_current_playback_buttons())
                 ctx.voice_state.channel.voice_state.player.stop()
             else:
                 await ctx.send(content='Error with previous chapter command, bot not active or voice not connected!', ephemeral=True)
@@ -1432,6 +1442,7 @@ class AudioPlayBack(Extension):
         """
         # Stop current playback and session
         self.session_update.stop()
+
         await c.bookshelf_close_session(self.sessionID)
 
         # Use our current tracked position as the baseline for seeking
@@ -1463,6 +1474,7 @@ class AudioPlayBack(Extension):
                 self.nextTime = max(0.0, self.currentTime - seek_amount)
 
         else:
+           # Chapter data available
             current_chapter = self.currentChapter
             current_index = next((i for i, ch in enumerate(self.chapterArray) if ch.get('id') == current_chapter.get('id')), None)
             prev_chapter = self.chapterArray[current_index - 1] if current_index is not None and current_index > 0 else None
