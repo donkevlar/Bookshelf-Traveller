@@ -46,7 +46,8 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 | `OPT_IMAGE_URL`    | Optional HTTPS URL for generating cover images and sending them to the discord API. This is primarily if you experience similar issues as mentioned above. | *String*  | **NO**    |
 | `TIMEZONE`         | Default set to `America/Toronto`                                                                                                                           | *String*  | **NO**    |
 | `DEFAULT_PROVIDER` | Experimental, set the default search provider for certain commands.                                                                                        | *String*  | **NO**    |
-| `DEBUG_MODE`       | By default, set to `False`. It enables verbose logs and also disables all notifications.                                                                   | *Boolean*  | **NO**    |
+| `DEBUG_MODE`       | By default, set to `False`. It enables verbose logs and also disables all notifications.                                                                   | *Boolean* | **NO**    |
+| `FFMPEG_DEBUG`     | By default, set to `False`. It creates ffmpege logs inside the appdata folder.                                                                             | *Boolean* | **NO**    |
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**

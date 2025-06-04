@@ -1,4 +1,5 @@
 import asyncio
+import os
 
 import pytz
 from interactions import *
@@ -131,6 +132,14 @@ class AudioPlayBack(Extension):
             else:
                 actual_start_time = server_current_time
                 logger.info(f"Using server current time: {actual_start_time}")
+
+            if s.FFMPEG_DEBUG:
+                # Create ffmpeg logs directory in appdata
+                ffmpeg_log_dir = os.path.join("db", "ffmpeg")
+                os.makedirs(ffmpeg_log_dir, exist_ok=True)
+    
+                # Set FFmpeg report environment variable. level=24 for warning. 32 for info. 48 for debug.
+                os.environ["FFREPORT"] = f"file={ffmpeg_log_dir}/ffmpeg-%t.log:level=32"
         
             # Build audio object with proper settings
             audio = AudioVolume(audio_obj)

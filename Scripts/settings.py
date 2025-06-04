@@ -34,6 +34,9 @@ TIMEZONE = os.getenv("TIMEZONE", "America/Toronto")
 # Audio Enabled
 AUDIO_ENABLED = str2bool(os.getenv('AUDIO_ENABLED', "True"))
 
+# FFmpeg Debug Logging
+FFMPEG_DEBUG = str2bool(os.getenv('FFMPEG_DEBUG', "False"))
+
 # Multi-user functionality, will remove token from admin and all admin functions
 MULTI_USER = str2bool(os.environ.get('MULTI_USER', "True"))
 
@@ -77,7 +80,8 @@ current_config = {
     "OWNER_ONLY": OWNER_ONLY,
     "TASK_FREQUENCY": TASK_FREQUENCY,
     "AUDIO_ENABLED": AUDIO_ENABLED,
-    "MULTI_USER": MULTI_USER
+    "MULTI_USER": MULTI_USER,
+    "FFMPEG_DEBUG": FFMPEG_DEBUG
 }
 
 # Used for embed footers
