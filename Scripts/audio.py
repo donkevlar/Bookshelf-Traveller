@@ -7,18 +7,11 @@ from interactions.api.voice.audio import AudioVolume
 import bookshelfAPI as c
 import settings as s
 from settings import TIMEZONE
+from ui_components import get_playback_rows, create_playback_embed
 import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import random
-
-# Import UI component functions
-from ui_components import (
-    get_playback_rows,
-    get_series_playback_rows,
-    get_podcast_playback_rows,
-    create_playback_embed
-)
 
 load_dotenv()
 
@@ -77,6 +70,8 @@ class AudioPlayBack(Extension):
         self.activeSessions = 0
         self.sessionOwner = None
         self.announcement_message = None
+        self.repeat_enabled = False
+        self.needs_restart = False
         # Chapter VARS
         self.currentChapter = None
         self.chapterArray = None
@@ -172,6 +167,25 @@ class AudioPlayBack(Extension):
 
     @Task.create(trigger=IntervalTrigger(seconds=updateFrequency))
     async def session_update(self):
+        # Check for restart flag
+        if self.needs_restart:
+            self.needs_restart = False
+        
+            restart_success = await self.restart_media_from_beginning()
+            if restart_success and self.audio_context and self.audio_context.voice_state:
+                try:
+                    await self.audio_context.voice_state.stop()
+                    await self.audio_context.voice_state.play(self.audioObj)
+                    # Task continues running normally
+                except Exception as e:
+                    logger.error(f"Error starting playback after restart: {e}")
+                    await self.cleanup_session("restart failed")
+            else:
+                logger.error("Restart failed - cleaning up session")
+                await self.cleanup_session("restart failed")
+
+            return  # Exit this iteration, but task keeps running
+
         logger.debug(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
         try:
             self.current_playback_time = self.current_playback_time + updateFrequency
@@ -196,12 +210,18 @@ class AudioPlayBack(Extension):
                 
                     if time_remaining <= 30.0:
                         if time_remaining <= 0:
-                            logger.info("Stream has reached the end - cleaning up")
-                            await self.cleanup_session("natural audio completion")
-                            return
+                            # Book has truly reached the end
+                            if self.repeat_enabled:
+                                logger.info("Book completed with repeat enabled - triggering restart")
+                                self.needs_restart = True
+                                return  # Let the restart logic handle it
+                            else:
+                                logger.info("Stream has reached the end - cleaning up")
+                                await self.cleanup_session("natural audio completion")
+                                return
                         else:
                             logger.info(f"ABS marked book finished with {time_remaining:.1f}s remaining - letting stream finish naturally")
-                            # Don't cleanup yet, let it play out
+                            # Don't cleanup yet, let it play out completely
                     else:
                         logger.info("ABS marked book as finished - cleaning up")
                         await self.cleanup_session("book completed by ABS")
@@ -433,6 +453,81 @@ class AudioPlayBack(Extension):
             # End loop
             self.auto_kill_session.stop()
 
+    async def restart_media_from_beginning(self):
+        """
+        Restart the current media (book/podcast) from the beginning while preserving session properties.
+        This method handles the complete restart process for both books and podcast episodes.
+        """
+        if not self.bookItemID:
+            logger.error("Cannot restart - no active media session")
+            return False
+    
+        try:
+            # Store current session properties we want to preserve
+            preserved_book_id = self.bookItemID
+            preserved_title = self.bookTitle
+            preserved_duration = self.bookDuration
+            preserved_cover = self.cover_image
+            preserved_chapter_array = self.chapterArray
+            preserved_volume = self.volume
+            preserved_session_owner = self.sessionOwner
+            preserved_context = self.audio_context
+            preserved_voice_channel = self.context_voice_channel
+            preserved_current_channel = self.current_channel
+            preserved_active_guild_id = self.active_guild_id
+            preserved_username = self.username
+            preserved_user_type = self.user_type
+            preserved_is_podcast = self.isPodcast
+            preserved_current_playback_time = self.current_playback_time
+        
+            # Close current session
+            if self.sessionID:
+                await c.bookshelf_close_session(self.sessionID)
+        
+            # Use unified session builder to create new session from beginning
+            audio, actual_start_time, session_id, book_title, book_duration = await self.build_session(
+                item_id=preserved_book_id,
+                force_restart=True
+            )
+        
+            # Restore preserved properties
+            self.bookTitle = preserved_title
+            self.bookDuration = preserved_duration
+            self.cover_image = preserved_cover
+            self.chapterArray = preserved_chapter_array
+            self.volume = preserved_volume
+            self.sessionOwner = preserved_session_owner
+            self.audio_context = preserved_context
+            self.context_voice_channel = preserved_voice_channel
+            self.current_channel = preserved_current_channel
+            self.active_guild_id = preserved_active_guild_id
+            self.username = preserved_username
+            self.user_type = preserved_user_type
+            self.isPodcast = preserved_is_podcast
+            self.current_playback_time = preserved_current_playback_time
+
+            self.currentTime = 0.0
+        
+            # Set to first chapter if it's a book with chapters
+            if not self.isPodcast and self.chapterArray and len(self.chapterArray) > 0:
+                self.chapterArray.sort(key=lambda x: float(x.get('start', 0)))
+                first_chapter = self.chapterArray[0]
+                self.currentChapter = first_chapter
+                self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
+        
+            # Reset playback state
+            self.play_state = 'playing'
+            self.audioObj = audio
+        
+            # Apply preserved volume to new audio object
+            audio.volume = preserved_volume
+        
+            return True
+        
+        except Exception as e:
+            logger.error(f"Error restarting media from beginning: {e}")
+            return False
+
     # Random Functions ------------------------
     # Change Chapter Function
     async def move_chapter(self, option: str):
@@ -457,15 +552,55 @@ class AudioPlayBack(Extension):
 
             if option == 'next':
                 nextChapterID = currentChapterID + 1
-
-                # Check if trying to go past last chapter
                 max_chapter_id = max(int(ch.get('id', 0)) for ch in self.chapterArray)
+
                 if nextChapterID > max_chapter_id:
-                    logger.info("Skipped past final chapter - marking complete and cleaning up")
-                    await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
-                    await self.cleanup_session("completed via chapter skip")
-                    self.found_next_chapter = False
-                    return
+                    if self.repeat_enabled:
+                        logger.info("Reached final chapter with repeat enabled - restarting book")
+                
+                       # Stop the session update task before restart
+                        if self.session_update.running:
+                            self.session_update.stop()
+                
+                        # Handle restart directly
+                        restart_success = await self.restart_media_from_beginning()
+                        if restart_success:
+                            # Send manual session sync like normal chapter moves do
+                            try:
+                                updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
+                                    item_id=self.bookItemID, 
+                                    session_id=self.sessionID,
+                                    current_time=updateFrequency - 0.5, 
+                                    next_time=0.0)  # Explicitly sync to beginning
+        
+                                self.currentTime = updatedTime  # Should be 0.0
+                                self.nextTime = None
+                            except Exception as e:
+                                logger.error(f"Error syncing restart position: {e}")
+
+                            # Set the chapter info for the UI callback to use
+                            if self.chapterArray and len(self.chapterArray) > 0:
+                                first_chapter = self.chapterArray[0]
+                                self.newChapterTitle = first_chapter.get('title', 'Chapter 1')
+                            else:
+                                self.newChapterTitle = 'Chapter 1'
+
+                            # Restart the session update task
+                            self.session_update.start()
+                            self.found_next_chapter = True
+                            return
+                        else:
+                            logger.error("Restart failed during chapter navigation")
+                            await self.cleanup_session("restart failed")
+                            self.found_next_chapter = False
+                            return
+                    else:
+                        # Normal completion handling
+                        logger.info("Skipped past final chapter - marking complete and cleaning up")
+                        await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
+                        await self.cleanup_session("completed via chapter skip")
+                        self.found_next_chapter = False
+                        return
 
             else:
                 nextChapterID = currentChapterID - 1
@@ -586,7 +721,8 @@ class AudioPlayBack(Extension):
             color=color,
             volume=self.volume,
             timestamp=formatted_time,
-            version=s.versionNumber
+            version=s.versionNumber,
+            repeat_enabled=self.repeat_enabled
         )
 
     # Commands --------------------------------
@@ -735,7 +871,7 @@ class AudioPlayBack(Extension):
                     self.audio_message = await ctx.send(
                         content=start_message,
                         embed=embed_message,
-                        components=get_playback_rows("playing")
+                        components=self.get_current_playback_buttons()
                     )
 
                     logger.info(f"Created audio message with ID: {self.audio_message.id} in channel: {self.audio_message.channel.id}")
@@ -894,10 +1030,7 @@ class AudioPlayBack(Extension):
                 logger.error(f"Error trying to fetch chapter title. {e}")
 
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            if self.play_state == "playing":
-                await ctx.send(embed=embed_message, components=get_playback_rows("playing"), ephemeral=True)
-            elif self.play_state == "paused":
-                await ctx.send(embed=embed_message, components=get_playback_rows("paused"), ephemeral=True)
+            await ctx.send(embed=embed_message, components=self.get_current_playback_buttons(), ephemeral=True)
         else:
             return await ctx.send("Bot not in voice channel or an error has occured. Please try again later!", ephemeral=True)
 
@@ -1202,6 +1335,23 @@ class AudioPlayBack(Extension):
         await ctx.send(choices=choices)
 
     # Component Callbacks ---------------------------
+    def get_current_playback_buttons(self):
+        """Get the current playback buttons based on current state"""
+        has_chapters = bool(
+            self.currentChapter and 
+            self.chapterArray and 
+            len(self.chapterArray) > 1 and
+            not self.isPodcast
+        )
+
+        return get_playback_rows(
+            play_state=self.play_state,
+            repeat_enabled=self.repeat_enabled,
+            has_chapters=has_chapters,
+            is_podcast=self.isPodcast,
+            is_series=False # Need series detection logic
+        )
+
     @component_callback('pause_audio_button')
     async def callback_pause_button(self, ctx: ComponentContext):
         if ctx.voice_state:
@@ -1210,9 +1360,11 @@ class AudioPlayBack(Extension):
             ctx.voice_state.channel.voice_state.pause()
             self.session_update.stop()
             logger.warning("Auto session kill task running... Checking for inactive session in 5 minutes!")
+
             self.auto_kill_session.start()
+
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            await ctx.edit_origin(content="Play", components=get_playback_rows("paused"), embed=embed_message)
+            await ctx.edit_origin(content="Play", components=self.get_current_playback_buttons(), embed=embed_message)
 
     @component_callback('play_audio_button')
     async def callback_play_button(self, ctx: ComponentContext):
@@ -1221,14 +1373,22 @@ class AudioPlayBack(Extension):
             self.play_state = 'playing'
             ctx.voice_state.channel.voice_state.resume()
             self.session_update.start()
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
 
             # Stop auto kill session task
             if self.auto_kill_session.running:
                 logger.info("Stopping auto kill session backend task.")
                 self.auto_kill_session.stop()
 
-            await ctx.edit_origin(components=get_playback_rows("playing"), embed=embed_message)
+            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
+            await ctx.edit_origin(components=self.get_current_playback_buttons(), embed=embed_message)
+
+    @component_callback('repeat_button')
+    async def callback_repeat_button(self, ctx: ComponentContext):
+        """Toggle repeat mode on/off"""
+        self.repeat_enabled = not self.repeat_enabled
+
+        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
+        await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
 
     @component_callback('next_chapter_button')
     async def callback_next_chapter_button(self, ctx: ComponentContext):
@@ -1243,26 +1403,24 @@ class AudioPlayBack(Extension):
                 return  # Return early without stopping playback
 
             await ctx.defer(edit_origin=True)
+            await ctx.edit_origin(components=self.get_current_playback_buttons())
 
-
-            if self.play_state == 'playing':
-                await ctx.edit_origin(components=get_playback_rows("playing"))
-                ctx.voice_state.channel.voice_state.player.stop()
-            elif self.play_state == 'paused':
-                await ctx.edit_origin(components=get_playback_rows("paused"))
+            # Stop current playback first
             ctx.voice_state.channel.voice_state.player.stop()
 
-            # Find next chapter
+            # Find next chapter or restart
             await self.move_chapter(option='next')
 
-            # Check if session was cleaned up (book completed)
+            # Check if session was cleaned up (book completed without repeat)
             if not self.sessionID:
                 await ctx.edit_origin(content="📚 Book completed!")
                 return
 
-            # Check if move_chapter succeeded before proceeding
+            # Check if move_chapter succeeded
             if self.found_next_chapter:
-                embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
+                # For restart case, newChapterTitle will be set to first chapter
+                chapter_title = self.newChapterTitle if self.newChapterTitle else self.currentChapterTitle
+                embed_message = self.modified_message(color=ctx.author.accent_color, chapter=chapter_title)
 
                 # Stop auto kill session task
                 if self.auto_kill_session.running:
@@ -1270,7 +1428,8 @@ class AudioPlayBack(Extension):
                     self.auto_kill_session.stop()
 
                 await ctx.edit(embed=embed_message)
-                await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
+
+                await ctx.voice_state.channel.voice_state.play(self.audioObj)
             else:
                 # This shouldn't be reached since we check earlier, but just in case
                 await ctx.send(content=f"No next chapter found.", ephemeral=True)
@@ -1280,6 +1439,7 @@ class AudioPlayBack(Extension):
 
             # Resetting Variable
             self.found_next_chapter = False
+            self.newChapterTitle = ''  # Clear after use
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
@@ -1298,10 +1458,10 @@ class AudioPlayBack(Extension):
             await ctx.defer(edit_origin=True)
 
             if self.play_state == 'playing':
-                await ctx.edit_origin(components=get_playback_rows("playing"))
+                await ctx.edit_origin(components=self.get_current_playback_buttons())
                 ctx.voice_state.channel.voice_state.player.stop()
             elif self.play_state == 'paused':
-                await ctx.edit_origin(components=get_playback_rows("paused"))
+                await ctx.edit_origin(components=self.get_current_playback_buttons())
                 ctx.voice_state.channel.voice_state.player.stop()
             else:
                 await ctx.send(content='Error with previous chapter command, bot not active or voice not connected!', ephemeral=True)
@@ -1373,20 +1533,29 @@ class AudioPlayBack(Extension):
 
             logger.info(f"Set Volume {round(self.volume * 100)}")  # NOQA
 
-    @component_callback('forward_button')
-    async def callback_forward_button(self, ctx: ComponentContext):
+    async def shared_seek_callback(self, ctx: ComponentContext, seek_amount: float, is_forward: bool):
+        """
+        Shared logic for all seek component callbacks.
+    
+        Parameters:
+        - ctx: ComponentContext from the button callback
+        - seek_amount: Number of seconds to seek (positive value)
+        - is_forward: True for forward seeking, False for rewinding
+        """
+        if not ctx.voice_state:
+            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
+            return
+
         await ctx.defer(edit_origin=True)
         ctx.voice_state.channel.voice_state.player.stop()
 
-        # Use the unified method for forward seeking
-        result = await self.shared_seek(30.0, is_forward=True)
+        # Use the unified method for seeking
+        result = await self.shared_seek(seek_amount, is_forward=is_forward)
+
         if result is None:  # Book completed
             await ctx.edit_origin(content="📚 Book completed!")
             return
 
-        # Start the session update task
-        self.session_update.start()
-
         # Update the embedded message with new info
         embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
 
@@ -1396,29 +1565,27 @@ class AudioPlayBack(Extension):
             self.auto_kill_session.stop()
 
         await ctx.edit_origin(embed=embed_message)
-        await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
+        await ctx.voice_state.channel.voice_state.play(self.audioObj)
+
+    @component_callback('forward_button')
+    async def callback_forward_button(self, ctx: ComponentContext):
+        """30-second forward seek"""
+        await self.shared_seek_callback(ctx, 30.0, is_forward=True)
 
     @component_callback('rewind_button')
     async def callback_rewind_button(self, ctx: ComponentContext):
-        await ctx.defer(edit_origin=True)
-        ctx.voice_state.channel.voice_state.player.stop()
+        """30-second rewind seek"""
+        await self.shared_seek_callback(ctx, 30.0, is_forward=False)
 
-        # Use the unified method for backward seeking
-        await self.shared_seek(30.0, is_forward=False)
+    @component_callback('forward_button_large')
+    async def callback_forward_button_large(self, ctx: ComponentContext):
+        """5-minute forward seek"""
+        await self.shared_seek_callback(ctx, 300.0, is_forward=True)
 
-        # Start the session update task
-        self.session_update.start()
-
-        # Update the embedded message with new info
-        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-
-        # Stop auto kill session task
-        if self.auto_kill_session.running:
-            logger.info("Stopping auto kill session backend task.")
-            self.auto_kill_session.stop()
-
-        await ctx.edit_origin(embed=embed_message)
-        await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
+    @component_callback('rewind_button_large')
+    async def callback_rewind_button_large(self, ctx: ComponentContext):
+        """5-minute rewind seek"""
+        await self.shared_seek_callback(ctx, 300.0, is_forward=False)
 
     async def shared_seek(self, seek_amount, is_forward=True):
         """
@@ -1453,16 +1620,45 @@ class AudioPlayBack(Extension):
             if is_forward:
                 potential_time = self.currentTime + seek_amount
                 if potential_time >= self.bookDuration:
-                    logger.info("Seeked past book end (no chapters) - marking complete and cleaning up")
-                    await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
-                    await self.cleanup_session("completed via seek past end")
-                    return None
+                    if self.repeat_enabled:
+                        logger.info("Seeked past book end (no chapters, repeat enabled) - restarting book")
+                    
+                        # Handle restart directly
+                        restart_success = await self.restart_media_from_beginning()
+                        if restart_success:
+                            # Send manual session sync
+                            try:
+                                updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
+                                    item_id=self.bookItemID, 
+                                    session_id=self.sessionID,
+                                    current_time=updateFrequency - 0.5, 
+                                    next_time=0.0)  # Explicitly sync to beginning
+                        
+                                self.currentTime = updatedTime  # Should be 0.0
+                                self.nextTime = None
+                                logger.info(f"Manual sync after restart: {updatedTime}")
+                            except Exception as e:
+                                logger.error(f"Error syncing restart position: {e}")
+
+                            # Restart the session update task
+                            self.session_update.start()
+                            return self.audioObj
+                        else:
+                            logger.error("Restart failed during seek")
+                            await self.cleanup_session("restart failed")
+                            return None
+                    else:
+                        logger.info("Seeked past book end (no chapters, no repeat) - marking complete and cleaning up")
+                        await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
+                        await self.cleanup_session("completed via seek past end")
+                        return None
         
                 self.nextTime = self.currentTime + seek_amount
             else:
                 self.nextTime = max(0.0, self.currentTime - seek_amount)
 
         else:
+           # Chapter data is available
             current_chapter = self.currentChapter
             current_index = next((i for i, ch in enumerate(self.chapterArray) if ch.get('id') == current_chapter.get('id')), None)
             prev_chapter = self.chapterArray[current_index - 1] if current_index is not None and current_index > 0 else None
@@ -1481,10 +1677,37 @@ class AudioPlayBack(Extension):
                     # Check if seeking would go past book end BEFORE setting nextTime
                     potential_time = self.currentTime + seek_amount
                     if potential_time >= self.bookDuration:
-                        logger.info("Seeked past book end - marking complete and cleaning up")
-                        await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
-                        await self.cleanup_session("completed via seek past end")
-                        return None
+                        if self.repeat_enabled:
+                            logger.info("Seeked past book end (with chapters, repeat enabled) - restarting book")
+                    
+                            # Handle restart directly
+                            restart_success = await self.restart_media_from_beginning()
+                            if restart_success:
+                                try:
+                                    updatedTime, duration, serverCurrentTime, finished_book = await c.bookshelf_session_update(
+                                        item_id=self.bookItemID, 
+                                        session_id=self.sessionID,
+                                        current_time=updateFrequency - 0.5, 
+                                        next_time=0.0)
+                            
+                                    self.currentTime = updatedTime
+                                    self.nextTime = None
+                                    logger.info(f"Manual sync after restart (no chapters): {updatedTime}")
+                                except Exception as e:
+                                    logger.error(f"Error syncing restart position: {e}")
+
+                                # Restart the session update task
+                                self.session_update.start()
+                                return self.audioObj
+                            else:
+                                logger.error("Restart failed during seek")
+                                await self.cleanup_session("restart failed")
+                                return None
+                        else:
+                            logger.info("Seeked past book end (with chapters, no repeat) - marking complete and cleaning up")
+                            await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
+                            await self.cleanup_session("completed via seek past end")
+                            return None
             
                     self.nextTime = min(self.bookDuration, self.currentTime + seek_amount)
                     logger.debug("Forward: simple time advance")
@@ -1535,6 +1758,7 @@ class AudioPlayBack(Extension):
         self.audioObj = audio
         self.nextTime = None
 
+        self.session_update.start()
         return audio
 
     # ----------------------------
