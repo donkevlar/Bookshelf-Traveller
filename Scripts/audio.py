@@ -73,6 +73,7 @@ class AudioPlayBack(Extension):
         self.announcement_message = None
         self.repeat_enabled = False
         self.needs_restart = False
+        self.stream_started = False
         # Chapter VARS
         self.currentChapter = None
         self.chapterArray = None
@@ -145,6 +146,18 @@ class AudioPlayBack(Extension):
             audio.ffmpeg_args = f""
             audio.bitrate = self.bitrate
             self.volume = audio.volume
+
+            # Hook into the audio source to detect when streaming starts
+            original_read = audio.read
+        
+            def stream_detecting_read(*args, **kwargs):
+                data = original_read(*args, **kwargs)
+                if data and not self.stream_started:
+                    self.stream_started = True
+                    logger.info("🎵 AUDIO STREAM DETECTED - FFmpeg is now providing data!")
+                return data
+        
+            audio.read = stream_detecting_read
         
             # Update instance variables
             self.sessionID = session_id
@@ -186,6 +199,11 @@ class AudioPlayBack(Extension):
                 await self.cleanup_session("restart failed")
 
             return  # Exit this iteration, but task keeps running
+
+        # Don't sync until FFmpeg is actually streaming
+        if not self.stream_started:
+            logger.info("Waiting for FFmpeg to start streaming...")
+            return
 
         logger.debug(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
         try:
@@ -383,6 +401,7 @@ class AudioPlayBack(Extension):
             self.activeSessions = max(0, self.activeSessions - 1)  # Prevent negative
             self.sessionOwner = None
             self.play_state = 'stopped'
+            self.stream_started = False
 
             # Clear message references
             self.audio_message = None
