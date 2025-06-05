@@ -809,13 +809,17 @@ class AudioPlayBack(Extension):
                 force_restart=startover
             )
 
-            if startover and chapter_array and len(chapter_array) > 0:
-                # Sort chapters by start time
-                chapter_array.sort(key=lambda x: float(x.get('start', 0)))
-                first_chapter = chapter_array[0]
-                self.currentChapter = first_chapter
-                self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
-                logger.info(f"Setting to first chapter: {self.currentChapterTitle}")
+            if startover:
+                if chapter_array and len(chapter_array) > 0:
+                    # Book has chapters - use first chapter
+                    chapter_array.sort(key=lambda x: float(x.get('start', 0)))
+                    first_chapter = chapter_array[0]
+                    self.currentChapter = first_chapter
+                    self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
+                else:
+                    # Book has no chapters - clear chapter info
+                    self.currentChapter = None
+                    self.currentChapterTitle = 'No Chapters'
 
             # Get Book Cover URL
             cover_image = await c.bookshelf_cover_image(book)
