@@ -8,6 +8,7 @@ import bookshelfAPI as c
 import settings as s
 from settings import TIMEZONE
 from ui_components import get_playback_rows, create_playback_embed
+from utils import add_progress_indicators
 import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -1256,6 +1257,11 @@ class AudioPlayBack(Extension):
                     logger.info("No valid recent sessions found, only showing random option")
                     choices = [{"name": "📚 Random Book (Surprise me!)", "value": "random"}]
 
+                # Add progress indicators
+                choices, timed_out = await add_progress_indicators(choices)
+                if timed_out:
+                    logger.warning("Autocomplete progress check timed out for recent sessions")
+
                 await ctx.send(choices=choices)
 
             except Exception as e:
@@ -1346,8 +1352,13 @@ class AudioPlayBack(Extension):
                     if 1 <= len(name) <= 100:
                         choices.append({"name": name, "value": f"{book_id}"})
 
+                # Add progress indicators
+                choices, timed_out = await add_progress_indicators(choices)
+                if timed_out:
+                    logger.warning("Autocomplete progress check timed out for search results")
+
                 await ctx.send(choices=choices)
-                logger.info(choices)
+                logger.debug(f"Sending {len(choices)} autocomplete choices")
 
             except Exception as e:  # NOQA
                 await ctx.send(choices=choices)

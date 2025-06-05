@@ -9,6 +9,7 @@ from datetime import datetime
 # Local file imports
 import bookshelfAPI as c
 import settings
+from utils import add_progress_indicators
 
 # Logger Config
 logger = logging.getLogger("bot")
@@ -530,6 +531,11 @@ class PrimaryCommands(Extension):
                         count += 1
                         choices.append(formatted_item)
 
+                # Add progress indicators
+                choices, timed_out = await add_progress_indicators(choices)
+                if timed_out:
+                    logger.warning("Autocomplete progress check timed out for recent sessions")
+
                 await ctx.send(choices=choices)
 
             except Exception as e:
@@ -555,6 +561,11 @@ class PrimaryCommands(Extension):
                             logger.debug(f'Subtitle found: {subtitle} with length {len(subtitle)}.')
                             if len(subtitle) <= 100:
                                 choices.append({"name": f"{subtitle}", "value": f"{book_id}"})
+
+                # Add progress indicators
+                choices, timed_out = await self.add_progress_indicators(choices)
+                if timed_out:
+                    logger.warning("Autocomplete progress check timed out for search results")
 
                 await ctx.send(choices=choices)
 
