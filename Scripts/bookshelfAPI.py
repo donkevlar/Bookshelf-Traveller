@@ -627,6 +627,53 @@ async def bookshelf_search_users(name):
                 return isFound, username, user_id, c_last_seen, isActive
 
 
+async def bookshelf_get_series_id(series_name: str):
+    """
+    Search for a series by name and return its ID and library ID
+    :param series_name: Name of the series to search for
+    :return: tuple (series_id, library_id) if found, (None, None) if not found
+    """
+    try:
+        libraries = await bookshelf_libraries()
+        logger.info(f"Searching for series '{series_name}' across {len(libraries)} libraries")
+        
+        for name, (library_id, audiobooks_only) in libraries.items():
+            logger.debug(f"Checking library '{name}' (ID: {library_id})")
+
+            endpoint = f"/libraries/{library_id}/series"
+            params = "&limit=500"
+
+            r = await bookshelf_conn(endpoint=endpoint, GET=True, params=params)
+            logger.debug(f"Raw series response: {r.text}")
+            
+            logger.debug(f"Series endpoint status for library '{name}': {r.status_code}")
+            if r.status_code == 200:
+                data = r.json()
+                series_list = data.get('results', [])
+                total_series = data.get('total', 0)
+                logger.info(f"Found {len(series_list)} series (out of {total_series} total) in library '{name}'")
+
+                for series_item in series_list:
+                    found_name = series_item.get('name', '').strip()
+                    target_name = series_name.lower()
+                    found_name_lower = found_name.lower()
+                    
+                    if found_name_lower == target_name:
+                        series_id = series_item.get('id')
+                        books = series_item.get('books', [])
+                        logger.info(f"Found series '{series_name}' with ID {series_id} and {len(books)} books in library '{name}'")
+                        return series_id, library_id, books
+            else:
+                logger.warning(f"Failed to get series from library '{name}'. Status: {r.status_code}")
+
+        logger.debug(f"Series '{series_name}' not found in any library")
+        return None, None
+        
+    except Exception as e:
+        logger.error(f"Error searching for series '{series_name}': {e}")
+        return None, None
+
+
 async def get_users() -> dict:
     endpoint = "/users"
 
