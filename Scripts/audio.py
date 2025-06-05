@@ -116,6 +116,14 @@ class AudioPlayBack(Extension):
         - Tuple: (audio_object, current_time, session_id, book_title, book_duration)
         """
         try:
+            # Handle force restart by resetting server progress first
+            if force_restart:
+                try:
+                    await c.bookshelf_mark_book_unfinished(item_id)
+                    logger.info("Reset server progress to beginning for restart")
+                except Exception as e:
+                    logger.warning(f"Failed to reset server progress for restart: {e}")
+
             # Get fresh audio object and session
             audio_obj, server_current_time, session_id, book_title, book_duration = await c.bookshelf_audio_obj(item_id)
         
@@ -170,7 +178,7 @@ class AudioPlayBack(Extension):
             # If we're seeking to a specific time, set nextTime for session sync
             if start_time is not None:
                 self.nextTime = actual_start_time
-        
+
             logger.info(f"Built session for '{book_title}' starting at {actual_start_time}s")
         
             return audio, actual_start_time, session_id, book_title, book_duration
