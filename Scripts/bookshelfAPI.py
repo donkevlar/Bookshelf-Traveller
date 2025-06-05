@@ -414,7 +414,6 @@ async def bookshelf_item_progress(item_id):
         r = await bookshelf_conn(GET=True, endpoint=secondary_url)
         data = r.json()
         title = data['media']['metadata']['title']
-        print(data)
 
         formatted_info = {
             'title': title,
