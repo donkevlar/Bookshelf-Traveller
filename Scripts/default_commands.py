@@ -338,6 +338,192 @@ class PrimaryCommands(Extension):
             logger.warning(
                 f'User:{ctx.user} (ID: {ctx.user.id}) | Error occurred: {e} | Command Name: recently-added')
 
+    @slash_command(name="discover", description="Discover 10 random books from your library")
+    @slash_option(name="library", description="Select a specific library (optional)", 
+                 opt_type=OptionType.STRING, autocomplete=True, required=False)
+    @slash_option(name="genre", description="Filter by genre (optional)", 
+                 opt_type=OptionType.STRING, required=False)
+    async def discover_books(self, ctx: SlashContext, library=None, genre=None):
+        try:
+            await ctx.defer(ephemeral=self.ephemeral_output)
+        
+            # Get all books from specified library or all libraries
+            all_books = []
+            libraries = await c.bookshelf_libraries()
+        
+            if library:
+                # Use specific library
+                if library in [lib_id for name, (lib_id, audiobooks_only) in libraries.items()]:
+                    books = await c.bookshelf_all_library_items(library)
+                    all_books.extend(books)
+                else:
+                    await ctx.send("Invalid library selected.", ephemeral=True)
+                    return
+            else:
+                # Get books from all libraries
+                for name, (lib_id, audiobooks_only) in libraries.items():
+                    books = await c.bookshelf_all_library_items(lib_id)
+                    all_books.extend(books)
+        
+            if not all_books:
+                await ctx.send("No books found in your library.", ephemeral=True)
+                return
+        
+            # Filter by genre if specified
+            if genre:
+                filtered_books = []
+                for book in all_books:
+                    try:
+                        book_details = await c.bookshelf_get_item_details(book['id'])
+                        book_genres = book_details.get('genres', '').lower()
+                        if genre.lower() in book_genres:
+                            filtered_books.append(book)
+                    except:
+                        continue
+                all_books = filtered_books
+            
+                if not all_books:
+                    await ctx.send(f"No books found with genre '{genre}'.", ephemeral=True)
+                    return
+        
+            # Randomly select up to 10 books
+            import random
+            random_books = random.sample(all_books, min(10, len(all_books)))
+        
+            # Create embeds for each book
+            embeds = []
+            img_url = os.getenv('OPT_IMAGE_URL')
+            bookshelf_url = os.getenv('bookshelfURL')
+        
+            for index, book in enumerate(random_books, 1):
+                book_id = book.get('id')
+                title = book.get('title', 'Unknown Title')
+                author = book.get('author', 'Unknown Author')
+            
+                try:
+                    # Get detailed book information
+                    book_details = await c.bookshelf_get_item_details(book_id)
+                    series = book_details.get('series', '')
+                    narrator = book_details.get('narrator', '')
+                    duration_seconds = book_details.get('duration', 0)
+                    publisher = book_details.get('publisher', '')
+                    published_year = book_details.get('publishedYear', '')
+                    genres = book_details.get('genres', '')
+                
+                    # Format duration
+                    if duration_seconds and duration_seconds > 0:
+                        hours = duration_seconds // 3600
+                        minutes = (duration_seconds % 3600) // 60
+                        if hours > 0:
+                            duration = f"{hours}h {minutes}m"
+                        else:
+                            duration = f"{minutes}m"
+                    else:
+                        duration = "Unknown"
+                
+                    # Get cover image
+                    cover_link = await c.bookshelf_cover_image(book_id)
+                
+                    # Create embed
+                    embed_message = Embed(
+                        title=f"🎲 Discovery #{index}: {title}",
+                        description=series if series else f"by {author}",
+                        color=0x3498db  # Blue color for discovery
+                    )
+                
+                    # Add fields with available information
+                    if series:
+                        embed_message.add_field(name="Author", value=author, inline=True)
+                
+                    if narrator and narrator != 'Unknown Narrator':
+                        embed_message.add_field(name="Narrator", value=narrator, inline=True)
+                
+                    if duration != "Unknown":
+                        embed_message.add_field(name="Duration", value=duration, inline=True)
+                
+                    # Additional info
+                    additional_info = []
+                    if publisher and publisher != 'Unknown Publisher':
+                        additional_info.append(f"**Publisher:** {publisher}")
+                    if published_year and published_year != 'Unknown Year':
+                        additional_info.append(f"**Year:** {published_year}")
+                    if genres and genres != 'Unknown Genre':
+                        additional_info.append(f"**Genres:** {genres}")
+                
+                    if additional_info:
+                        embed_message.add_field(
+                            name="Details", 
+                            value="\n".join(additional_info), 
+                            inline=False
+                        )
+                
+                    # Add cover image
+                    if cover_link:
+                        embed_message.add_image(cover_link)
+                
+                    # Set proper URL
+                    if img_url and "https" in img_url:
+                        bookshelf_url = img_url
+                    embed_message.url = f"{bookshelf_url}/item/{book_id}"
+                
+                    # Add footer
+                    embed_message.footer = f"{settings.bookshelf_traveller_footer} | Random Discovery"
+                
+                    embeds.append(embed_message)
+                
+                except Exception as e:
+                    logger.error(f"Error getting details for book {book_id}: {e}")
+                    # Create basic embed if detailed info fails
+                    embed_message = Embed(
+                        title=f"🎲 Discovery #{index}: {title}",
+                        description=f"by {author}",
+                        color=0x3498db
+                    )
+                    embeds.append(embed_message)
+        
+            # Send results
+            if len(embeds) == 1:
+                filter_text = f" from {library}" if library else ""
+                genre_text = f" in genre '{genre}'" if genre else ""
+                await ctx.send(
+                    content=f"🎲 **Random Discovery**{filter_text}{genre_text}:",
+                    embed=embeds[0], 
+                    ephemeral=self.ephemeral_output
+                )
+            else:
+                from interactions.ext.paginators import Paginator
+                paginator = Paginator.create_from_embeds(self.bot, *embeds, timeout=300)
+                filter_text = f" from {library}" if library else ""
+                genre_text = f" in genre '{genre}'" if genre else ""
+            
+                # Add intro message to paginator
+                await ctx.send(
+                    content=f"🎲 **{len(embeds)} Random Books Discovered**{filter_text}{genre_text}:",
+                    ephemeral=self.ephemeral_output
+                )
+                await paginator.send(ctx, ephemeral=self.ephemeral_output)
+        
+            logger.info(f'Successfully sent command: discover ({len(embeds)} books)')
+        
+        except Exception as e:
+            logger.error(f"Error in discover command: {e}")
+            await ctx.send("Could not discover books at this time. Please try again later.", 
+                          ephemeral=True)
+
+    @discover_books.autocomplete("library")
+    async def discover_library_autocomplete(self, ctx: AutocompleteContext):
+        try:
+            library_data = await c.bookshelf_libraries()
+            choices = []
+        
+            for name, (library_id, audiobooks_only) in library_data.items():
+                choices.append({"name": name, "value": library_id})
+        
+            await ctx.send(choices=choices)
+        except Exception as e:
+            logger.error(f"Error in library autocomplete: {e}")
+            await ctx.send(choices=[])
+
     @slash_command(name="search-book", description="Search for a book in your libraries. Default Command.")
     @slash_option(name="book", description="Book Title", autocomplete=True, required=True, opt_type=OptionType.STRING)
     async def search_book(self, ctx: SlashContext, book):
