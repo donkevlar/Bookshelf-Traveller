@@ -1,19 +1,19 @@
 import os
 import sqlite3
 import time
+import logging
+import sys
 
 import bookshelfAPI as c
 import settings as s
-import logging
-import sys
+from multi_user import search_user_db
+from wishlist import search_wishlist_db, mark_book_as_downloaded
 
 from interactions import *
 from interactions.api.events import Startup
 from datetime import datetime, timedelta
 from interactions.ext.paginators import Paginator
 from dotenv import load_dotenv
-from wishlist import search_wishlist_db, mark_book_as_downloaded
-from multi_user import search_user_db
 
 # Enable dot env outside of docker
 load_dotenv()

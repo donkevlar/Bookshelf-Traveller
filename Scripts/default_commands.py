@@ -9,7 +9,7 @@ from datetime import datetime
 # Local file imports
 import bookshelfAPI as c
 import settings
-from utils import add_progress_indicators
+from utils import ownership_check, add_progress_indicators
 
 # Logger Config
 logger = logging.getLogger("bot")
@@ -31,22 +31,6 @@ def option_library_name():
         )(func)
 
     return wrapper
-
-
-# Custom check for ownership
-async def ownership_check(ctx: BaseContext):
-    # Default only owner can use this bot
-    ownership = settings.OWNER_ONLY
-    if ownership:
-        # Check to see if user is the owner while ownership var is true
-        if ctx.bot.owner.username == ctx.user.username:
-            logger.info(f"{ctx.user.username}, you are the owner and ownership is enabled!")
-            return True
-        else:
-            logger.warning(f"{ctx.user.username}, is not the owner and ownership is enabled!")
-            return False
-    else:
-        return True
 
 
 class PrimaryCommands(Extension):

@@ -1,8 +1,11 @@
 import os
-from interactions import *
-import bookshelfAPI as c
 import logging
 import sqlite3
+from interactions import *
+
+import bookshelfAPI as c
+from utils import ownership_check
+
 
 logger = logging.getLogger("bot")
 
@@ -103,22 +106,6 @@ def remove_user_db(user: str):
     except sqlite3.Error as e:
         logger.error(f"Error while attempting to delete {user}: {e}")
         return False
-
-
-# Custom check for ownership
-async def ownership_check(ctx: BaseContext):
-    # Default only owner can use this bot
-    ownership = settings.OWNER_ONLY
-    if ownership:
-        # Check to see if user is the owner while ownership var is true
-        if ctx.bot.owner.username == ctx.user.username:
-            logger.info(f"{ctx.user.username}, you are the owner and ownership is enabled!")
-            return True
-        else:
-            logger.warning(f"{ctx.user.username}, is not the owner and ownership is enabled!")
-            return False
-    else:
-        return True
 
 
 class MultiUser(Extension):
