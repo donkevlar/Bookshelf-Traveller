@@ -145,7 +145,13 @@ class AudioPlayBack(Extension):
                 logger.info(f"Using provided start time: {actual_start_time}")
             else:
                 actual_start_time = server_current_time
-                logger.info(f"Using server current time: {actual_start_time}")
+
+                # Log meaningful information about the resume position
+                if server_current_time > 0:
+                    formatted_time = time_converter(int(server_current_time))
+                    logger.info(f"Respecting server progress - resuming at: {formatted_time} ({actual_start_time}s)")
+                else:
+                    logger.info("Starting from beginning - no previous progress found")
 
             if s.FFMPEG_DEBUG:
                 # Create ffmpeg logs directory in appdata
@@ -288,13 +294,17 @@ class AudioPlayBack(Extension):
                 current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(
                     self.bookItemID, updatedTime if 'updatedTime' in locals() else None)
 
-                if not isPodcast and current_chapter:
+                if not isPodcast and current_chapter and self.chapterArray and len(self.chapterArray) > 0:
                     # Check if current_chapter has a title key
-                    chapter_title = current_chapter.get('title', 'Unknown Chapter')
+                    chapter_title = current_chapter.get('title', 'Chapter 1')
                     logger.debug(f"Current Chapter Sync: {chapter_title}")
                     self.currentChapter = current_chapter
                     self.currentChapterTitle = chapter_title
-                
+                elif not isPodcast:
+                    # Book has no chapters
+                    self.currentChapter = None
+                    self.currentChapterTitle = 'No Chapters'
+
             except Exception as e:
                 logger.warning(f"Error getting current chapter: {e}")
 
@@ -638,62 +648,11 @@ class AudioPlayBack(Extension):
             current_index = next((i for i, ch in enumerate(self.chapterArray) 
                                 if int(ch.get('id', 0)) == current_chapter_id), 0)
         
-<<<<<<< HEAD
-                                self.currentTime = updatedTime  # Should be 0.0
-                                self.nextTime = None
-                            except Exception as e:
-                                logger.error(f"Error syncing restart position: {e}")
-
-                            # Set the chapter info for the UI callback to use
-                            if self.chapterArray and len(self.chapterArray) > 0:
-                                first_chapter = self.chapterArray[0]
-                                self.newChapterTitle = first_chapter.get('title', 'Chapter 1')
-                            else:
-                                self.newChapterTitle = 'Chapter 1'
-
-                            # Restart the session update task
-                            self.session_update.start()
-                            self.found_next_chapter = True
-                            return
-                        else:
-                            logger.error("Restart failed during chapter navigation")
-                            await self.cleanup_session("restart failed")
-                            self.found_next_chapter = False
-                            return
-                    elif self.seriesEnabled and self.currentSeries and not self.isLastBookInSeries:
-                        logger.info("Reached final chapter - moving to next book in series")
-                    
-                        # Stop the session update task before moving to next book
-                        if self.session_update.running:
-                            self.session_update.stop()
-                    
-                        # Move to next book in series
-                        success = await self.move_to_next_book_in_series()
-                        if success:
-                            # Set the chapter info for the UI callback to use
-                            self.newChapterTitle = self.currentChapterTitle
-                            self.found_next_chapter = True
-                            return
-                        else:
-                            logger.error("Failed to move to next book in series")
-                            await self.cleanup_session("series progression failed")
-                            self.found_next_chapter = False
-                            return
-                        
-                    else:
-                        # Normal completion handling - no repeat, no series, or last book in series
-                        logger.info("Skipped past final chapter - marking complete and cleaning up")
-                        await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
-                        await self.cleanup_session("completed via chapter skip")
-                        self.found_next_chapter = False
-                        return
-=======
             # Calculate target index
             if target_index is not None:
                 next_index = target_index
             elif relative_move is not None:
                 next_index = current_index + relative_move
->>>>>>> 32462e1 (Make move chapter index based and add index based support to change-chapter)
             else:
                 logger.error("Must provide either target_index or relative_move")
                 self.found_next_chapter = False
@@ -741,6 +700,38 @@ class AudioPlayBack(Extension):
                     else:
                         logger.error("Restart failed during chapter navigation")
                         await self.cleanup_session("restart failed")
+                        self.found_next_chapter = False
+                        return
+
+                elif self.seriesEnabled and self.currentSeries and not self.isLastBookInSeries:
+                    logger.info("Reached final chapter - moving to next book in series")                                                                                                                                        # Stop the session update task before moving to next book                                             if self.session_update.running:
+
+                    # Stop the session update task before moving to next book
+                    if self.session_update.running:
+                        self.session_update.stop()
+
+                    # Mark the book as complete
+                    try:
+                        await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
+                        logger.info(f"Successfully marked book {self.bookItemID} as finished before series progression")
+                    except Exception as e:
+                        logger.warning(f"Failed to mark book as finished before series progression: {e}")
+
+                    success = await self.move_to_series_book("next")                                                                                                                              # Move to next book in series                                                                         success = await self.move_to_next_book_in_series()
+                    if success:
+                        # Set the chapter info for the UI callback to use
+                        self.newChapterTitle = self.currentChapterTitle
+                        self.found_next_chapter = True
+
+                        if self.seriesIndex is not None:
+                            self.isFirstBookInSeries = self.seriesIndex == 0
+                            self.isLastBookInSeries = self.seriesIndex == len(self.seriesList) - 1
+                            logger.info(f"Updated series position: book {self.seriesIndex + 1}/{len(self.seriesList)}, first={self.isFirstBookInSeries}, last={self.isLastBookInSeries}")
+
+                        return
+                    else:
+                        logger.error("Failed to move to next book in series")
+                        await self.cleanup_session("series progression failed")
                         self.found_next_chapter = False
                         return
                 else:
@@ -828,14 +819,14 @@ class AudioPlayBack(Extension):
 
         # Calculate progress percentage and time progressed
         progress_percentage = 0
-        if self.bookDuration and self.bookDuration > 0:
+        if self.bookDuration and self.bookDuration > 0 and self.currentTime is not None:
             safe_current_time = min(self.currentTime, self.bookDuration)
             progress_percentage = (safe_current_time / self.bookDuration) * 100
             progress_percentage = round(progress_percentage, 1)
             progress_percentage = max(0, min(100, progress_percentage))
 
-        formatted_duration = time_converter(self.bookDuration)
-        formatted_current = time_converter(self.currentTime)
+        formatted_duration = time_converter(self.bookDuration) if self.bookDuration else "Unknown"
+        formatted_current = time_converter(self.currentTime) if self.currentTime is not None else "Unknown"
 
         # Prepare series info if available
         series_info = None
@@ -847,16 +838,16 @@ class AudioPlayBack(Extension):
             }
 
         return create_playback_embed(
-            book_title=self.bookTitle,
-            chapter_title=chapter,
+            book_title=self.bookTitle or "Unknown Book",
+            chapter_title=chapter or "Unknown Chapter",
             progress=f"{progress_percentage}%",
             current_time=formatted_current,
             duration=formatted_duration,
-            username=self.username,
-            user_type=self.user_type,
-            cover_image=self.cover_image,
+            username=self.username or "Unknown User",
+            user_type=self.user_type or "user",
+            cover_image=self.cover_image or "",
             color=color,
-            volume=self.volume,
+            volume=self.volume or 0.0,
             timestamp=formatted_time,
             version=s.versionNumber,
             repeat_enabled=self.repeat_enabled,
@@ -946,6 +937,8 @@ class AudioPlayBack(Extension):
                 force_restart=startover
             )
 
+            self.currentTime = currentTime
+
             await self.setup_series_context(book)
 
             if startover:
@@ -959,6 +952,16 @@ class AudioPlayBack(Extension):
                     # Book has no chapters - clear chapter info
                     self.currentChapter = None
                     self.currentChapterTitle = 'No Chapters'
+            else:
+                # Not starting over - use current chapter data or detect no chapters
+                if current_chapter and chapter_array and len(chapter_array) > 0:
+                    self.currentChapter = current_chapter
+                    self.currentChapterTitle = current_chapter.get('title', 'Chapter 1')
+                else:
+                    # No chapter data available
+                    self.currentChapter = None
+                    self.currentChapterTitle = 'No Chapters'
+
 
             # Get Book Cover URL
             cover_image = await c.bookshelf_cover_image(book)
@@ -981,12 +984,14 @@ class AudioPlayBack(Extension):
 
             # Chapter Vars
             self.isPodcast = isPodcast
-            self.currentChapter = current_chapter if not startover else self.currentChapter  # Use first chapter if startover
-            self.currentChapterTitle = current_chapter.get('title') if not startover else self.currentChapterTitle
             self.chapterArray = chapter_array
             self.bookFinished = False  # Force locally to False. If it were True, it would've exited sooner. Startover needs this to be False.
             self.current_channel = ctx.channel_id
             self.play_state = 'playing'
+
+            if self.currentTime is None:
+                logger.warning(f"currentTime is None after build_session, using 0.0 as fallback")
+                self.currentTime = 0.0
 
             # Create embedded message
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
@@ -1783,18 +1788,52 @@ class AudioPlayBack(Extension):
                 logger.info("Already at the last book in series")
                 return False
             new_index = self.seriesIndex + 1
-            start_time = 0.0  # Always start from beginning for next books
+            target_book_id = self.seriesList[new_index]
+
+            # Check if the target book is finished - if so, start from beginning
+            # Otherwise, let build_session respect the server's current position
+            try:
+                progress_data = await c.bookshelf_item_progress(target_book_id)
+                is_finished = progress_data.get('finished', 'False') == 'True'
+            
+                if is_finished:
+                    start_time = 0.0
+                    logger.info(f"Target book {target_book_id} is finished - starting from beginning")
+                else:
+                    start_time = None  # Let build_session use server's current position
+                    logger.info(f"Target book {target_book_id} not finished - will respect server position")
+                
+            except Exception as e:
+                logger.warning(f"Error checking next book progress, defaulting to server position: {e}")
+                start_time = None  # Let build_session decide
+
         elif direction == "previous":
             if self.seriesIndex <= 0:
                 logger.info("Already at the first book in series")
                 return False
             new_index = self.seriesIndex - 1
-            # Use stored time if this was the previous book, otherwise start from beginning
             target_book_id = self.seriesList[new_index]
-            start_time = 0.0
-            if target_book_id == self.previousBookID and self.previousBookTime:
-                start_time = self.previousBookTime
-                logger.info(f"Resuming previous book at {start_time}s")
+
+            # Check if the target book is finished - if so, start from beginning
+            # Otherwise, let build_session respect the server's current position
+            try:
+                progress_data = await c.bookshelf_item_progress(target_book_id)
+                is_finished = progress_data.get('finished', 'False') == 'True'
+            
+                if is_finished:
+                    start_time = 0.0
+                    logger.info(f"Target book {target_book_id} is finished - starting from beginning")
+                elif target_book_id == self.previousBookID and self.previousBookTime:
+                    start_time = self.previousBookTime
+                    logger.info(f"Resuming previous book at {start_time}s")
+                else:
+                    start_time = 0.0
+                    logger.info(f"No stored progress for previous book - starting from beginning")
+                
+            except Exception as e:
+                logger.warning(f"Error checking book progress, defaulting to beginning: {e}")
+                start_time = 0.0
+
         else:
             logger.error(f"Invalid direction: {direction}")
             return False
@@ -1837,7 +1876,12 @@ class AudioPlayBack(Extension):
             current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(target_book_id, start_time)
             self.currentChapter = current_chapter
             self.chapterArray = chapter_array
-            self.currentChapterTitle = current_chapter.get('title', 'Chapter 1' if direction == "next" else 'Unknown Chapter') if current_chapter else ('Chapter 1' if direction == "next" else 'Unknown Chapter')
+
+            if current_chapter and chapter_array and len(chapter_array) > 0:
+                self.currentChapterTitle = current_chapter.get('title', 'Chapter 1')
+            else:
+                self.currentChapterTitle = 'No Chapters'
+
             self.isPodcast = isPodcast
             self.bookFinished = False
         
@@ -1951,7 +1995,7 @@ class AudioPlayBack(Extension):
                     logger.info("Stopping auto kill session backend task.")
                     self.auto_kill_session.stop()
 
-                await ctx.edit(embed=embed_message)
+                await ctx.edit(embed=embed_message, components=self.get_current_playback_buttons())
                 await ctx.voice_state.channel.voice_state.play(self.audioObj)
 
             elif session_was_cleaned_up and is_last_chapter:
@@ -2007,7 +2051,7 @@ class AudioPlayBack(Extension):
                     logger.info("Stopping auto kill session backend task.")
                     self.auto_kill_session.stop()
 
-                await ctx.edit(embed=embed_message)
+                await ctx.edit(embed=embed_message, components=self.get_current_playback_buttons())
                 ctx.voice_state.channel.voice_state.player.stop()
                 await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
             else:
