@@ -74,7 +74,8 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
 # --- Embeds ---
 
 def create_playback_embed(book_title, chapter_title, progress, current_time, duration, 
-                           username, user_type, cover_image, color, volume, timestamp, version, repeat_enabled=False):
+                           username, user_type, cover_image, color, volume, timestamp, version, 
+                           repeat_enabled=False, series_info=None):
     embed = Embed(
         title=book_title,
         description=f"Currently playing {book_title}",
@@ -95,6 +96,11 @@ def create_playback_embed(book_title, chapter_title, progress, current_time, dur
 #        f"Repeat: **{repeat_status}\n**"
         f"Current volume: **{round(volume * 100)}%**"
     )
+
+    if series_info:
+        series_text = f"Series: **{series_info['name']}** (Book {series_info['current']}/{series_info['total']})"
+        playback_info += f"\n{series_text}"
+
     embed.add_field(name='Playback Information', value=playback_info)
 
     embed.add_image(cover_image)
