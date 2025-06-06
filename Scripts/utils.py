@@ -1,10 +1,28 @@
 import time
 import logging
+
 import bookshelfAPI as c
+import settings
 
 # Logger Config
 logger = logging.getLogger("bot")
 
+async def ownership_check(ctx):
+    """
+    Basic ownership check - respects OWNER_ONLY setting.
+    Used for info/utility commands.
+    """
+    ownership = settings.OWNER_ONLY
+    if ownership:
+        # Check to see if user is the owner while ownership var is true
+        if ctx.bot.owner.id == ctx.user.id or ctx.user in ctx.bot.owners:
+            logger.info(f"{ctx.user.username}, you are the owner and ownership is enabled!")
+            return True
+        else:
+            logger.warning(f"{ctx.user.username}, is not the owner and ownership is enabled!")
+            return False
+    else:
+        return True
 
 async def add_progress_indicators(choices, timeout_seconds=2.5):
     """
