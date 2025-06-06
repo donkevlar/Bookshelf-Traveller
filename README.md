@@ -20,7 +20,7 @@ Make sure that you select all intents when setting up your bot and that you have
 ### Known Limitations
 **Podcast playback is currently not supported due to the many differences in pulling the audio sources.**
 
-**Ownership by default will allow you to run all commands, to disable this, use the env variable `OWNER_ONLY`.**
+**Ownership by default will allow only you to control the bot, to disable this, use the env variable `OWNER_ONLY`.**
 
 **When using commands that use images, i.e. `/media_progress` or `/recent_sessions`, 
 the server must use an `HTTPS` connection due to a requirement from discord's API. If not, no image will be generated.**
@@ -38,16 +38,16 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 | `DISCORD_TOKEN`    | Discord API Token                                                                                                                                          | *String*  | **YES**   |
 | `bookshelfToken`   | Bookshelf User Token (All user types work, but some will limit your interaction options.)                                                                  | *String*  | **YES**   |
 | `bookshelfURL`     | Bookshelf url with protocol and port, ex: http://localhost:80                                                                                              | *String*  | **YES**   |
-| `PLAYBACK_ROLE`*   | A discord role id, used if you want other users to have access to playback. *NO LONGER SUPPORTED                                                           | *Integer* | **NO**    |
-| `OWNER_ONLY`       | By default set to `True`. Only allow bot owner to use bot.                                                                                                 | *Boolean* | **NO**    |
-| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to ephemeral (shown only to you). * Note: This has been transitioned to a command, it only affects the default commands module.| *Boolean* | **NO**    |
+| `PLAYBACK_ROLE`    | A discord role id, used if you want other users to have access to playback.                                                                                | *Integer* | **NO**    |
+| `OWNER_ONLY`       | By default set to `True`. Only allow bot owner or role owners (if enabled) to use the bot.                                                                 | *Boolean* | **NO**    |
+| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to be ephemeral (shown only to you).                                                                      | *Boolean* | **NO**    |
 | `MULTI_USER`       | By default set to `True`, disable this to re-enable admin controls (Conditional on the user logged in.) and to remove the /login and /select options       | *Boolean* | **NO**    |
 | `AUDIO_ENABLED`    | By default set to `True`, disable if you want to remove the ability for audio playback.                                                                    | *Boolean* | **NO**    |
 | `OPT_IMAGE_URL`    | Optional HTTPS URL for generating cover images and sending them to the discord API. This is primarily if you experience similar issues as mentioned above. | *String*  | **NO**    |
 | `TIMEZONE`         | Default set to `America/Toronto`                                                                                                                           | *String*  | **NO**    |
 | `DEFAULT_PROVIDER` | Experimental, set the default search provider for certain commands.                                                                                        | *String*  | **NO**    |
 | `DEBUG_MODE`       | By default, set to `False`. It enables verbose logs and also disables all notifications.                                                                   | *Boolean* | **NO**    |
-| `FFMPEG_DEBUG`     | By default, set to `False`. It creates ffmpege logs inside the appdata folder.                                                                             | *Boolean* | **NO**    |
+| `FFMPEG_DEBUG`     | By default, set to `False`. It creates FFmpeg logs inside the appdata folder.                                                                              | *Boolean* | **NO**    |
 
 ## Installation
 **Current Installation method is by docker container, however, you can also run main.py within a project folder.**
@@ -83,8 +83,6 @@ donkevlar/bookshelf-traveller:latest
 or using docker compose:
 
 ```
-version: '3.8'  # Specify the version of the Compose file format
-
 services:
   bookshelf-traveller:
     image: donkevlar/bookshelf-traveller:latest
@@ -106,9 +104,9 @@ Visit the community applications (CA) store and search for the template name lis
 ### Python Script
 Requirements: **Python 3.10 or above**.
 
-**FFMPEG Must be installed in the project directory and/or in PATH to run audio commands using the script installation method. If this is too difficult, please use the docker instructions above.**
+**FFmpeg must be installed in the project directory and/or in PATH to run audio commands using the script installation method. If this is too difficult, please use the docker instructions above.**
 
-[FFMPEG](https://www.ffmpeg.org/download.html)
+[FFmpeg](https://www.ffmpeg.org/download.html)
 
 you'll also need an '.env' file for loading the above [ENV Variables](https://github.com/donkevlar/Bookshelf-Traveller/blob/master/README.md#environmental-variables)
 
@@ -165,7 +163,7 @@ Here's the list of commands sorted alphabetically:
 | `/play`               | Start a new audio session from server, syncs automatically                                                 | `book_title`                                       |                                                                                                                                                                                                                                               | Autocomplete provides up to the last 10 titles you've listened to. Also, Provides a full embedded UI with playback controls. |
 | `/remove-book`        | Mark a book as downloaded in your wishlist                                                                 |                                                    |                                                                                                                                                                                                                                               |                                                                                                                              |
 | `/recent-sessions`    | Will display ***up to*** 10 recent sessions in a filtered and formatted way.                               |                                                    |                                                                                                                                                                                                                                               |
-| `/recently-added`    | Will display ***up to*** 10 recently added books.                                                           |                                                    |                                                                                                                                                                                                                                               |
+| `/recently-added`     | Will display ***up to*** 10 recently added books.                                                          |                                                    |                                                                                                                                                                                                                                               |
 | `/refresh`            | Refresh play book                                                                                          |                                                    |                                                                                                                                                                                                                                               |
 | `/resume`             | Resume audio                                                                                               |                                                    |                                                                                                                                                                                                                                               |
 | `/select`             | Switch between logged in ABS users                                                                         |                                                    |                                                                                                                                                                                                                                               |
