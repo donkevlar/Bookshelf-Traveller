@@ -9,7 +9,7 @@ from datetime import datetime
 # Local file imports
 import bookshelfAPI as c
 import settings
-from utils import ownership_check, add_progress_indicators
+from utils import ownership_check, is_bot_owner, add_progress_indicators
 
 # Logger Config
 logger = logging.getLogger("bot")
@@ -40,7 +40,8 @@ class PrimaryCommands(Extension):
     # Slash Commands ----------------------------------------------------
     #
 
-    # Pings the server, can ping other servers, why? IDK, cause why not.
+    # Pings the server
+    @check(is_bot_owner)
     @slash_command(name="ping", description="Latency of the discord bot server to the discord central shard. Default Command.")
     async def ping(self, ctx: SlashContext):
         latency = self.bot.latency
@@ -48,7 +49,7 @@ class PrimaryCommands(Extension):
             message = "Latency data not available yet. Please try again in a few seconds."
         else:
             message = f'Discord BOT Server Latency: {round(latency * 1000)} ms'
-        await ctx.send(message, ephemeral=self.ephemeral_output)
+        await ctx.send(message, ephemeral=True)
         logger.debug(f' Successfully sent command: ping')
 
     # Self-explanatory, pulls all a library's items

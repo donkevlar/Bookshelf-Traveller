@@ -1,5 +1,6 @@
 import time
 import logging
+from functools import wraps
 
 import bookshelfAPI as c
 import settings
@@ -23,6 +24,97 @@ async def ownership_check(ctx):
             return False
     else:
         return True
+
+async def is_bot_owner(ctx):
+    """Root access - for admin commands only"""
+    return ctx.bot.owner.id == ctx.user.id or ctx.user in ctx.bot.owners
+
+async def is_playback_manager(ctx):
+    """Can manage any playback session (bot owners + role users)"""
+    # Bot owner has full access
+    if await is_bot_owner(ctx):
+        return True
+
+    # Users with playback role (if configured)
+    if settings.PLAYBACK_ROLE:
+        try:
+            playback_role_id = int(settings.PLAYBACK_ROLE)
+            if hasattr(ctx.author, 'roles') and any(role.id == playback_role_id for role in ctx.author.roles):
+                return True
+        except (ValueError, AttributeError) as e:
+            logger.warning(f"Invalid PLAYBACK_ROLE setting: {settings.PLAYBACK_ROLE}, Error: {e}")
+
+    return False
+
+async def can_control_session(ctx, audio_extension, action="control"):
+    """
+    Universal permission check for session actions.
+    
+    Args:
+        ctx: Discord context
+        audio_extension: The audio extension instance  
+        action: Type of action - "control", "start", or "announce"
+    
+    Returns:
+        bool: True if user can perform the action
+    """
+    # Managers can do anything
+    if await is_playback_manager(ctx):
+        return True
+    
+    if action == "start":
+        # If OWNER_ONLY is enabled, only privileged users can start
+        if settings.OWNER_ONLY:
+            return False
+        
+        # Regular users can start IF no active session
+        if not hasattr(audio_extension, 'activeSessions') or audio_extension.activeSessions == 0:
+            return True
+        
+        return False
+    
+    elif action in ["control", "announce"]:
+        # Session owner can control/announce their own session
+        if (hasattr(audio_extension, 'sessionOwner') and 
+            audio_extension.sessionOwner == ctx.author.username):
+            return True
+        
+        return False
+    
+    return False
+
+def check_session_control(action="control"):
+    """
+    Decorator for session control permissions.
+    
+    Args:
+        action: Type of action - "control", "start", or "announce"
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(self, ctx, *args, **kwargs):
+            if not await can_control_session(ctx, self, action):
+                # Customize message based on action
+                if action == "start":
+                    if hasattr(self, 'activeSessions') and self.activeSessions >= 1:
+                        if await is_playback_manager(ctx):
+                            message = f"A session is currently active (owner: {self.sessionOwner}). You can control it or use `/stop` first if you want to start a new session."
+                        else:
+                            message = f"A session is currently active (owner: {self.sessionOwner}). Please wait for it to end or ask a manager to stop it."
+                    else:
+                        message = "You don't have permission to start playback sessions."
+                elif action == "announce":
+                    message = "Only the session owner or managers can create announcements."
+                else:  # action == "control"
+                    message = "You don't have permission to control this session."
+                
+                await ctx.send(message, ephemeral=True)
+                return
+            
+            # Permission check passed, call the original function
+            return await func(self, ctx, *args, **kwargs)
+        return wrapper
+    return decorator
 
 async def add_progress_indicators(choices, timeout_seconds=2.5):
     """
