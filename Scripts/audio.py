@@ -463,7 +463,6 @@ class AudioPlayBack(Extension):
             self.nextTime = None
 
             # Reset series context
-            self.seriesEnabled = True  # Reset to default
             self.seriesList = []
             self.seriesIndex = None
             self.previousBookID = None
@@ -1916,7 +1915,8 @@ class AudioPlayBack(Extension):
             is_podcast=self.isPodcast,
             is_series=is_series,
             is_first_book=self.isFirstBookInSeries,
-            is_last_book=self.isLastBookInSeries
+            is_last_book=self.isLastBookInSeries,
+            series_enabled=self.seriesEnabled
         )
 
     @component_callback('pause_audio_button')
@@ -2140,6 +2140,19 @@ class AudioPlayBack(Extension):
             await ctx.voice_state.channel.voice_state.play(self.audioObj)
         else:
             await ctx.send(content="Failed to move to previous book in series.", ephemeral=True)
+
+    @component_callback('toggle_series_button')
+    async def callback_toggle_series_button(self, ctx: ComponentContext):
+        """Toggle series auto-progression mode"""
+        self.seriesEnabled = not self.seriesEnabled
+        status = "enabled" if self.seriesEnabled else "disabled"
+    
+        # Update the embed and buttons
+        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
+        await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+    
+        # Send a brief status message
+        await ctx.send(f"Series auto-progression {status}.", ephemeral=True)
 
     @component_callback('volume_up_button')
     async def callback_volume_up_button(self, ctx: ComponentContext):
