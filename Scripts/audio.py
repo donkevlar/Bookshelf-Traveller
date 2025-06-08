@@ -70,7 +70,7 @@ class AudioPlayBack(Extension):
         self.current_playback_time = 0
         self.audio_context = None
         self.bitrate = 128000
-        self.volume = 0.0
+        self.volume = 0.5
         self.placeholder = None
         self.playbackSpeed = 1.0
         self.isPodcast = False
@@ -142,15 +142,19 @@ class AudioPlayBack(Extension):
     
                 # Set FFmpeg report environment variable. level=24 for warning. 32 for info. 48 for debug.
                 os.environ["FFREPORT"] = f"file={ffmpeg_log_dir}/ffmpeg-%t.log:level=32"
+
+            # Reset stream detection for each new session
+            self.stream_started = False
         
-            # Build audio object with proper settings
+            # Build audio object
+            preserved_vol = self.volume if hasattr(self, 'volume') and self.volume is not None else 0.5
             audio = AudioVolume(audio_obj)
             audio.buffer_seconds = 1
             audio.locked_stream = True
             audio.ffmpeg_before_args = f"-re -ss {actual_start_time}"
             audio.ffmpeg_args = f""
             audio.bitrate = self.bitrate
-            self.volume = audio.volume
+            audio._volume = preserved_vol
 
             # Hook into the audio source to detect when streaming starts
             original_read = audio.read
@@ -160,9 +164,18 @@ class AudioPlayBack(Extension):
                 if data and not self.stream_started:
                     self.stream_started = True
                     logger.info("🎵 AUDIO STREAM DETECTED - FFmpeg is now providing data!")
+
+                    # Apply volume when stream actually starts
+                    logger.debug(f"🔧 Before backup: audio._volume = {audio._volume}")
+                    audio._volume = preserved_vol
+                    logger.debug(f"🔧 After backup: audio._volume = {audio._volume}")
+                    logger.debug(f"Applied volume backup: {preserved_vol}")
+
                 return data
         
             audio.read = stream_detecting_read
+
+            self.volume = preserved_vol
         
             # Update instance variables
             self.sessionID = session_id
@@ -454,7 +467,7 @@ class AudioPlayBack(Extension):
             self.isFirstBookInSeries = False
 
             # Reset audio variables
-            self.volume = 0.0
+            self.volume = 0.5
             self.audioObj = None
 
             logger.debug("Reset all state variables")
