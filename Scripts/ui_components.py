@@ -3,7 +3,7 @@ from interactions import ActionRow, Button, ButtonStyle, Embed
 # --- Playback Rows ---
 
 def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=False,
-                     has_chapters=True, is_series=False, is_first_book=False, is_last_book=False):
+                     has_chapters=True, is_series=False, is_first_book=False, is_last_book=False, series_enabled=True):
     """Build dynamic playback control rows based on state"""
     is_paused = play_state == "paused"
     rows = []
@@ -60,6 +60,11 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
                 style=ButtonStyle.PRIMARY, 
                 label="Prior Book", 
                 custom_id="previous_book_button"
+            ),
+            Button(
+                style=ButtonStyle.SUCCESS if series_enabled else ButtonStyle.SECONDARY,
+                label="Series",
+                custom_id="toggle_series_button"
             ),
             Button(
                 disabled=is_last_book, 
