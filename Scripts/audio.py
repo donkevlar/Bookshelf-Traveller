@@ -4,11 +4,13 @@ import os
 import pytz
 from interactions import *
 from interactions.api.voice.audio import AudioVolume
+
 import bookshelfAPI as c
 import settings as s
 from settings import TIMEZONE
 from ui_components import get_playback_rows, create_playback_embed
-from utils import add_progress_indicators
+from utils import ownership_check, is_bot_owner, check_session_control, can_control_session, add_progress_indicators
+
 import logging
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -27,26 +29,6 @@ ownership = s.OWNER_ONLY
 
 # Timezone
 timeZone = pytz.timezone(TIMEZONE)
-
-# Custom check for ownership
-async def ownership_check(ctx: BaseContext):  # NOQA
-
-    logger.info(f'Ownership is currently set to: {ownership}')
-
-    if ownership:
-        logger.info('OWNERSHIP is enabled, verifying if user is authorized.')
-        # Check to see if user is the owner while ownership var is true
-        if ctx.bot.owner.id == ctx.user.id or ctx.user in ctx.bot.owners:
-            logger.info('Verified, executing command!')
-            return True
-        else:
-            logger.warning('User is not an owner!')
-            return False
-
-    else:
-        logger.info('ownership is disabled! skipping!')
-        return True
-
 
 def time_converter(time_sec: int) -> str:
     """
@@ -864,15 +846,8 @@ class AudioPlayBack(Extension):
     @slash_option(name="startover",
                   description="Start the book from the beginning instead of resuming",
                   opt_type=OptionType.BOOLEAN)
+    @check_session_control("start")
     async def play_audio(self, ctx: SlashContext, book: str, startover=False):
-        # Check for ownership if enabled
-        if ownership:
-            if ctx.author.id not in ctx.bot.owners:
-                logger.warning(f'User {ctx.author} attempted to use /play, and OWNER_ONLY is enabled!')
-                await ctx.send(
-                    content="Ownership enabled and you are not authorized to use this command. Contact bot owner.")
-                return
-
         if not self.bot.is_ready or not ctx.author.voice:
             await ctx.send(content="Bot is not ready or author not in voice channel, please try again later.",
                            ephemeral=True)
@@ -1061,6 +1036,7 @@ class AudioPlayBack(Extension):
 
     # Pause audio, stops tasks, keeps session active.
     @slash_command(name="pause", description="pause audio", dm_permission=False)
+    @check_session_control()
     async def pause_audio(self, ctx):
         if ctx.voice_state:
             await ctx.send("Pausing Audio", ephemeral=True)
@@ -1077,6 +1053,7 @@ class AudioPlayBack(Extension):
 
     # Resume Audio, restarts tasks, session is kept open
     @slash_command(name="resume", description="resume audio", dm_permission=False)
+    @check_session_control()
     async def resume_audio(self, ctx):
         if ctx.voice_state:
             if self.sessionID != "":
@@ -1094,10 +1071,10 @@ class AudioPlayBack(Extension):
             else:
                 await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
-    @check(ownership_check)
     @slash_command(name="change-chapter", description="Navigate to a specific chapter or use next/previous.", dm_permission=False)
     @slash_option(name="option", description="Select 'next', 'previous', or enter a chapter number", opt_type=OptionType.STRING,
                   autocomplete=True, required=True)
+    @check_session_control()
     async def change_chapter(self, ctx, option: str):
         if not ctx.voice_state:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
@@ -1159,9 +1136,9 @@ class AudioPlayBack(Extension):
         # Reset variable
         self.found_next_chapter = False
 
-    @check(ownership_check)
     @slash_command(name="volume", description="change the volume for the bot", dm_permission=False)
     @slash_option(name="volume", description="Must be between 1 and 100", required=False, opt_type=OptionType.INTEGER)
+    @check_session_control()
     async def volume_adjuster(self, ctx, volume=0):
         if ctx.voice_state:
             audio = self.audioObj
@@ -1180,6 +1157,7 @@ class AudioPlayBack(Extension):
 
     @slash_command(name="stop", description="Will disconnect from the voice channel and stop audio.",
                    dm_permission=False)
+    @check_session_control()
     async def stop_audio(self, ctx: SlashContext):
         if ctx.voice_state:
             logger.info(f"executing command /stop")
@@ -1188,23 +1166,34 @@ class AudioPlayBack(Extension):
         else:
             await ctx.send(content="Not connected to voice.", ephemeral=True)
 
-    @check(ownership_check)
     @slash_command(name="close-all-sessions",
-                   description="DEBUGGING PURPOSES, close all active sessions. Takes up to 60 seconds.",
+                   description="DEBUGGING PURPOSES, close all active ABS sessions. Takes up to 60 seconds.",
                    dm_permission=False)
     @slash_option(name="max_items", description="max number of items to attempt to close, default=100",
                   opt_type=OptionType.INTEGER)
+    @check(is_bot_owner)
     async def close_active_sessions(self, ctx, max_items=50):
         # Wait for task to complete
-        ctx.defer()
+        await ctx.defer()
+
+        # Add warning if there's active playback
+        if self.activeSessions > 0 and self.sessionID:
+            await ctx.send(
+                "⚠️ **WARNING**: You have active audio playback running. "
+                "This command will close the ABS session, which means:\n"
+                "• Audio will continue playing but won't sync progress\n"
+                "• You should use `/stop` to properly end playback first\n\n"
+                "Proceeding with session cleanup...", 
+                ephemeral=True
+            )
 
         openSessionCount, closedSessionCount, failedSessionCount = await c.bookshelf_close_all_sessions(max_items)
 
         await ctx.send(content=f"Result of attempting to close sessions. success: {closedSessionCount}, "
                                f"failed: {failedSessionCount}, total: {openSessionCount}", ephemeral=True)
 
-    @check(ownership_check)
     @slash_command(name='refresh', description='re-sends your current playback card.')
+    @check_session_control()
     async def refresh_play_card(self, ctx: SlashContext):
         if ctx.voice_state:
             try:
@@ -1220,6 +1209,7 @@ class AudioPlayBack(Extension):
             return await ctx.send("Bot not in voice channel or an error has occured. Please try again later!", ephemeral=True)
 
     @slash_command(name="toggle-series", description="Toggle automatic series progression on/off")
+    @check_session_control()
     async def toggle_series_mode(self, ctx: SlashContext):
         if not ctx.voice_state or self.play_state == 'stopped':
             await ctx.send("No active playback session found.", ephemeral=True)
@@ -1297,27 +1287,17 @@ class AudioPlayBack(Extension):
     
         await ctx.send(embed=embed, ephemeral=True)
 
-    @check(ownership_check)
     @slash_command(name="announce", description="Create a public announcement card for the current playback session")
+    @check_session_control("announce")
     async def announce_playback(self, ctx: SlashContext):
         """
         Creates a public (non-ephemeral) playbook card to invite others to join the listening session.
         Available to bot owner and the user who started the current playback session.
         """
-    
-        # Check if bot owner OR session owner
-        is_bot_owner = ctx.author.id in [ctx.bot.owner.id] + [owner.id for owner in ctx.bot.owners]
-        is_session_owner = self.sessionOwner == ctx.author.username
-    
-        if not (is_bot_owner or is_session_owner):
-            await ctx.send("Only the bot owner or the person who started this playback session can use this command.", ephemeral=True)
-            return
-    
-        # Check if bot is in voice and playing
         if not ctx.voice_state or self.play_state == 'stopped':
             await ctx.send("No active playback session found. Start playing audio first.", ephemeral=True)
             return
-    
+
         # Get current voice channel
         voice_channel = ctx.voice_state.channel
         if not voice_channel:
@@ -1921,6 +1901,10 @@ class AudioPlayBack(Extension):
 
     @component_callback('pause_audio_button')
     async def callback_pause_button(self, ctx: ComponentContext):
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+        
         if ctx.voice_state:
             logger.info('Pausing Playback!')
             self.play_state = 'paused'
@@ -1935,6 +1919,10 @@ class AudioPlayBack(Extension):
 
     @component_callback('play_audio_button')
     async def callback_play_button(self, ctx: ComponentContext):
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
         if ctx.voice_state:
             logger.info('Resuming Playback!')
             self.play_state = 'playing'
@@ -1952,6 +1940,10 @@ class AudioPlayBack(Extension):
     @component_callback('repeat_button')
     async def callback_repeat_button(self, ctx: ComponentContext):
         """Toggle repeat mode on/off"""
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
         self.repeat_enabled = not self.repeat_enabled
 
         embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
@@ -1959,6 +1951,10 @@ class AudioPlayBack(Extension):
 
     @component_callback('next_chapter_button')
     async def callback_next_chapter_button(self, ctx: ComponentContext):
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
         if ctx.voice_state:
             logger.info('Moving to next chapter!')
 
@@ -2018,6 +2014,10 @@ class AudioPlayBack(Extension):
 
     @component_callback('previous_chapter_button')
     async def callback_previous_chapter_button(self, ctx: ComponentContext):
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
         if ctx.voice_state:
             logger.info('Moving to previous chapter!')
 
@@ -2068,6 +2068,10 @@ class AudioPlayBack(Extension):
 
     @component_callback('stop_audio_button')
     async def callback_stop_button(self, ctx: ComponentContext):
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
         if ctx.voice_state:
             await ctx.edit_origin()
             await ctx.delete()
@@ -2075,6 +2079,10 @@ class AudioPlayBack(Extension):
 
     @component_callback('next_book_button')
     async def callback_next_book_button(self, ctx: ComponentContext):
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
         if not ctx.voice_state:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
             return
@@ -2111,6 +2119,10 @@ class AudioPlayBack(Extension):
 
     @component_callback('previous_book_button')
     async def callback_previous_book_button(self, ctx: ComponentContext):
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
         if not ctx.voice_state:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
             return
@@ -2143,6 +2155,10 @@ class AudioPlayBack(Extension):
 
     @component_callback('volume_up_button')
     async def callback_volume_up_button(self, ctx: ComponentContext):
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
         if ctx.voice_state and ctx.author.voice:
             adjustment = 0.1
             # Update Audio OBJ
@@ -2159,6 +2175,10 @@ class AudioPlayBack(Extension):
 
     @component_callback('volume_down_button')
     async def callback_volume_down_button(self, ctx: ComponentContext):
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
         if ctx.voice_state and ctx.author.voice:
             adjustment = 0.1
 
@@ -2182,6 +2202,10 @@ class AudioPlayBack(Extension):
         - seek_amount: Number of seconds to seek (positive value)
         - is_forward: True for forward seeking, False for rewinding
         """
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
         if not ctx.voice_state:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
             return
