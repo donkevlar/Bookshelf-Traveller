@@ -1151,17 +1151,19 @@ class AudioPlayBack(Extension):
     @slash_command(name="volume", description="change the volume for the bot", dm_permission=False)
     @slash_option(name="volume", description="Must be between 1 and 100", required=False, opt_type=OptionType.INTEGER)
     @check_session_control()
-    async def volume_adjuster(self, ctx, volume=0):
+    async def volume_adjuster(self, ctx, volume=-1):
         if ctx.voice_state:
             audio = self.audioObj
-            if volume == 0:
-                await ctx.send(content=f"Volume currently set to: {self.volume * 100}%", ephemaral=True)
-            elif volume >= 1 < 100:
+
+            if volume == -1:
+                status = "muted" if self.volume == 0 else f"{self.volume * 100}%"
+                await ctx.send(content=f"Volume currently set to: {status}", ephemeral=True)
+            elif 0 <= volume <= 100:
                 volume_float = float(volume / 100)
                 audio.volume = volume_float
                 self.volume = audio.volume
-                await ctx.send(content=f"Volume set to: {volume}%", ephemaral=True)
-
+                status = "muted" if volume == 0 else f"{volume}%"
+                await ctx.send(content=f"Volume set to: {status}", ephemeral=True)
             else:
                 await ctx.send(content=f"Invalid Entry", ephemeral=True)
         else:
@@ -2190,7 +2192,7 @@ class AudioPlayBack(Extension):
             # Update Audio OBJ
             audio = self.audioObj
             self.volume = audio.volume
-            audio.volume = self.volume + adjustment  # NOQA
+            audio.volume = min(1.0, self.volume + adjustment)
             self.volume = audio.volume
 
             # Create embedded message
@@ -2210,7 +2212,7 @@ class AudioPlayBack(Extension):
 
             audio = self.audioObj
             self.volume = audio.volume
-            audio.volume = self.volume - adjustment  # NOQA
+            audio.volume = max(0.0, self.volume - adjustment)
             self.volume = audio.volume
 
             # Create embedded message
