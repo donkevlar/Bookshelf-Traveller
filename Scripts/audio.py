@@ -1865,7 +1865,7 @@ class AudioPlayBack(Extension):
         
             # Update audio state
             self.audioObj = audio
-            self.currentTime = start_time
+            self.currentTime = currentTime
             self.bookItemID = target_book_id
             self.bookTitle = bookTitle
             self.bookDuration = bookDuration
