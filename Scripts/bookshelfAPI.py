@@ -544,7 +544,7 @@ async def bookshelf_title_search(display_title: str) -> list:
     :return: found_titles(list)
     """
     libraries = await bookshelf_libraries()
-    valid_media_types = ['book']
+    valid_media_types = ['book', 'podcast']
 
     valid_libraries = []
     valid_library_count = 0
@@ -826,13 +826,12 @@ async def bookshelf_get_current_chapter(item_id: str, current_time=0):
                 isPodcast = True
                 foundChapter = {}
                 chapter_array = []
-                book_finished = False
+
                 return foundChapter, chapter_array, book_finished, isPodcast
             else:
                 isPodcast = False
-
-            chapter_array = []
-            foundChapter = {}
+                chapter_array = []
+                foundChapter = {}
 
             for chapters in data['media']['chapters']:
                 chapter_array.append(chapters)
@@ -871,15 +870,6 @@ async def bookshelf_audio_obj(item_id: str, index_id: int = 1):
     :return: Tuple containing (onlineURL, currentTime, session_id, bookTitle, bookDuration)
     """
 
-    endpoint = f"/items/{item_id}/play"
-    headers = {'Content-Type': 'application/json'}
-    data = {
-        "deviceInfo": {"clientName": "Bookshelf-Traveller", "deviceId": "Bookshelf-Traveller"},
-        "supportedMimeTypes": ["audio/flac", "audio/mp4"],
-        "mediaPlayer": "Discord",
-        "forceDirectPlay": "true"
-    }
-
     bookshelfURL = os.environ.get("bookshelfURL", "")
     bookshelfToken = os.environ.get("bookshelfToken", "")
 
@@ -889,6 +879,41 @@ async def bookshelf_audio_obj(item_id: str, index_id: int = 1):
 
     defaultAPIURL = f"{bookshelfURL}/api"
     tokenInsert = f"?token={bookshelfToken}"
+
+    # First, get the item details to determine media type
+    item_endpoint = f"/items/{item_id}"
+    item_response = await bookshelf_conn(GET=True, endpoint=item_endpoint)
+    
+    if item_response.status_code != 200:
+        logger.error(f"Failed to get item details for {item_id}")
+        return None
+    
+    item_data = item_response.json()
+    mediaType = item_data.get("mediaType", "unknown")
+    logger.info(f"Item {item_id} mediaType: {mediaType}")
+
+    headers = {'Content-Type': 'application/json'}
+    data = {
+        "deviceInfo": {"clientName": "Bookshelf-Traveller", "deviceId": "Bookshelf-Traveller"},
+        "supportedMimeTypes": ["audio/flac", "audio/mp4"],
+        "mediaPlayer": "Discord",
+        "forceDirectPlay": "true"
+    }
+
+    if mediaType == "podcast":
+        episodes = item_data.get("media", {}).get("episodes", [])
+        if episodes:
+            selected_episode = episodes[0]
+            episode_id_for_session = selected_episode.get('id')
+            episode_title = selected_episode.get('title', 'Unknown')
+        
+            logger.info(f"Selected episode: {episode_title} (ID: {episode_id_for_session})")
+            endpoint = f"/items/{item_id}/play/{episode_id_for_session}"
+        else:
+            logger.error("No episodes found in podcast")
+            return None
+    else:
+        endpoint = f"/items/{item_id}/play"
 
     # Send request to play
     audio_obj = await bookshelf_conn(POST=True, endpoint=endpoint, Headers=headers, Data=data)
@@ -903,38 +928,81 @@ async def bookshelf_audio_obj(item_id: str, index_id: int = 1):
         logger.error(f"Error parsing JSON response: {e}")
         return None
 
-    # Extract audio metadata
+    # Extract basic session info
     library_item = data.get("libraryItem", {})
-    audiofiles = library_item.get("media", {}).get("audioFiles", [])
-    mediaType = library_item.get("mediaType", "unknown")
     currentTime = data.get("currentTime", 0)
     session_id = data.get("id", "")
-    bookTitle = data.get("mediaMetadata", {}).get("title", "Unknown Title")
     bookDuration = data.get("duration", None)
+    episode_id = data.get('episodeId')
 
-    if not audiofiles:
-        logger.warning(f"No audio files found for item {item_id}")
-        return None
+    if mediaType == "podcast":
+        # PODCAST HANDLING
+        episodes = library_item.get("media", {}).get("episodes", [])
+        
+        if not episodes:
+            logger.warning(f"No episodes found for podcast {item_id}")
+            return None
+            
+        logger.info(f"Found {len(episodes)} episodes in podcast")
+        
+        # FOR NOW: Use the first episode (we can enhance this later)
+        # TODO: Add logic to find the episode that matches recent sessions
+        selected_episode = episodes[0]
+        
+        # Extract episode info
+        episode_title = selected_episode.get('title', 'Unknown Episode')
+        episode_audio_file = selected_episode.get('audioFile', {})
+        episode_audio_track = selected_episode.get('audioTrack', {})
+        
+        logger.info(f"Selected episode: {episode_title}")
+        
+        # Use episode's audio file data
+        if episode_audio_file:
+            ino = episode_audio_file.get('ino', '')
+            duration = episode_audio_file.get('duration', 0)
+            bookTitle = episode_title
+            logger.info(f"Using episode audioFile: ino={ino}, duration={duration}")
+        elif episode_audio_track:
+            ino = episode_audio_track.get('ino', '')
+            duration = episode_audio_track.get('duration', 0) 
+            bookTitle = episode_title
+            logger.info(f"Using episode audioTrack: ino={ino}, duration={duration}")
+        else:
+            logger.error(f"No audio file found in episode: {episode_title}")
+            return None
 
-    logger.debug(f"{len(audiofiles)} audio files found for item {item_id}")
+    else:
+        # BOOK HANDLING
+        audiofiles = library_item.get("media", {}).get("audioFiles", [])
+        mediaMetadata = data.get("mediaMetadata", {})
+        bookTitle = mediaMetadata.get("title", "Unknown Title")
 
-    # Get the requested audio file or fallback to the first one
-    selected_file = next((file for file in audiofiles if file.get('index') == index_id), audiofiles[0])
-    ino = selected_file.get('ino', '')
+        if not audiofiles:
+            logger.warning(f"No audio files found for item {item_id}")
+            return None
+
+        # Get the requested audio file or fallback to the first one
+        selected_file = next((file for file in audiofiles if file.get('index') == index_id), audiofiles[0])
+        ino = selected_file.get('ino', '')
+
+        logger.debug(f"{len(audiofiles)} audio files found for item {item_id}")
+
+        if not ino:
+            logger.error(f"Invalid file index {index_id} for item {item_id}.")
+            return None
 
     if not ino:
-        logger.error(f"Invalid file index {index_id} for item {item_id}.")
+        logger.error(f"No valid audio file identifier found for {mediaType} {item_id}")
         return None
 
     logger.info(f"Media Type: {mediaType}, Current Time: {currentTime} Seconds")
-
     onlineURL = f"{defaultAPIURL}/items/{item_id}/file/{ino}{tokenInsert}"
     logger.info(f"Attempting to play: {onlineURL}")
 
-    return onlineURL, currentTime, session_id, bookTitle, bookDuration
+    return onlineURL, currentTime, session_id, bookTitle, bookDuration, episode_id
 
 
-async def bookshelf_session_update(session_id: str, item_id: str, current_time: float, next_time=None, mark_finished=False):
+async def bookshelf_session_update(session_id: str, item_id: str, current_time: float, next_time=None, mark_finished=False, episode_id=None):
     """
     :param session_id:
     :param item_id:
@@ -956,9 +1024,11 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
     if current_time > 1 or mark_finished:
 
         try:
-
             # Check if session is open
             r_session_info = await bookshelf_conn(GET=True, endpoint=get_session_endpoint)
+
+            if r_session_info.status_code != 200:
+                logger.warning(f"Session info request failed. Response: {r_session_info.text}")
 
             if r_session_info.status_code == 200:
                 # Format to JSON
@@ -1004,6 +1074,9 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
 
                 r_session_update = await bookshelf_conn(POST=True, endpoint=sync_endpoint,
                                                         Data=session_update, Headers=headers)
+
+                if r_session_update.status_code != 200:
+                    logger.warning(f"Session sync failed. Response: {r_session_update.text}")
 
                 if r_session_update.status_code == 200:
                     logger.debug(f'bookshelf session sync successful. {updatedTime}')

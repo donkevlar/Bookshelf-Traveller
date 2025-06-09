@@ -116,7 +116,7 @@ class AudioPlayBack(Extension):
                     logger.warning(f"Failed to reset server progress for restart: {e}")
 
             # Get fresh audio object and session
-            audio_obj, server_current_time, session_id, book_title, book_duration = await c.bookshelf_audio_obj(item_id)
+            audio_obj, server_current_time, session_id, book_title, book_duration, episode_id = await c.bookshelf_audio_obj(item_id)
         
             # Determine actual start time
             if force_restart:
@@ -234,7 +234,8 @@ class AudioPlayBack(Extension):
                     item_id=self.bookItemID,
                     session_id=self.sessionID,
                     current_time=updateFrequency,
-                    next_time=self.nextTime)
+                    next_time=self.nextTime,
+                    episode_id=getattr(self, 'episodeId', None))
 
                 self.currentTime = updatedTime
 
@@ -904,10 +905,10 @@ class AudioPlayBack(Extension):
                 await ctx.send(content="Error retrieving chapter information. The item may be invalid or inaccessible.", ephemeral=True)
                 return
 
-            if isPodcast:
-                await ctx.send(content="The content you attempted to play is currently not supported, aborting.",
-                              ephemeral=True)
-                return
+#            if isPodcast:
+#                await ctx.send(content="The content you attempted to play is currently not supported, aborting.",
+#                              ephemeral=True)
+#                return
 
             if bookFinished and not startover:
                 await ctx.send(content="This book is marked as finished. Use the `startover: True` option to play it from the beginning.", ephemeral=True)
@@ -1446,11 +1447,25 @@ class AudioPlayBack(Extension):
                     try:
                         # Get essential IDs
                         bookID = session.get('bookId')
+                        episodeID = session.get('episodeId') 
                         itemID = session.get('libraryItemId')
+                        mediaType = session.get('mediaType')
 
-                        # Skip sessions with missing essential data
-                        if not itemID or not bookID:
-                            logger.info(f"Skipping session with missing itemID or bookID")
+                        should_skip = False
+
+                        if mediaType == 'book':
+                            if not itemID or not bookID:
+                                logger.info(f"Skipping book session with missing itemID or bookID")
+                                should_skip = True
+                        elif mediaType == 'podcast':
+                            if not itemID or not episodeID:
+                                logger.info(f"Skipping podcast session with missing itemID or episodeID") 
+                                should_skip = True
+                        else:
+                            logger.info(f"Skipping session with unknown mediaType: {mediaType}")
+                            should_skip = True
+
+                        if should_skip:
                             skipped_session_count += 1
                             continue
 
@@ -1476,6 +1491,10 @@ class AudioPlayBack(Extension):
                             logger.info(f"Found session with None author for itemID: {itemID}, title: {title}")
                             display_author = 'Unknown Author'
 
+                        # Add media type indicator to the name for podcasts
+                        if mediaType == 'podcast':
+                            title = f"🎙️ {title}"  # Add podcast emoji
+
                         # Format name with smart truncation
                         name = f"{title} | {display_author}"
                         if len(name) > 100:
@@ -1493,6 +1512,16 @@ class AudioPlayBack(Extension):
 
                         # Ensure we don't exceed Discord limit
                         name = name.encode("utf-8")[:100].decode("utf-8", "ignore")
+
+                        # Check if this is a podcast episode (has episodeId structure)
+                        episode_id = session.get('episodeId')
+
+                        if episode_id:
+                            # Use the full library item ID for podcasts
+                            formatted_item = {"name": name, "value": itemID}
+                        else:
+                            # Regular book session
+                            formatted_item = {"name": name, "value": itemID}
 
                         # Add to choices if not already there
                         formatted_item = {"name": name, "value": itemID}
