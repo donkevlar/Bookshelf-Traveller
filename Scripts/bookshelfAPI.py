@@ -256,16 +256,16 @@ async def bookshelf_get_item_details(book_id) -> dict:
             # Books have series and audio files
             series_raw = data['media']['metadata'].get('series', [])
             files_raw = data['media'].get('audioFiles', [])
-            
+
+            # Calculate total duration for books
+            duration_sec = sum(int(file.get('duration', 0)) for file in files_raw)
+
             # Construct series info
             series = ''
             if series_raw:
                 series_name = series_raw[0].get('name', 'Unknown Series')
                 series_seq = series_raw[0].get('sequence', '0')
                 series = f"{series_name}, Book {series_seq}"
-
-        # Calculate total duration
-        duration_sec = sum(int(file.get('duration', 0)) for file in files_raw)
 
         formatted_data = {
             'title': title,

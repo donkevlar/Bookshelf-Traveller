@@ -1,10 +1,11 @@
-from interactions import ActionRow, Button, ButtonStyle, Embed
+from interactions import ActionRow, Button, ButtonStyle, Embed, StringSelectMenu, StringSelectOption
 
 # --- Playback Rows ---
 
 def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=False,
                      has_chapters=True, is_series=False, is_first_book=False, is_last_book=False, 
-                     series_enabled=True, is_first_episode=False, is_last_episode=False):
+                     series_enabled=True, is_first_episode=False, is_last_episode=False,
+                     episode_options=None, series_options=None):
     """Build dynamic playback control rows based on state"""
     is_paused = play_state == "paused"
     rows = []
@@ -32,7 +33,7 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
         Button(style=ButtonStyle.DANGER, label="Stop", custom_id='stop_audio_button')
     ))
 
-    # Row 3: Chapter/Content Navigation (chapter-centric)
+    # Row 3: Chapter Navigation
     if has_chapters:
         # Books with chapters get chapter navigation
         rows.append(ActionRow(
@@ -58,9 +59,9 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
                 custom_id="previous_episode_button"
             ),
             Button(
-                style=ButtonStyle.SECONDARY,
-                label="Episodes",
-                custom_id="episode_menu_button"
+                style=ButtonStyle.SUCCESS if series_enabled else ButtonStyle.SECONDARY,
+                label="Auto▶",
+                custom_id="toggle_episode_auto_button"
             ),
             Button(
                 disabled=is_last_episode, 
@@ -80,14 +81,38 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
             ),
             Button(
                 style=ButtonStyle.SUCCESS if series_enabled else ButtonStyle.SECONDARY,
-                label="Series",
-                custom_id="toggle_series_button"
+                label="Auto▶",
+                custom_id="toggle_series_auto_button"
             ),
             Button(
                 disabled=is_last_book, 
                 style=ButtonStyle.PRIMARY, 
                 label="Next Book", 
                 custom_id="next_book_button"
+            )
+        ))
+
+    # Row 5: Direct dropdown selection menus
+    if is_podcast and episode_options:
+        # Episode selection dropdown
+        rows.append(ActionRow(
+            StringSelectMenu(
+                episode_options,
+                min_values=1,
+                max_values=1,
+                placeholder="Select Episode",
+                custom_id='episode_select_menu'
+            )
+        ))
+    elif is_series and series_options:
+        # Series book selection dropdown
+        rows.append(ActionRow(
+            StringSelectMenu(
+                series_options,
+                min_values=1,
+                max_values=1,
+                placeholder="Select Book",
+                custom_id='series_select_menu'
             )
         ))
 
