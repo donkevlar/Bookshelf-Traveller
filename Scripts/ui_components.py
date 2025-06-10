@@ -3,7 +3,8 @@ from interactions import ActionRow, Button, ButtonStyle, Embed
 # --- Playback Rows ---
 
 def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=False,
-                     has_chapters=True, is_series=False, is_first_book=False, is_last_book=False, series_enabled=True):
+                     has_chapters=True, is_series=False, is_first_book=False, is_last_book=False, 
+                     series_enabled=True, is_first_episode=False, is_last_episode=False):
     """Build dynamic playback control rows based on state"""
     is_paused = play_state == "paused"
     rows = []
@@ -31,29 +32,45 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
         Button(style=ButtonStyle.DANGER, label="Stop", custom_id='stop_audio_button')
     ))
 
-    # Row 3: Navigation controls - dynamic based on content type and chapter availability
-    if is_podcast:
+    # Row 3: Chapter/Content Navigation (chapter-centric)
+    if has_chapters:
+        # Books with chapters get chapter navigation
         rows.append(ActionRow(
-            Button(style=ButtonStyle.PRIMARY, label="Prior Episode", custom_id='previous_episode_button'),
-            Button(style=ButtonStyle.PRIMARY, label="Next Episode", custom_id='next_episode_button')
+            Button(style=ButtonStyle.PRIMARY, label="Prior Chapter", custom_id='previous_chapter_button'),
+            Button(style=ButtonStyle.PRIMARY, label="Next Chapter", custom_id='next_chapter_button')
         ))
-    else:  # book
-        if has_chapters:
-            # Traditional chapter navigation
-            rows.append(ActionRow(
-                Button(style=ButtonStyle.PRIMARY, label="Prior Chapter", custom_id='previous_chapter_button'),
-                Button(style=ButtonStyle.PRIMARY, label="Next Chapter", custom_id='next_chapter_button')
-            ))
-        else:
-            # Large time-based navigation for books without chapters
-            rows.append(ActionRow(
-               # Uses Braille blank space (U+2800), Discord trims regular spaces
-                Button(style=ButtonStyle.PRIMARY, label="⠀⠀⠀-5m⠀⠀⠀", custom_id='rewind_button_large'),
-                Button(style=ButtonStyle.PRIMARY, label="⠀⠀⠀+5m⠀⠀⠀", custom_id='forward_button_large')
-            ))
+    else:
+        # Books without chapters and podcasts get large time jumps
+        rows.append(ActionRow(
+           # Uses Braille blank space (U+2800), Discord trims regular spaces
+            Button(style=ButtonStyle.PRIMARY, label="⠀⠀⠀-5m⠀⠀⠀", custom_id='rewind_button_large'),
+            Button(style=ButtonStyle.PRIMARY, label="⠀⠀⠀+5m⠀⠀⠀", custom_id='forward_button_large')
+        ))
 
-    # Row 4: Series controls (only for books in a series)
-    if is_series:
+    # Row 4: Series/Episode Navigation
+    if is_podcast:
+        # Podcast episode navigation
+        rows.append(ActionRow(
+            Button(
+                disabled=is_first_episode, 
+                style=ButtonStyle.PRIMARY, 
+                label="← Newer", 
+                custom_id="previous_episode_button"
+            ),
+            Button(
+                style=ButtonStyle.SECONDARY,
+                label="Episodes",
+                custom_id="episode_menu_button"
+            ),
+            Button(
+                disabled=is_last_episode, 
+                style=ButtonStyle.PRIMARY, 
+                label="Older →", 
+                custom_id="next_episode_button"
+            )
+        ))
+    elif is_series:
+        # Book series navigation
         rows.append(ActionRow(
             Button(
                 disabled=is_first_book, 
@@ -80,9 +97,12 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
 
 def create_playback_embed(book_title, chapter_title, progress, current_time, duration, 
                            username, user_type, cover_image, color, volume, timestamp, version, 
-                           repeat_enabled=False, series_info=None):
+                           repeat_enabled=False, series_info=None, is_podcast=False):
+    """Playback embed"""
+    emoji = "🎙️" if is_podcast else "📖"
+
     embed = Embed(
-        title=book_title,
+        title=f"{emoji} {book_title}",
         description=f"Currently playing {book_title}",
         color=color
     )
@@ -90,24 +110,35 @@ def create_playback_embed(book_title, chapter_title, progress, current_time, dur
     user_info = f"User: **{username}** (**{user_type}**)"
     embed.add_field(name='ABS Information', value=user_info)
 
-    repeat_status = "Enabled" if repeat_enabled else "Disabled"
-
-    playback_info = (
-        f"Status: **Playing**\n"
-        f"Progress: **{progress}**\n"
-        f"Current Chapter: **{chapter_title}**\n"
-        f"Current Time: **{current_time}**\n"
-        f"Book Duration: **{duration}**\n"
-#        f"Repeat: **{repeat_status}\n**"
-        f"Current volume: **{round(volume * 100)}%**"
-    )
+    if is_podcast:
+        playback_info = (
+            f"Status: **Playing**\n"
+            f"Progress: **{progress}**\n"
+            f"Episode: **{chapter_title}**\n"
+            f"Current Time: **{current_time}**\n"
+            f"Episode Duration: **{duration}**\n"
+            f"Current volume: **{round(volume * 100)}%**"
+        )
+    else:
+        playback_info = (
+            f"Status: **Playing**\n"
+            f"Progress: **{progress}**\n"
+            f"Current Chapter: **{chapter_title}**\n"
+            f"Current Time: **{current_time}**\n"
+            f"Book Duration: **{duration}**\n"
+            f"Current volume: **{round(volume * 100)}%**"
+        )
 
     if series_info:
-        series_text = f"Series: **{series_info['name']}** (Book {series_info['current']}/{series_info['total']})"
+        if is_podcast:
+            # For podcasts, series_info contains episode position info
+            series_text = f"**{series_info['name']}**"
+        else:
+            # For books, show series info normally
+            series_text = f"Series: **{series_info['name']}** (Book {series_info['current']}/{series_info['total']})"
         playback_info += f"\n{series_text}"
 
     embed.add_field(name='Playback Information', value=playback_info)
-
     embed.add_image(cover_image)
     embed.footer = f"Powered by Bookshelf Traveller 🕮 | {version}\nDisplay Last Updated: {timestamp}"
 

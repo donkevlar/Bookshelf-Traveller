@@ -199,19 +199,10 @@ async def bookshelf_auth_test():
 
 async def bookshelf_get_item_details(book_id) -> dict:
     """
-    Fetch book details from Bookshelf API.
+    Fetch book/podcast details from Bookshelf API.
     :param book_id:
-    :return: formatted_data(dict) -> keys: title,
-        author,
-        narrator,
-        series,
-        publisher,
-        genres,
-        publishedYear,
-        description,
-        language,
-        duration,
-        addedDate
+    :return: formatted_data(dict) -> keys: title, author, narrator, series, publisher, genres, 
+                                           publishedYear, description, language, duration, addedDate, mediaType
     """
     _url = f"/items/{book_id}"
     r = await bookshelf_conn(GET=True, endpoint=_url)
@@ -235,6 +226,7 @@ async def bookshelf_get_item_details(book_id) -> dict:
     logger.debug(data)
 
     try:
+        mediaType = data.get('mediaType', 'book')
         title = data['media']['metadata'].get('title', 'Unknown Title')
         desc = data['media']['metadata'].get('description', 'No Description')
         language = data['media']['metadata'].get('language', 'Unknown Language')
@@ -244,16 +236,33 @@ async def bookshelf_get_item_details(book_id) -> dict:
 
         authors_list = [author.get('name') for author in data['media']['metadata'].get('authors', [])]
         narrators_list = data['media']['metadata'].get('narrators', [])
-        series_raw = data['media']['metadata'].get('series', [])
-        files_raw = data['media'].get('audioFiles', [])
         genres_raw = data['media']['metadata'].get('genres', [])
 
-        # Construct series info
-        series = ''
-        if series_raw:
-            series_name = series_raw[0].get('name', 'Unknown Series')
-            series_seq = series_raw[0].get('sequence', '0')
-            series = f"{series_name}, Book {series_seq}"
+        # Handle different media types
+        if mediaType == 'podcast':
+            # For podcasts, calculate total duration from episodes
+            episodes = data['media'].get('episodes', [])
+            duration_sec = sum(int(episode.get('duration', 0)) for episode in episodes)
+            
+            # Podcasts don't have series in the same way books do
+            series = ''
+            
+            # For podcasts, "narrators" might be the host(s)
+            if not narrators_list:
+                # Try to get host information or use author as fallback
+                narrators_list = authors_list if authors_list else ['Unknown Host']
+                
+        else:  # book
+            # Books have series and audio files
+            series_raw = data['media']['metadata'].get('series', [])
+            files_raw = data['media'].get('audioFiles', [])
+            
+            # Construct series info
+            series = ''
+            if series_raw:
+                series_name = series_raw[0].get('name', 'Unknown Series')
+                series_seq = series_raw[0].get('sequence', '0')
+                series = f"{series_name}, Book {series_seq}"
 
         # Calculate total duration
         duration_sec = sum(int(file.get('duration', 0)) for file in files_raw)
@@ -674,6 +683,75 @@ async def bookshelf_get_series_id(series_name: str):
         return None, None
 
 
+async def bookshelf_get_podcast_episodes(item_id: str):
+    """
+    Get all episodes for a podcast with proper indexing
+    :param item_id: Podcast library item ID
+    :return: List of episodes with index information
+    """
+    try:
+        endpoint = f"/items/{item_id}"
+        r = await bookshelf_conn(GET=True, endpoint=endpoint)
+        
+        if r.status_code != 200:
+            logger.error(f"Failed to get podcast episodes for {item_id}")
+            return []
+            
+        data = r.json()
+        media_type = data.get('mediaType', '')
+        
+        if media_type != 'podcast':
+            logger.warning(f"Item {item_id} is not a podcast")
+            return []
+            
+        episodes = data.get('media', {}).get('episodes', [])
+        
+        def get_sort_key(episode):
+            """
+            Create a sort key that prioritizes episode number, then falls back to published date.
+            Episodes with numbers come first (sorted by episode number desc = newest first)
+            Episodes without numbers come after (sorted by published date desc = newest first)
+            """
+            episode_num = episode.get('episode')
+            published_at = episode.get('publishedAt') or 0
+            
+            if episode_num is not None:
+                try:
+                    # Episodes with numbers: use negative episode number for desc sort
+                    # Add large offset to ensure numbered episodes come before unnumbered ones
+                    return (0, -int(episode_num))
+                except (ValueError, TypeError):
+                    # Episode number exists but isn't a valid integer
+                    logger.debug(f"Invalid episode number for episode {episode.get('title', 'Unknown')}: {episode_num}")
+                    # Treat as unnumbered episode
+                    return (1, -published_at)
+            else:
+                # Episodes without numbers: sort by published date (newest first)
+                # Use 1 as first sort key to put these after numbered episodes
+                return (1, -published_at)
+
+        # Sort episodes: numbered episodes first (by episode number desc), then unnumbered (by date desc)
+        episodes_sorted = sorted(episodes, key=get_sort_key)
+        
+        # Add index to each episode (0-based)
+        for index, episode in enumerate(episodes_sorted):
+            episode['episode_index'] = index
+            
+        # Log the sorting result for debugging
+        logger.info(f"Found {len(episodes_sorted)} episodes for podcast {item_id}")
+        if episodes_sorted:
+            first_episode = episodes_sorted[0]
+            first_title = first_episode.get('title', 'Unknown')
+            first_num = first_episode.get('episode', 'No number')
+            logger.debug(f"First episode after sort: '{first_title}' (Episode: {first_num})")
+            
+        return episodes_sorted
+        
+    except Exception as e:
+        logger.error(f"Error getting podcast episodes for {item_id}: {e}")
+        return []
+
+
 async def get_users() -> dict:
     endpoint = "/users"
 
@@ -861,15 +939,16 @@ async def bookshelf_get_current_chapter(item_id: str, current_time=0):
         # Return default values instead of None
         return {}, [], False, False  # Default empty values that are unpacked correctly
 
-async def bookshelf_audio_obj(item_id: str, index_id: int = 1):
+async def bookshelf_audio_obj(item_id: str, episode_index: int = 0):
     """
-    Fetches audio playback details for a given book item.
-
-    :param item_id: Book item ID.
-    :param index_id: The file number index.
-    :return: Tuple containing (onlineURL, currentTime, session_id, bookTitle, bookDuration)
+    Enhanced audio object function with proper podcast episode support
+    
+    :param item_id: Book/Podcast item ID
+    :param episode_index: Episode index for podcasts ONLY (0 = newest, 1 = second newest, etc.)
+                         This parameter is IGNORED for books
+    :return: For books: (onlineURL, currentTime, session_id, title, duration, episode_id)
+             For podcasts: (onlineURL, currentTime, session_id, title, duration, episode_id, episode_info)
     """
-
     bookshelfURL = os.environ.get("bookshelfURL", "")
     bookshelfToken = os.environ.get("bookshelfToken", "")
 
@@ -900,19 +979,43 @@ async def bookshelf_audio_obj(item_id: str, index_id: int = 1):
         "forceDirectPlay": "true"
     }
 
+    episode_info = None
+    episode_id_for_session = None
+
     if mediaType == "podcast":
-        episodes = item_data.get("media", {}).get("episodes", [])
-        if episodes:
-            selected_episode = episodes[0]
-            episode_id_for_session = selected_episode.get('id')
-            episode_title = selected_episode.get('title', 'Unknown')
+        episodes = await bookshelf_get_podcast_episodes(item_id)
         
-            logger.info(f"Selected episode: {episode_title} (ID: {episode_id_for_session})")
-            endpoint = f"/items/{item_id}/play/{episode_id_for_session}"
-        else:
+        if not episodes:
             logger.error("No episodes found in podcast")
             return None
+
+        # Validate episode index
+        if episode_index >= len(episodes):
+            logger.warning(f"Episode index {episode_index} out of range, using latest episode")
+            episode_index = 0
+        elif episode_index < 0:
+            logger.warning(f"Invalid episode index {episode_index}, using latest episode")
+            episode_index = 0
+
+        selected_episode = episodes[episode_index]
+        episode_id_for_session = selected_episode.get('id')
+        episode_title = selected_episode.get('title', 'Unknown Episode')
+        
+        # Store episode info for later use
+        episode_info = {
+            'title': episode_title,
+            'index': episode_index,
+            'total_episodes': len(episodes),
+            'published_at': selected_episode.get('publishedAt', 0),
+            'description': selected_episode.get('description', ''),
+            'duration': selected_episode.get('duration', 0)
+        }
+
+        logger.info(f"Selected episode {episode_index + 1}/{len(episodes)}: {episode_title}")
+        endpoint = f"/items/{item_id}/play/{episode_id_for_session}"
     else:
+        # BOOK HANDLING - episode_index parameter is IGNORED
+        logger.info("Book detected - episode_index parameter ignored")
         endpoint = f"/items/{item_id}/play"
 
     # Send request to play
@@ -936,43 +1039,31 @@ async def bookshelf_audio_obj(item_id: str, index_id: int = 1):
     episode_id = data.get('episodeId')
 
     if mediaType == "podcast":
-        # PODCAST HANDLING
+        bookTitle = episode_info['title']
+
+        # Get audio file info from the episode
         episodes = library_item.get("media", {}).get("episodes", [])
-        
-        if not episodes:
-            logger.warning(f"No episodes found for podcast {item_id}")
-            return None
-            
-        logger.info(f"Found {len(episodes)} episodes in podcast")
-        
-        # FOR NOW: Use the first episode (we can enhance this later)
-        # TODO: Add logic to find the episode that matches recent sessions
-        selected_episode = episodes[0]
-        
-        # Extract episode info
-        episode_title = selected_episode.get('title', 'Unknown Episode')
-        episode_audio_file = selected_episode.get('audioFile', {})
-        episode_audio_track = selected_episode.get('audioTrack', {})
-        
-        logger.info(f"Selected episode: {episode_title}")
-        
-        # Use episode's audio file data
-        if episode_audio_file:
-            ino = episode_audio_file.get('ino', '')
-            duration = episode_audio_file.get('duration', 0)
-            bookTitle = episode_title
-            logger.info(f"Using episode audioFile: ino={ino}, duration={duration}")
-        elif episode_audio_track:
-            ino = episode_audio_track.get('ino', '')
-            duration = episode_audio_track.get('duration', 0) 
-            bookTitle = episode_title
-            logger.info(f"Using episode audioTrack: ino={ino}, duration={duration}")
+        selected_episode = next((ep for ep in episodes if ep.get('id') == episode_id_for_session), None)
+
+        if selected_episode:
+            episode_audio_file = selected_episode.get('audioFile', {})
+            episode_audio_track = selected_episode.get('audioTrack', {})
+
+            if episode_audio_file:
+                ino = episode_audio_file.get('ino', '')
+                logger.info(f"Using episode audioFile: ino={ino}")
+            elif episode_audio_track:
+                ino = episode_audio_track.get('ino', '')
+                logger.info(f"Using episode audioTrack: ino={ino}")
+            else:
+                logger.error(f"No audio file found in episode: {episode_info['title']}")
+                return None
         else:
-            logger.error(f"No audio file found in episode: {episode_title}")
+            logger.error(f"Could not find episode data for {episode_id_for_session}")
             return None
 
     else:
-        # BOOK HANDLING
+        # Book
         audiofiles = library_item.get("media", {}).get("audioFiles", [])
         mediaMetadata = data.get("mediaMetadata", {})
         bookTitle = mediaMetadata.get("title", "Unknown Title")
@@ -981,15 +1072,9 @@ async def bookshelf_audio_obj(item_id: str, index_id: int = 1):
             logger.warning(f"No audio files found for item {item_id}")
             return None
 
-        # Get the requested audio file or fallback to the first one
-        selected_file = next((file for file in audiofiles if file.get('index') == index_id), audiofiles[0])
+        # Use the first audio file for books
+        selected_file = audiofiles[0]
         ino = selected_file.get('ino', '')
-
-        logger.debug(f"{len(audiofiles)} audio files found for item {item_id}")
-
-        if not ino:
-            logger.error(f"Invalid file index {index_id} for item {item_id}.")
-            return None
 
     if not ino:
         logger.error(f"No valid audio file identifier found for {mediaType} {item_id}")
@@ -999,8 +1084,12 @@ async def bookshelf_audio_obj(item_id: str, index_id: int = 1):
     onlineURL = f"{defaultAPIURL}/items/{item_id}/file/{ino}{tokenInsert}"
     logger.info(f"Attempting to play: {onlineURL}")
 
-    return onlineURL, currentTime, session_id, bookTitle, bookDuration, episode_id
-
+    # Podcasts return 7-tuple structure
+    if mediaType == "podcast":
+        return onlineURL, currentTime, session_id, bookTitle, bookDuration, episode_id, episode_info
+    else:
+        # Books returns 6-tuple structure without episode_info
+        return onlineURL, currentTime, session_id, bookTitle, bookDuration, episode_id
 
 async def bookshelf_session_update(session_id: str, item_id: str, current_time: float, next_time=None, mark_finished=False, episode_id=None):
     """
