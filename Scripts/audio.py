@@ -272,6 +272,21 @@ class AudioPlayBack(Extension):
                                 logger.info("Book completed with repeat enabled - triggering restart")
                                 self.needs_restart = True
                                 return  # Let the restart logic handle it
+
+
+                            elif self.isPodcast and self.seriesEnabled and not self.isLastEpisode:
+                                logger.info("Episode completed - moving to next episode")
+                
+                                # Move to next episode
+                                success = await self.move_to_podcast_episode(relative_move=1)
+                                if success:
+                                    logger.info("Successfully moved to next episode")
+                                    return  # Continue with the new episode
+                                else:
+                                    logger.error("Failed to move to next episode")
+                                    await self.cleanup_session("episode progression failed")
+                                    return
+
                             elif self.seriesEnabled and self.currentSeries and not self.isLastBookInSeries:
                                 logger.info("Book completed - moving to next book in series")
                     
@@ -3067,6 +3082,31 @@ class AudioPlayBack(Extension):
                             await self.cleanup_session("restart failed")
                             return None
 
+                    elif self.isPodcast and self.seriesEnabled and not self.isLastEpisode:
+                        # Handle podcast episode progression
+                        logger.info("Seeked past episode end - moving to next episode")
+        
+                        if self.session_update.running:
+                            self.session_update.stop()
+        
+                        # Mark current episode as finished
+                        episode_id = getattr(self, 'episodeId', None)
+                        try:
+                            await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID, episode_id)
+                            logger.info(f"Successfully marked episode {episode_id} as finished before progression")
+                        except Exception as e:
+                            logger.warning(f"Failed to mark episode as finished before progression: {e}")
+        
+                        # Move to next episode
+                        success = await self.move_to_podcast_episode(relative_move=1)
+                        if success:
+                            self.session_update.start()
+                            return self.audioObj
+                        else:
+                            logger.error("Failed to move to next episode")
+                            await self.cleanup_session("episode progression failed")
+                            return None
+
                     elif self.seriesEnabled and self.currentSeries and not self.isLastBookInSeries:
                         logger.info("Seeked past book end (with chapters) - moving to next book in series")
             
@@ -3083,8 +3123,20 @@ class AudioPlayBack(Extension):
                             return None
 
                     else:
-                        logger.info("Seeked past book end (no chapters, no repeat) - marking complete and cleaning up")
-                        await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
+                        # Final fallback - mark as complete and cleanup
+                        if self.isPodcast:
+                            logger.info("Seeked past final episode - marking complete and cleaning up")
+                        else:
+                            logger.info("Seeked past book end - marking complete and cleaning up")
+        
+                        # Mark as finished while we still have session info
+                        episode_id = getattr(self, 'episodeId', None) if self.isPodcast else None
+                        try:
+                            await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID, episode_id)
+                            logger.info(f"Successfully marked {'episode' if episode_id else 'book'} as finished via session sync")
+                        except Exception as e:
+                            logger.warning(f"Failed to mark as finished via session sync: {e}")
+        
                         await self.cleanup_session("completed via seek past end")
                         return None
         
