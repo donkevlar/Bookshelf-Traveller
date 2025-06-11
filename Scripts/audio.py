@@ -1679,24 +1679,57 @@ class AudioPlayBack(Extension):
 
                         if r.status_code == 200:
                             data = r.json()
-                            dataset = data.get('book', [])
 
-                            for book in dataset:
-                                authors_list = []
-                                title = book['libraryItem']['media']['metadata']['title']
-                                authors_raw = book['libraryItem']['media']['metadata']['authors']
+                            book_dataset = data.get('book', [])
+                            podcast_dataset = data.get('podcast', [])
 
-                                for author in authors_raw:
-                                    name = author.get('name')
-                                    authors_list.append(name)
+                            logger.info(f"Library {lib_id.get('name')} search results: {len(book_dataset)} books, {len(podcast_dataset)} podcasts")
 
-                                author = ', '.join(authors_list)
-                                book_id = book['libraryItem']['id']
+                            # Process books
+                            for book in book_dataset:
+                                try:
+                                    authors_list = []
+                                    title = book['libraryItem']['media']['metadata']['title']
+                                    authors_raw = book['libraryItem']['media']['metadata'].get('authors', [])
 
-                                # Add to list if not already present (avoid duplicates)
-                                new_item = {'id': book_id, 'title': title, 'author': author}
-                                if not any(item['id'] == book_id for item in found_titles):
-                                    found_titles.append(new_item)
+                                    for author in authors_raw:
+                                        name = author.get('name')
+                                        if name:
+                                            authors_list.append(name)
+
+                                    author = ', '.join(authors_list) if authors_list else 'Unknown Author'
+                                    book_id = book['libraryItem']['id']
+
+                                    # Add to list if not already present (avoid duplicates)
+                                    new_item = {'id': book_id, 'title': title, 'author': author}
+                                    if not any(item['id'] == book_id for item in found_titles):
+                                        found_titles.append(new_item)
+                                        logger.debug(f"Added book: {title}")
+                                except Exception as e:
+                                    logger.warning(f"Error processing book result: {e}")
+    
+                            # Process podcasts
+                            for podcast in podcast_dataset:
+                                try:
+                                    title = podcast['libraryItem']['media']['metadata']['title']
+                                    # Podcasts have different author structure
+                                    podcast_metadata = podcast['libraryItem']['media']['metadata']
+                                    author = podcast_metadata.get('author', 'Unknown Author')
+                                    if not author or author == 'Unknown Author':
+                                        author = podcast_metadata.get('feedAuthor', 'Unknown Author')
+            
+                                    book_id = podcast['libraryItem']['id']
+
+                                    # Add podcast emoji to distinguish in search
+                                    title_with_emoji = f"🎙️ {title}"
+
+                                    # Add to list if not already present (avoid duplicates)
+                                    new_item = {'id': book_id, 'title': title_with_emoji, 'author': author}
+                                    if not any(item['id'] == book_id for item in found_titles):
+                                        found_titles.append(new_item)
+                                        logger.debug(f"Added podcast: {title}")
+                                except Exception as e:
+                                    logger.warning(f"Error processing podcast result: {e}")
 
                     except Exception as e:
                         logger.error(f"Error searching library {library_iD}: {e}")
