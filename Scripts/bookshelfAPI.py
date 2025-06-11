@@ -435,16 +435,16 @@ async def bookshelf_item_progress(item_id):
 
         return formatted_info
 
-
-async def bookshelf_mark_book_finished(item_id: str, session_id: str):
+async def bookshelf_mark_book_finished(item_id: str, session_id: str, episode_id: str = None):
     """
-    Explicitly mark a book as finished by setting progress to 100% and isFinished to True
+    Explicitly mark a book or podcast episode as finished
     :param item_id: The library item ID
-    :param session_id: The current session ID
+    :param session_id: The current session ID  
+    :param episode_id: For podcasts, the specific episode ID to mark as finished
     :return: True if successful, False otherwise
     """
     try:
-        # First, get the book's total duration
+        # First, get the item's details to determine media type
         endpoint = f"/items/{item_id}"
         r = await bookshelf_conn(GET=True, endpoint=endpoint)
 
@@ -453,61 +453,77 @@ async def bookshelf_mark_book_finished(item_id: str, session_id: str):
             return False
 
         data = r.json()
+        media_type = data.get('mediaType', 'book')
 
-        # Calculate total duration from audio files
-        files_raw = data['media'].get('audioFiles', [])
-        total_duration = sum(int(file.get('duration', 0)) for file in files_raw)
+        if media_type == 'podcast':
+            if not episode_id:
+                logger.error(f"Episode ID required for podcast {item_id} but not provided")
+                return False
+
+            # Get episode list to find the episode index
+            episode_list = await bookshelf_get_podcast_episodes(item_id)
+            episode_data = next((ep for ep in episode_list if ep["id"] == episode_id), None)
+
+            if not episode_data:
+                logger.error(f"Episode {episode_id} not found in podcast {item_id}")
+                return False
+
+            # Get duration from audioFile
+            audio_file = episode_data.get("audioFile", {})
+            duration = audio_file.get("duration", 0) if audio_file else 0
+            
+            if not duration or int(duration) <= 0:
+                logger.error(f"Invalid episode duration for episode {episode_id}: {duration}")
+                return False
+            
+            total_duration = int(duration)
+            logger.info(f"Marking podcast episode {episode_id} as finished (duration: {total_duration}s)")
+
+        else:
+            # For books, calculate total duration from audio files
+            files_raw = data['media'].get('audioFiles', [])
+            total_duration = sum(int(file.get('duration', 0)) for file in files_raw)
+            logger.info(f"Marking book {item_id} as finished (duration: {total_duration}s)")
 
         if total_duration <= 0:
-            logger.error(f"Invalid total duration for book {item_id}")
+            logger.error(f"Invalid total duration for {media_type} {item_id}: {total_duration}")
             return False
 
-        # Update session to mark as finished
-        sync_endpoint = f"/session/{session_id}/sync"
-        headers = {'Content-Type': 'application/json'}
+        # Update the progress endpoint to explicitly mark as finished
+        if media_type == 'podcast':
+            # Use the web interface's endpoint pattern
+            progress_endpoint = f"/me/progress/{item_id}/{episode_id}"
+            logger.info(f"Updating podcast episode progress at: {progress_endpoint}")
+        else:
+            # For books, use just the item ID
+            progress_endpoint = f"/me/progress/{item_id}"
+            logger.info(f"Updating book progress at: {progress_endpoint}")
 
-        # Set the current time to the very end and mark as finished
-        session_update = {
+        progress_update = {
+            'isFinished': True,
+            'progress': 1.0,
             'currentTime': float(total_duration),
-            'timeListened': 1.0,  # Small amount to trigger the update
-            'duration': float(total_duration)
+            'finishedAt': int(time.time() * 1000)  # Current timestamp in milliseconds
         }
 
-        r_session_update = await bookshelf_conn(POST=True, endpoint=sync_endpoint,
-                                              Data=session_update, Headers=headers)
+        # Use PATCH method for progress update
+        async with httpx.AsyncClient() as client:
+            bookshelfURL = os.environ.get("bookshelfURL")
+            bookshelfToken = os.environ.get("bookshelfToken") 
+            api_url = f"{bookshelfURL}/api{progress_endpoint}?token={bookshelfToken}"
 
-        if r_session_update.status_code == 200:
-            logger.info(f"Successfully marked book {item_id} as finished")
+            progress_response = await client.patch(api_url, json=progress_update, 
+                                                 headers={'Content-Type': 'application/json'})
 
-            # Now explicitly set the progress to finished via the progress endpoint
-            progress_endpoint = f"/me/progress/{item_id}"
-            progress_update = {
-                'isFinished': True,
-                'progress': 1.0,
-                'currentTime': float(total_duration)
-            }
-
-            # Use PATCH method for progress update
-            async with httpx.AsyncClient() as client:
-                bookshelfURL = os.environ.get("bookshelfURL")
-                bookshelfToken = os.environ.get("bookshelfToken") 
-                api_url = f"{bookshelfURL}/api{progress_endpoint}?token={bookshelfToken}"
-
-                progress_response = await client.patch(api_url, json=progress_update, 
-                                                     headers={'Content-Type': 'application/json'})
-
-                if progress_response.status_code == 200:
-                    logger.info(f"Successfully updated progress for book {item_id} to finished")
-                    return True
-                else:
-                    logger.warning(f"Failed to update progress endpoint, but session was updated. Status: {progress_response.status_code}")
-                    return True  # Session update worked, so consider it successful
-        else:
-            logger.error(f"Failed to update session for finished book. Status: {r_session_update.status_code}")
-            return False
+            if progress_response.status_code == 200:
+                logger.info(f"Successfully marked {media_type} {'episode ' + episode_id if episode_id else item_id} as finished")
+                return True
+            else:
+                logger.warning(f"Failed to update progress endpoint. Status: {progress_response.status_code}, Response: {progress_response.text}")
+                return False
 
     except Exception as e:
-        logger.error(f"Error marking book as finished: {e}")
+        logger.error(f"Error marking {media_type if 'media_type' in locals() else 'item'} as finished: {e}")
         return False
 
 
@@ -1027,6 +1043,7 @@ async def bookshelf_audio_obj(item_id: str, episode_index: int = 0):
 
     try:
         data = audio_obj.json()
+
     except Exception as e:
         logger.error(f"Error parsing JSON response: {e}")
         return None
