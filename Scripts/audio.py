@@ -1433,28 +1433,46 @@ class AudioPlayBack(Extension):
         embed_message = self.create_announcement_embed(voice_channel, ctx.guild.name)
 
         try:
-            # Get detailed book information
-            book_details = await c.bookshelf_get_item_details(self.bookItemID)
-            author = book_details.get('author', 'Unknown Author')
-            series = book_details.get('series', '')
-            narrator = book_details.get('narrator', '')
-        
+            # Get detailed information
+            item_details = await c.bookshelf_get_item_details(self.bookItemID)
+            logger.info(f"Item details for announcement: {item_details}")
+
             # Build announcement message
             announcement_parts = ["📢 **Now Playing:**"]
             announcement_parts.append(f"**{self.bookTitle}**")
+    
+            if self.isPodcast:
+                # For podcasts, get podcast title and author
+                podcast_author = item_details.get('author', 'Unknown Podcast Host')
+                logger.info(f"Podcast author from item_details: '{podcast_author}'")
         
-            if series:
-                announcement_parts.append(f"*{series}*")
+                # Get the actual podcast title (not episode title)
+                podcast_endpoint = f"/items/{self.bookItemID}"
+                podcast_response = await c.bookshelf_conn(GET=True, endpoint=podcast_endpoint)
+                if podcast_response.status_code == 200:
+                    podcast_data = podcast_response.json()
+                    podcast_title = podcast_data['media']['metadata'].get('title', 'Unknown Podcast')
+                    announcement_parts.append(f"*from {podcast_title}*")
         
-            announcement_parts.append(f"by {author}")
-        
-            if narrator and narrator != 'Unknown Narrator':
-                announcement_parts.append(f"Read by {narrator}")
-        
+                if podcast_author and podcast_author != 'Unknown Podcast Host':
+                    announcement_parts.append(f"hosted by {podcast_author}")
+            else:
+                # Get detailed book information
+                author = item_details.get('author', 'Unknown Author')
+                series = item_details.get('series', '')
+                narrator = item_details.get('narrator', '')
+
+                if series:
+                    announcement_parts.append(f"*{series}*")
+
+                announcement_parts.append(f"by {author}")
+
+                if narrator and narrator != 'Unknown Narrator':
+                    announcement_parts.append(f"Read by {narrator}")
+
             announcement_parts.append(f"\nJoin us in {voice_channel.mention}!")
-        
             announcement_content = "\n".join(announcement_parts)
-        
+
         except Exception as e:
             logger.error(f"Error getting book details for announcement: {e}")
             # Fallback to basic announcement
@@ -1499,12 +1517,28 @@ class AudioPlayBack(Extension):
             description=f"**{self.bookTitle}**",
             color=0x3498db if self.play_state == 'playing' else (0xe67e22 if self.play_state == 'paused' else 0x95a5a6)
         )
+
+        # Get proper chapter/episode display
+        if self.isPodcast:
+            current_episode = self.podcastEpisodes[self.currentEpisodeIndex]
+            episode_number = current_episode.get('episode')
+            position_in_list = self.currentEpisodeIndex + 1
+        
+            if episode_number is not None:
+                chapter_display = f"Episode {episode_number}"
+            else:
+                if self.currentEpisodeIndex == 0:
+                    chapter_display = "Latest Episode"
+                else:
+                    chapter_display = f"Episode {position_in_list}"
+        else:
+            chapter_display = self.currentChapterTitle
     
         # Add playbook information
         playback_info = (
             f"**Status:** {self.play_state.title()}\n"
             f"**Progress:** {progress_percentage}%\n"
-            f"**Chapter:** {self.currentChapterTitle}\n"
+            f"**{'Episode' if self.isPodcast else 'Chapter'}:** {chapter_display}\n"
             f"**Current Time:** {formatted_current}\n"
             f"**Total Duration:** {formatted_duration}"
         )
@@ -2263,6 +2297,45 @@ class AudioPlayBack(Extension):
                 series_options=series_options
             )
 
+    async def update_callback_embed(self, ctx, update_buttons=True, stop_auto_kill=False):
+        """
+        Update playback embed for component callbacks with proper chapter/episode display
+    
+        Args:
+            ctx: Component context
+            update_buttons: Whether to update the button components as well
+            stop_auto_kill: Whether to stop the auto-kill session task
+        """
+        # Get proper display title
+        if self.isPodcast:
+            current_episode = self.podcastEpisodes[self.currentEpisodeIndex]
+            episode_number = current_episode.get('episode')
+            position_in_list = self.currentEpisodeIndex + 1
+        
+            if episode_number is not None:
+                display_chapter = f"Episode {episode_number}"
+            else:
+                if self.currentEpisodeIndex == 0:
+                    display_chapter = "Latest Episode"
+                else:
+                    display_chapter = f"Episode {position_in_list}"
+        else:
+            display_chapter = self.currentChapterTitle
+
+        # Generate embed
+        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=display_chapter)
+    
+        # Stop auto kill session task if requested
+        if stop_auto_kill and self.auto_kill_session.running:
+            logger.info("Stopping auto kill session backend task.")
+            self.auto_kill_session.stop()
+    
+        # Update UI
+        if update_buttons:
+            await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+        else:
+            await ctx.edit_origin(embed=embed_message)
+
     async def shared_seek_callback(self, ctx: ComponentContext, seek_amount: float, is_forward: bool):
         """
         Shared logic for all seek component callbacks.
@@ -2290,15 +2363,8 @@ class AudioPlayBack(Extension):
             await ctx.edit_origin(content="📚 Book completed!")
             return
 
-        # Update the embedded message with new info
-        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-
-        # Stop auto kill session task
-        if self.auto_kill_session.running:
-            logger.info("Stopping auto kill session backend task.")
-            self.auto_kill_session.stop()
-
-        await ctx.edit_origin(embed=embed_message)
+        # Update UI
+        await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
         await ctx.voice_state.channel.voice_state.play(self.audioObj)
 
     def _create_media_options(self, media_type="series"):
@@ -2580,7 +2646,7 @@ class AudioPlayBack(Extension):
         if not await can_control_session(ctx, self):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
-        
+
         if ctx.voice_state:
             logger.info('Pausing Playback!')
             self.play_state = 'paused'
@@ -2590,8 +2656,7 @@ class AudioPlayBack(Extension):
 
             self.auto_kill_session.start()
 
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            await ctx.edit_origin(content="Play", components=self.get_current_playback_buttons(), embed=embed_message)
+            await self.update_callback_embed(ctx, update_buttons=True)
 
     @component_callback('play_audio_button')
     async def callback_play_button(self, ctx: ComponentContext):
@@ -2610,8 +2675,7 @@ class AudioPlayBack(Extension):
                 logger.info("Stopping auto kill session backend task.")
                 self.auto_kill_session.stop()
 
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            await ctx.edit_origin(components=self.get_current_playback_buttons(), embed=embed_message)
+            await self.update_callback_embed(ctx, update_buttons=True)
 
     @component_callback('repeat_button')
     async def callback_repeat_button(self, ctx: ComponentContext):
@@ -2621,9 +2685,7 @@ class AudioPlayBack(Extension):
             return
 
         self.repeat_enabled = not self.repeat_enabled
-
-        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-        await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+        await self.update_callback_embed(ctx, update_buttons=True)
 
     @component_callback('next_chapter_button')
     async def callback_next_chapter_button(self, ctx: ComponentContext):
@@ -2632,8 +2694,6 @@ class AudioPlayBack(Extension):
             return
 
         if ctx.voice_state:
-            logger.info('Moving to next chapter!')
-
             # Check if chapter data exists before attempting navigation
             if not self.currentChapter or not self.chapterArray:
                 logger.warning("No chapter data available for this book. Cannot navigate chapters.")
@@ -2659,24 +2719,11 @@ class AudioPlayBack(Extension):
 
             if self.found_next_chapter:
                 # Normal successful navigation or restart
-                chapter_title = self.newChapterTitle if self.newChapterTitle else self.currentChapterTitle
-                embed_message = self.modified_message(color=ctx.author.accent_color, chapter=chapter_title)
-
-                # Stop auto kill session task
-                if self.auto_kill_session.running:
-                    logger.info("Stopping auto kill session backend task.")
-                    self.auto_kill_session.stop()
-
-                await ctx.edit(embed=embed_message, components=self.get_current_playback_buttons())
+                await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
                 await ctx.voice_state.channel.voice_state.play(self.audioObj)
-
             elif session_was_cleaned_up and is_last_chapter:
-                # Book completed - this is expected, not an error
                 await ctx.edit_origin(content="📚 Book completed!")
-                # Don't show any error message - this is successful completion
-            
             else:
-                # Actual navigation failure (not book completion)
                 await ctx.send(content="Failed to navigate to next chapter.", ephemeral=True)
                 # Restart playback since we stopped it
                 if ctx.voice_state and ctx.voice_state.channel:
@@ -2684,7 +2731,7 @@ class AudioPlayBack(Extension):
 
             # Reset variable
             self.found_next_chapter = False
-            self.newChapterTitle = ''  # Clear after use
+            self.newChapterTitle = ''
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
@@ -2695,10 +2742,8 @@ class AudioPlayBack(Extension):
             return
 
         if ctx.voice_state:
-            logger.info('Moving to previous chapter!')
-
+            # Check if chapter data exists before attempting navigation
             if not self.currentChapter or not self.chapterArray:
-                logger.warning("No chapter data available for this book. Cannot navigate chapters.")
                 await ctx.send(content="This book doesn't have chapter information. Chapter navigation is not available.", 
                               ephemeral=True)
                 return  # Return early without stopping playback
@@ -2720,25 +2765,17 @@ class AudioPlayBack(Extension):
 
             # Check if move_chapter succeeded before proceeding
             if self.found_next_chapter:
-                embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
-
-                # Stop auto kill session task
-                if self.auto_kill_session.running:
-                    logger.info("Stopping auto kill session backend task.")
-                    self.auto_kill_session.stop()
-
-                await ctx.edit(embed=embed_message, components=self.get_current_playback_buttons())
+                await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
                 ctx.voice_state.channel.voice_state.player.stop()
-                await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
+                await ctx.voice_state.channel.voice_state.play(self.audioObj)
             else:
-                # Previous chapter navigation failure is always an actual error
-                # (since going before first chapter just goes to first chapter)
                 await ctx.send(content="Failed to navigate to previous chapter.", ephemeral=True)
                 if ctx.voice_state and ctx.voice_state.channel:
                     await ctx.voice_state.channel.voice_state.play(self.audioObj)
 
-            # Resetting Variable
+            # Reset Variable
             self.found_next_chapter = False
+            self.newChapterTitle = ''
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
@@ -2781,14 +2818,7 @@ class AudioPlayBack(Extension):
         success = await self.move_to_series_book("next")
     
         if success:
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-        
-            # Stop auto kill session task
-            if self.auto_kill_session.running:
-                logger.info("Stopping auto kill session backend task.")
-                self.auto_kill_session.stop()
-        
-            await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+            await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
             await ctx.voice_state.channel.voice_state.play(self.audioObj)
         else:
             await ctx.send(content="Failed to move to next book in series.", ephemeral=True)
@@ -2817,14 +2847,8 @@ class AudioPlayBack(Extension):
         success = await self.move_to_series_book("previous")
     
         if success:
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-        
-            # Stop auto kill session task
-            if self.auto_kill_session.running:
-                logger.info("Stopping auto kill session backend task.")
-                self.auto_kill_session.stop()
-        
-            await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+            # Update UI
+            await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
             await ctx.voice_state.channel.voice_state.play(self.audioObj)
         else:
             await ctx.send(content="Failed to move to previous book in series.", ephemeral=True)
@@ -2832,12 +2856,11 @@ class AudioPlayBack(Extension):
     @component_callback('toggle_series_auto_button')
     async def callback_toggle_series_button(self, ctx: ComponentContext):
         """Toggle series auto-progression mode"""
-        self.seriesEnabled = not self.seriesEnabled
         status = "enabled" if self.seriesEnabled else "disabled"
 
-        # Update the embed and buttons
-        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-        await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+        # Update UI
+        self.seriesEnabled = not self.seriesEnabled
+        await self.update_callback_embed(ctx, update_buttons=True)
 
     @component_callback('next_episode_button')
     async def callback_next_episode_button(self, ctx: ComponentContext):
@@ -2863,27 +2886,8 @@ class AudioPlayBack(Extension):
         success = await self.move_to_podcast_episode(relative_move=1)
 
         if success:
-            # Determine proper episode display name
-            current_episode = self.podcastEpisodes[self.currentEpisodeIndex]
-            episode_number = current_episode.get('episode')
-            position_in_list = self.currentEpisodeIndex + 1
-        
-            if episode_number is not None:
-                display_chapter = f"Episode {episode_number}"
-            else:
-                if self.currentEpisodeIndex == 0:
-                    display_chapter = "Latest Episode"
-                else:
-                    display_chapter = f"Episode {position_in_list}"
-        
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=display_chapter)
-
-            # Stop auto kill session task
-            if self.auto_kill_session.running:
-                logger.info("Stopping auto kill session backend task.")
-                self.auto_kill_session.stop()
-
-            await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+            # Update UI
+            await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
             await ctx.voice_state.channel.voice_state.play(self.audioObj)
         else:
             await ctx.send(content="Failed to move to next episode.", ephemeral=True)
@@ -2912,27 +2916,7 @@ class AudioPlayBack(Extension):
         success = await self.move_to_podcast_episode(relative_move=-1)
 
         if success:
-            # Determine proper episode display name
-            current_episode = self.podcastEpisodes[self.currentEpisodeIndex]
-            episode_number = current_episode.get('episode')
-            position_in_list = self.currentEpisodeIndex + 1
-        
-            if episode_number is not None:
-                display_chapter = f"Episode {episode_number}"
-            else:
-                if self.currentEpisodeIndex == 0:
-                    display_chapter = "Latest Episode"
-                else:
-                    display_chapter = f"Episode {position_in_list}"
-        
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=display_chapter)
-
-            # Stop auto kill session task
-            if self.auto_kill_session.running:
-                logger.info("Stopping auto kill session backend task.")
-                self.auto_kill_session.stop()
-
-            await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+            await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
             await ctx.voice_state.channel.voice_state.play(self.audioObj)
         else:
             await ctx.send(content="Failed to move to previous episode.", ephemeral=True)
@@ -2944,12 +2928,9 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        self.seriesEnabled = not self.seriesEnabled  # Reuse Series enable variable for episodes
-        status = "enabled" if self.seriesEnabled else "disabled"
-
-        # Update the embed and buttons
-        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-        await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+        # Update UI
+        self.seriesEnabled = not self.seriesEnabled  # Reuse Series enable variable for episodes. Should rename to Auto
+        await self.update_callback_embed(ctx, update_buttons=True)
 
     @component_callback('series_select_menu')
     async def series_select_callback(self, ctx: ComponentContext):
@@ -2975,10 +2956,8 @@ class AudioPlayBack(Extension):
             audio.volume = self.volume + adjustment  # NOQA
             self.volume = audio.volume
 
-            # Create embedded message
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            await ctx.edit_origin(embed=embed_message)
-
+            # Update UI
+            await self.update_callback_embed(ctx, update_buttons=False)
             logger.info(f"Set Volume {round(self.volume * 100)}")  # NOQA
 
     @component_callback('volume_down_button')
@@ -2995,10 +2974,8 @@ class AudioPlayBack(Extension):
             audio.volume = self.volume - adjustment  # NOQA
             self.volume = audio.volume
 
-            # Create embedded message
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            await ctx.edit_origin(embed=embed_message)
-
+            # Update UI
+            await self.update_callback_embed(ctx, update_buttons=False)
             logger.info(f"Set Volume {round(self.volume * 100)}")  # NOQA
 
     @component_callback('forward_button')
