@@ -4,8 +4,8 @@ from interactions import ActionRow, Button, ButtonStyle, Embed, StringSelectMenu
 
 def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=False,
                      has_chapters=True, is_series=False, is_first_book=False, is_last_book=False, 
-                     series_enabled=True, is_first_episode=False, is_last_episode=False,
-                     episode_options=None, series_options=None):
+                     series_autoplay=True, is_first_episode=False, is_last_episode=False,
+                     podcast_autoplay=True, episode_options=None, series_options=None):
     """Build dynamic playback control rows based on state"""
     is_paused = play_state == "paused"
     rows = []
@@ -59,9 +59,9 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
                 custom_id="previous_episode_button"
             ),
             Button(
-                style=ButtonStyle.SUCCESS if series_enabled else ButtonStyle.SECONDARY,
+                style=ButtonStyle.SUCCESS if podcast_autoplay else ButtonStyle.SECONDARY,
                 label="Auto▶",
-                custom_id="toggle_episode_auto_button"
+                custom_id="toggle_podcast_auto_button"
             ),
             Button(
                 disabled=is_last_episode, 
@@ -80,7 +80,7 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
                 custom_id="previous_book_button"
             ),
             Button(
-                style=ButtonStyle.SUCCESS if series_enabled else ButtonStyle.SECONDARY,
+                style=ButtonStyle.SUCCESS if series_autoplay else ButtonStyle.SECONDARY,
                 label="Auto▶",
                 custom_id="toggle_series_auto_button"
             ),

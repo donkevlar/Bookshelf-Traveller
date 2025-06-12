@@ -82,17 +82,18 @@ class AudioPlayBack(Extension):
         self.newChapterTitle = ''
         self.found_next_chapter = False
         # Series Variables
-        self.seriesEnabled = True  # Default to enabled
+        self.currentSeries = None  # Series metadata
+        self.seriesAutoplay = True   # Auto-progression for book series
         self.seriesList = []  # List of book IDs in series order
         self.seriesIndex = None  # Current position in series
         self.previousBookID = None
         self.previousBookTime = None
-        self.currentSeries = None  # Series metadata
         self.isLastBookInSeries = False
         self.isFirstBookInSeries = False
         self.seriesBookCache = {}
         # Podcast Variables
         self.isPodcast = False
+        self.podcastAutoplay = True  # Auto-progression for podcast episodes
         self.podcastEpisodes = []
         self.currentEpisodeIndex = None
         self.totalEpisodes = 0
@@ -274,7 +275,7 @@ class AudioPlayBack(Extension):
                                 return  # Let the restart logic handle it
 
 
-                            elif self.isPodcast and self.seriesEnabled and not self.isLastEpisode:
+                            elif self.podcastAutoplay and self.isPodcast and not self.isLastEpisode:
                                 logger.info("Episode completed - moving to next episode")
                 
                                 # Move to next episode
@@ -287,7 +288,7 @@ class AudioPlayBack(Extension):
                                     await self.cleanup_session("episode progression failed")
                                     return
 
-                            elif self.seriesEnabled and self.currentSeries and not self.isLastBookInSeries:
+                            elif self.seriesAutoplay and self.currentSeries and not self.isLastBookInSeries:
                                 logger.info("Book completed - moving to next book in series")
                     
                                 # Store current book as previous
@@ -595,7 +596,7 @@ class AudioPlayBack(Extension):
             preserved_series = self.currentSeries
             preserved_series_list = self.seriesList.copy()
             preserved_series_index = self.seriesIndex
-            preserved_series_enabled = self.seriesEnabled
+            preserved_series_enabled = self.seriesAutoplay
             preserved_is_first = self.isFirstBookInSeries
             preserved_is_last = self.isLastBookInSeries
 
@@ -628,7 +629,7 @@ class AudioPlayBack(Extension):
             self.currentSeries = preserved_series
             self.seriesList = preserved_series_list
             self.seriesIndex = preserved_series_index
-            self.seriesEnabled = preserved_series_enabled
+            self.seriesAutoplay = preserved_series_enabled
             self.isFirstBookInSeries = preserved_is_first
             self.isLastBookInSeries = preserved_is_last
 
@@ -742,7 +743,7 @@ class AudioPlayBack(Extension):
                         self.found_next_chapter = False
                         return
 
-                elif self.seriesEnabled and self.currentSeries and not self.isLastBookInSeries:
+                elif self.seriesAutoplay and self.currentSeries and not self.isLastBookInSeries:
                     logger.info("Reached final chapter - moving to next book in series")                                                                                                                                        # Stop the session update task before moving to next book                                             if self.session_update.running:
 
                     # Stop the session update task before moving to next book
@@ -1333,24 +1334,53 @@ class AudioPlayBack(Extension):
         else:
             return await ctx.send("Bot not in voice channel or an error has occured. Please try again later!", ephemeral=True)
 
-    @slash_command(name="toggle-series", description="Toggle automatic series progression on/off")
+    @slash_command(name="toggle-series-autoplay", description="Toggle automatic series progression on/off")
     @check_session_control()
-    async def toggle_series_mode(self, ctx: SlashContext):
+    async def toggle_series_autoplay(self, ctx: SlashContext):
         if not ctx.voice_state or self.play_state == 'stopped':
             await ctx.send("No active playback session found.", ephemeral=True)
             return
     
-        self.seriesEnabled = not self.seriesEnabled
-        status = "enabled" if self.seriesEnabled else "disabled"
+        if self.isPodcast:
+            await ctx.send("This command is for book series. Use `/toggle-podcast-autoplay` for podcasts.", ephemeral=True)
+            return
+        
+        if not self.currentSeries:
+            await ctx.send("Current book is not part of a series.", ephemeral=True)
+            return
+    
+        self.seriesAutoplay = not self.seriesAutoplay
+        status = "enabled" if self.seriesAutoplay else "disabled"
     
         series_info = ""
-        if self.currentSeries and self.seriesEnabled:
+        if self.currentSeries and self.seriesAutoplay:
             current_pos = self.seriesIndex + 1 if self.seriesIndex is not None else "?"
             total_books = len(self.seriesList)
             series_info = f"\nCurrently playing book {current_pos}/{total_books} in '{self.currentSeries['name']}'"
     
         await ctx.send(f"Series auto-progression {status}.{series_info}", ephemeral=True)
-        logger.info(f"Series mode {status} by {ctx.author}")
+
+    @slash_command(name="toggle-podcast-autoplay", description="Toggle automatic podcast episode progression on/off")
+    @check_session_control()
+    async def toggle_podcast_autoplay(self, ctx: SlashContext):
+        if not ctx.voice_state or self.play_state == 'stopped':
+            await ctx.send("No active playback session found.", ephemeral=True)
+            return
+    
+        if not self.isPodcast:
+            await ctx.send("This command is for podcasts. Use `/toggle-series-autoplay` for book series.", ephemeral=True)
+            return
+    
+        self.podcastAutoplay = not self.podcastAutoplay
+        status = "enabled" if self.podcastAutoplay else "disabled"
+    
+        episode_info = ""
+        if self.podcastAutoplay and self.podcastEpisodes:
+            current_pos = self.currentEpisodeIndex + 1 if self.currentEpisodeIndex is not None else "?"
+            total_episodes = len(self.podcastEpisodes)
+            episode_info = f"\nCurrently playing episode {current_pos}/{total_episodes}"
+    
+        await ctx.send(f"Podcast auto-progression {status}.{episode_info}", ephemeral=True)
 
     @slash_command(name="series-info", description="Show information about the current series")
     async def series_info_command(self, ctx: SlashContext):
@@ -1365,7 +1395,7 @@ class AudioPlayBack(Extension):
         series_name = self.currentSeries['name']
         current_book = self.seriesIndex + 1 if self.seriesIndex is not None else "?"
         total_books = len(self.seriesList)
-        auto_progression = "enabled" if self.seriesEnabled else "disabled"
+        auto_progression = "enabled" if self.seriesAutoplay else "disabled"
     
         # Get titles of previous and next books if available
         prev_book_info = ""
@@ -2273,7 +2303,7 @@ class AudioPlayBack(Extension):
                 is_series=False,     # Podcasts don't use series navigation
                 is_first_episode=self.isFirstEpisode,
                 is_last_episode=self.isLastEpisode,
-                series_enabled=self.seriesEnabled, # Autoplay
+                podcast_autoplay=self.podcastAutoplay,
                 episode_options=episode_options
             )
         else:
@@ -2293,7 +2323,7 @@ class AudioPlayBack(Extension):
                 is_series=is_series,
                 is_first_book=self.isFirstBookInSeries,
                 is_last_book=self.isLastBookInSeries,
-                series_enabled=self.seriesEnabled,
+                series_autoplay=self.seriesAutoplay,
                 series_options=series_options
             )
 
@@ -2845,12 +2875,12 @@ class AudioPlayBack(Extension):
             await ctx.send(content="Failed to move to previous book in series.", ephemeral=True)
 
     @component_callback('toggle_series_auto_button')
-    async def callback_toggle_series_button(self, ctx: ComponentContext):
+    async def callback_toggle_series_auto_button(self, ctx: ComponentContext):
         """Toggle series auto-progression mode"""
-        status = "enabled" if self.seriesEnabled else "disabled"
+        status = "enabled" if self.seriesAutoplay else "disabled"
 
         # Update UI
-        self.seriesEnabled = not self.seriesEnabled
+        self.seriesAutoplay = not self.seriesAutoplay
         await self.update_callback_embed(ctx, update_buttons=True)
 
     @component_callback('next_episode_button')
@@ -2912,15 +2942,15 @@ class AudioPlayBack(Extension):
         else:
             await ctx.send(content="Failed to move to previous episode.", ephemeral=True)
 
-    @component_callback('toggle_episode_auto_button')
-    async def callback_toggle_episode_auto_button(self, ctx: ComponentContext):
+    @component_callback('toggle_podcast_auto_button')
+    async def callback_toggle_podcast_auto_button(self, ctx: ComponentContext):
         """Toggle episode auto-progression mode for podcasts"""
         if not await can_control_session(ctx, self):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
         # Update UI
-        self.seriesEnabled = not self.seriesEnabled  # Reuse Series enable variable for episodes. Should rename to Auto
+        self.podcastAutoplay = not self.podcastAutoplay
         await self.update_callback_embed(ctx, update_buttons=True)
 
     @component_callback('series_select_menu')
@@ -3050,7 +3080,7 @@ class AudioPlayBack(Extension):
                             await self.cleanup_session("restart failed")
                             return None
 
-                    elif self.isPodcast and self.seriesEnabled and not self.isLastEpisode:
+                    elif self.podcastAutoplay and self.isPodcast and not self.isLastEpisode:
                         # Handle podcast episode progression
                         logger.info("Seeked past episode end - moving to next episode")
         
@@ -3075,7 +3105,7 @@ class AudioPlayBack(Extension):
                             await self.cleanup_session("episode progression failed")
                             return None
 
-                    elif self.seriesEnabled and self.currentSeries and not self.isLastBookInSeries:
+                    elif self.seriesAutoplay and self.currentSeries and not self.isLastBookInSeries:
                         logger.info("Seeked past book end (with chapters) - moving to next book in series")
             
                         if self.session_update.running:
@@ -3159,7 +3189,8 @@ class AudioPlayBack(Extension):
                                 await self.cleanup_session("restart failed")
                                 return None
 
-                        elif self.seriesEnabled and self.currentSeries and not self.isLastBookInSeries:
+                       # Note no podcast logic here as they don't have chapters
+                        elif self.seriesAutoplay and self.currentSeries and not self.isLastBookInSeries:
                             logger.info("Seeked past book end (with chapters) - moving to next book in series")
             
                             if self.session_update.running:
