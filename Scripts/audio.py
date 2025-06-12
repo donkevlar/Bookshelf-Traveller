@@ -2702,7 +2702,6 @@ class AudioPlayBack(Extension):
                 return  # Return early without stopping playback
 
             await ctx.defer(edit_origin=True)
-            await ctx.edit_origin(components=self.get_current_playback_buttons())
 
             # Stop current playback
             ctx.voice_state.channel.voice_state.player.stop()
@@ -2750,15 +2749,7 @@ class AudioPlayBack(Extension):
 
             await ctx.defer(edit_origin=True)
 
-            if self.play_state == 'playing':
-                await ctx.edit_origin(components=self.get_current_playback_buttons())
-                ctx.voice_state.channel.voice_state.player.stop()
-            elif self.play_state == 'paused':
-                await ctx.edit_origin(components=self.get_current_playback_buttons())
-                ctx.voice_state.channel.voice_state.player.stop()
-            else:
-                await ctx.send(content='Error with previous chapter command, bot not active or voice not connected!', ephemeral=True)
-                return
+            ctx.voice_state.channel.voice_state.player.stop()
 
             # Find previous chapter
             await self.move_chapter(relative_move=-1)
