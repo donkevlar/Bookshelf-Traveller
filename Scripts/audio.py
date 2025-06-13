@@ -120,8 +120,34 @@ class AudioPlayBack(Extension):
             # Handle force restart by resetting server progress first
             if force_restart:
                 try:
-                    await c.bookshelf_mark_book_unfinished(item_id)
-                    logger.info("Reset server progress to beginning for restart")
+                    # First, check if this is a podcast by getting item details
+                    item_details = await c.bookshelf_get_item_details(item_id)
+                    media_type = item_details.get('mediaType', 'book')
+
+                    if media_type == 'podcast':
+                        # For podcasts, we need to get the episode list to find the episode ID
+                        if hasattr(self, 'podcastEpisodes') and self.podcastEpisodes and episode_index < len(self.podcastEpisodes):
+                            # Use existing episode data if available
+                            episode_id = self.podcastEpisodes[episode_index].get('id')
+                        else:
+                            # Get fresh episode data if not available
+                            episodes = await c.bookshelf_get_podcast_episodes(item_id)
+                            if episodes and episode_index < len(episodes):
+                                episode_id = episodes[episode_index].get('id')
+                            else:
+                                logger.warning(f"Could not find episode at index {episode_index} for podcast {item_id}")
+                                episode_id = None
+                    
+                        if episode_id:
+                            await c.bookshelf_mark_book_unfinished(item_id, episode_id)
+                            logger.info(f"Reset server progress for podcast episode {episode_id}")
+                        else:
+                            logger.warning(f"Could not determine episode ID for podcast restart, skipping unfinished marking")
+                    else:
+                        # For books, no episode ID needed
+                        await c.bookshelf_mark_book_unfinished(item_id)
+                        logger.info("Reset server progress to beginning for book restart")
+
                 except Exception as e:
                     logger.warning(f"Failed to reset server progress for restart: {e}")
 
@@ -133,10 +159,12 @@ class AudioPlayBack(Extension):
             if len(result) == 7:  # Podcast with episode info
                 audio_obj, server_current_time, session_id, book_title, book_duration, episode_id, episode_info = result
                 self.episodeInfo = episode_info
+                self.episodeId = episode_id
             else:
                 # Book
                 audio_obj, server_current_time, session_id, book_title, book_duration, episode_id = result
                 self.episodeInfo = None
+                self.episodeId = None
         
             # Determine actual start time
             if force_restart:
@@ -476,6 +504,7 @@ class AudioPlayBack(Extension):
             self.sessionOwner = None
             self.play_state = 'stopped'
             self.stream_started = False
+            self.repeat_enabled = False
 
             # Clear message references
             self.audio_message = None
@@ -590,9 +619,9 @@ class AudioPlayBack(Extension):
             preserved_active_guild_id = self.active_guild_id
             preserved_username = self.username
             preserved_user_type = self.user_type
-            preserved_is_podcast = self.isPodcast
             preserved_current_playback_time = self.current_playback_time
 
+            # Preserve series variables
             preserved_series = self.currentSeries
             preserved_series_list = self.seriesList.copy()
             preserved_series_index = self.seriesIndex
@@ -600,16 +629,40 @@ class AudioPlayBack(Extension):
             preserved_is_first = self.isFirstBookInSeries
             preserved_is_last = self.isLastBookInSeries
 
+            # Preserve podcast variables
+            preserved_is_podcast = self.isPodcast
+            preserved_podcast_episodes = self.podcastEpisodes.copy() if self.podcastEpisodes else []
+            preserved_current_episode_index = self.currentEpisodeIndex
+            preserved_total_episodes = self.totalEpisodes
+            preserved_is_first_episode = self.isFirstEpisode
+            preserved_is_last_episode = self.isLastEpisode
+            preserved_current_episode_title = self.currentEpisodeTitle
+            preserved_podcast_autoplay = self.podcastAutoplay
+            preserved_episode_info = getattr(self, 'episodeInfo', None)
+
             # Close current session
-            if self.sessionID:
-                await c.bookshelf_close_session(self.sessionID)
+            current_session_id = self.sessionID
+            if current_session_id:
+                logger.info(f"Closing current session {current_session_id} before restart")
+                await c.bookshelf_close_session(current_session_id)
         
             # Use unified session builder to create new session from beginning
-            audio, actual_start_time, session_id, book_title, book_duration = await self.build_session(
-                item_id=preserved_book_id,
-                force_restart=True
-            )
-        
+            if preserved_is_podcast and preserved_current_episode_index is not None:
+                # For podcasts, restart the current episode
+                audio, actual_start_time, session_id, book_title, book_duration = await self.build_session(
+                    item_id=preserved_book_id,
+                    force_restart=True,
+                    episode_index=preserved_current_episode_index
+                )
+            else:
+                # For books, restart from beginning
+                audio, actual_start_time, session_id, book_title, book_duration = await self.build_session(
+                    item_id=preserved_book_id,
+                    force_restart=True
+                )
+
+            logger.info(f"New session created: {session_id} (was: {current_session_id})")
+
             # Restore preserved properties
             self.bookTitle = preserved_title
             self.bookDuration = preserved_duration
@@ -626,12 +679,24 @@ class AudioPlayBack(Extension):
             self.isPodcast = preserved_is_podcast
             self.current_playback_time = preserved_current_playback_time
 
+            # Restore series variables
             self.currentSeries = preserved_series
             self.seriesList = preserved_series_list
             self.seriesIndex = preserved_series_index
             self.seriesAutoplay = preserved_series_enabled
             self.isFirstBookInSeries = preserved_is_first
             self.isLastBookInSeries = preserved_is_last
+
+            # Restore podcast variables
+            self.podcastEpisodes = preserved_podcast_episodes
+            self.currentEpisodeIndex = preserved_current_episode_index
+            self.totalEpisodes = preserved_total_episodes
+            self.isFirstEpisode = preserved_is_first_episode
+            self.isLastEpisode = preserved_is_last_episode
+            self.currentEpisodeTitle = preserved_current_episode_title
+            self.podcastAutoplay = preserved_podcast_autoplay
+            if preserved_episode_info:
+                self.episodeInfo = preserved_episode_info
 
             self.currentTime = 0.0
         
@@ -641,14 +706,27 @@ class AudioPlayBack(Extension):
                 first_chapter = self.chapterArray[0]
                 self.currentChapter = first_chapter
                 self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
-        
+            elif self.isPodcast:
+                # For podcasts, set the episode title
+                if self.currentEpisodeIndex is not None and self.podcastEpisodes:
+                    current_episode = self.podcastEpisodes[self.currentEpisodeIndex]
+                    episode_number = current_episode.get('episode')
+                    if episode_number is not None:
+                        self.currentChapterTitle = f"Episode {episode_number}"
+                    else:
+                        if self.currentEpisodeIndex == 0:
+                            self.currentChapterTitle = "Latest Episode"
+                        else:
+                            self.currentChapterTitle = f"Episode {self.currentEpisodeIndex + 1}"
+
             # Reset playback state
             self.play_state = 'playing'
             self.audioObj = audio
         
             # Apply preserved volume to new audio object
             audio.volume = preserved_volume
-        
+
+            logger.info(f"Successfully restarted media from beginning. New session: {self.sessionID}")
             return True
         
         except Exception as e:

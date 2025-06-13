@@ -70,15 +70,22 @@ async def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET
         if GET:
             if Headers:
                 r = await client.get(link, headers=Headers)
-                return r
             else:
                 r = await client.get(link)
-                return r
+
+            if r.status_code == 404:
+                logger.warning(f"404: GET {link} returned 404")
+
+            return r
         elif POST:
             if Data is not None and Headers is not None:
                 r = await client.post(link, headers=Headers, json=Data)
             else:
                 r = await client.post(link)
+
+            if r.status_code == 404:
+                logger.warning(f"404: POST {link} returned 404")
+
             return r
         else:
             logger.warning('Must include GET, POST or PATCH in arguments')
@@ -527,15 +534,41 @@ async def bookshelf_mark_book_finished(item_id: str, session_id: str, episode_id
         return False
 
 
-async def bookshelf_mark_book_unfinished(item_id: str):
+async def bookshelf_mark_book_unfinished(item_id: str, episode_id: str = None):
     """
-    Mark a book as not finished by setting progress and resetting isFinished to False
+    Mark a book or podcast episode as not finished by setting progress and resetting isFinished to False
     :param item_id: The library item ID
+    :param episode_id: For podcasts, the specific episode ID to mark as unfinished
     :return: True if successful, False otherwise
     """
+    logger.info(f"Attempting to mark as unfinished - item_id: {item_id}, episode_id: {episode_id}")
     try:
+        # First, get the item's details to determine media type
+        endpoint = f"/items/{item_id}"
+        r = await bookshelf_conn(GET=True, endpoint=endpoint)
+
+        if r.status_code != 200:
+            logger.error(f"404 SOURCE: Failed to get item details for {item_id} - Status: {r.status_code}")
+            return False
+
+        data = r.json()
+        media_type = data.get('mediaType', 'book')
+
+        # Determine the correct progress endpoint
+        if media_type == 'podcast':
+            if not episode_id:
+                logger.error(f"Episode ID required for podcast {item_id} but not provided")
+                return False
+            
+            # Use the podcast episode progress endpoint
+            progress_endpoint = f"/me/progress/{item_id}/{episode_id}"
+            logger.info(f"Marking podcast episode {episode_id} as unfinished")
+        else:
+            # For books, use just the item ID
+            progress_endpoint = f"/me/progress/{item_id}"
+            logger.info(f"Marking book {item_id} as unfinished")
+
         # Update progress to mark as not finished
-        progress_endpoint = f"/me/progress/{item_id}"
         progress_update = {
             'isFinished': False,
             'progress': 0.0,
@@ -552,14 +585,16 @@ async def bookshelf_mark_book_unfinished(item_id: str):
                                                  headers={'Content-Type': 'application/json'})
 
             if progress_response.status_code == 200:
-                logger.info(f"Successfully marked book {item_id} as not finished")
+                media_name = f"podcast episode {episode_id}" if episode_id else f"book {item_id}"
+                logger.info(f"Successfully marked {media_name} as not finished")
                 return True
             else:
-                logger.error(f"Failed to mark book as not finished. Status: {progress_response.status_code}")
+                logger.error(f"404 SOURCE: Failed to update progress endpoint {progress_endpoint}. Status: {progress_response.status_code}, Response: {progress_response.text}")
                 return False
 
     except Exception as e:
-        logger.error(f"Error marking book as not finished: {e}")
+        media_name = f"podcast episode {episode_id}" if episode_id else f"book {item_id}"
+        logger.error(f"Error marking {media_name} as not finished: {e}")
         return False
 
 
