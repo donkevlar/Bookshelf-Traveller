@@ -1003,7 +1003,7 @@ class AudioPlayBack(Extension):
     # Commands --------------------------------
 
     # Main play command, place class variables here since this is required to play audio
-    @slash_command(name="play", description="Play audio from Audiobook Shelf", dm_permission=False)
+    @slash_command(name="play", description="Play audio from AudiobookShelf", dm_permission=False)
     @slash_option(name="book", description="Enter a book title or 'random' for a surprise", required=True,
                   opt_type=OptionType.STRING,
                   autocomplete=True)
@@ -2533,16 +2533,15 @@ class AudioPlayBack(Extension):
                 episode = item  # podcastEpisodes contains episode objects
                 title = episode.get('title', 'Unknown Episode')
                 episode_number = episode.get('episode')
-                episode_duration = episode.get('duration', 0)
-            
+
+                # Get Duration
+                audio_file = episode.get('audioFile', {})
+                episode_duration = audio_file.get('duration', 0) if audio_file else 0
+
                 # Format duration
                 if episode_duration and episode_duration > 0:
-                    hours = episode_duration // 3600
-                    minutes = (episode_duration % 3600) // 60
-                    if hours > 0:
-                        extra_info = f"{hours}h {minutes}m"
-                    else:
-                        extra_info = f"{minutes}m"
+                    from audio import time_converter
+                    extra_info = time_converter(int(episode_duration))
                 else:
                     extra_info = "Unknown Duration"
 
@@ -2558,19 +2557,50 @@ class AudioPlayBack(Extension):
         
             # Mark current item
             is_current = index == current_index
-            if is_current:
-                display_prefix += " ⭐"
-                description = f"CURRENTLY PLAYING • {extra_info}"
-            else:
-                description = f"{extra_info} • Position {index + 1}"
 
-            # Format label with truncation
-            display_title = title
-            if len(display_prefix + " - " + display_title) > 80:
-                available_length = 80 - len(display_prefix + " - ")
-                display_title = display_title[:available_length-3] + "..."
-        
-            label = f"{display_prefix} - {display_title}"
+            if media_type == "episode":
+                # For episodes: use episode title as label, episode number + duration as description
+                display_title = title
+                if len(display_title) > 100:
+                    display_title = display_title[:97] + "..."
+            
+                label = display_title
+                if is_current:
+                    label = f"⭐ {label}"
+            
+                if episode_number is not None:
+                    description = f"Episode {episode_number} • {extra_info}"
+                else:
+                    if index == 0:
+                        description = f"Latest Episode • {extra_info}"
+                    else:
+                        description = f"Episode {index + 1} • {extra_info}"
+            else:
+                # For series: use book number + title as label, author + duration as description
+                display_title = title
+                book_number = index + 1
+            
+                # Format as "Book # - Title"
+                full_label = f"Book {book_number} - {display_title}"
+                if len(full_label) > 100:
+                    # Truncate the title part if too long
+                    available_length = 100 - len(f"Book {book_number} - ") - 3
+                    display_title = display_title[:available_length] + "..."
+                    full_label = f"Book {book_number} - {display_title}"
+
+                label = full_label
+                if is_current:
+                    label = f"⭐ {label}"
+
+                # Get book duration from cached data if available
+                book_id = item
+                book_duration = ""
+                if book_id in cached_data and 'duration' in cached_data[book_id]:
+                    from audio import time_converter
+                    duration_seconds = cached_data[book_id]['duration']
+                    book_duration = f" • {time_converter(int(duration_seconds))}"
+            
+                description = f"{extra_info}{book_duration}"
         
             # Ensure label isn't too long (Discord limit is 100 chars)
             if len(label) > 100:
@@ -2618,13 +2648,15 @@ class AudioPlayBack(Extension):
                 book_details = await c.bookshelf_get_item_details(book_id)
                 self.seriesBookCache[book_id] = {
                     'title': book_details.get('title', 'Unknown Book'),
-                    'author': book_details.get('author', 'Unknown Author')
+                    'author': book_details.get('author', 'Unknown Author'),
+                    'duration': book_details.get('duration', 0)
                 }
             except Exception as e:
                 logger.error(f"Error caching series book data for {book_id}: {e}")
                 self.seriesBookCache[book_id] = {
                     'title': 'Unknown Book',
-                    'author': 'Unknown Author'
+                    'author': 'Unknown Author',
+                    'duration': 0
                 }
 
     async def handle_media_selection(self, ctx, media_type="series"):
@@ -2707,37 +2739,15 @@ class AudioPlayBack(Extension):
                 logger.info(f"Successfully switched to {display_name}")
                 logger.debug(f"Updated series state: seriesIndex={self.seriesIndex}, bookTitle='{self.bookTitle}'")
 
-                # Update the original playback card immediately
-                if hasattr(self, 'audio_message') and self.audio_message:
-                    try:
-                        updated_embed = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-                        updated_buttons = self.get_current_playback_buttons()
+                # Update UI
+                await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
 
-                        logger.debug(f"Regenerating buttons after switch - series dropdown should show book {self.seriesIndex + 1} as current")
-                    
-                        await self.audio_message.edit(
-                            content=f"✅ Switched to: {display_name}",
-                            embed=updated_embed,
-                            components=updated_buttons
-                        )
-                    
-                    except Exception as e:
-                        logger.error(f"Failed to update original playback card: {e}")
-            
-                # Respond to the modal
-                await ctx.send(f"✅ Switched to {display_name}", ephemeral=True)
-            
                 # Start new playback
                 if ctx.voice_state:
                     await ctx.voice_state.channel.voice_state.play(self.audioObj)
-                
-                    # Stop auto kill session task
-                    if self.auto_kill_session.running:
-                        logger.info("Stopping auto kill session backend task.")
-                        self.auto_kill_session.stop()
-            
+
                 logger.info(f"Successfully switched to {display_name}")
-            
+
             else:
                 media_name = "book" if media_type == "series" else "episode"
                 await ctx.send(f"Failed to switch to selected {media_name}.", ephemeral=True)
