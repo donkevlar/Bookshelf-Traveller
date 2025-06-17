@@ -3117,9 +3117,8 @@ class AudioPlayBack(Extension):
 
         Returns audio object ready for playback.
         """
-        # Stop current playback and session
+        # Stop session update
         self.session_update.stop()
-        await c.bookshelf_close_session(self.sessionID)
 
         # Use our current tracked position as the baseline for seeking
         current_time = self.currentTime
