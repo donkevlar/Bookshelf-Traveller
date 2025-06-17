@@ -1729,6 +1729,8 @@ class AudioPlayBack(Extension):
                         subtitle = mediaMetadata.get('subtitle', '')
                         display_author = session.get('displayAuthor')
 
+                        logger.debug(f"Recent session: title='{title}', mediaType='{mediaType}', episodeID='{episodeID}', itemID='{itemID}'")
+
                         # Skip if both title and author are None (likely deleted item)
                         if title is None and display_author is None:
                             logger.info(f"Skipping session with no title or author for itemID: {itemID}")
@@ -1779,6 +1781,15 @@ class AudioPlayBack(Extension):
 
                         # Add to choices if not already there
                         formatted_item = {"name": name, "value": itemID}
+
+                        # Add episode_id field for podcasts
+                        mediaType = session.get('mediaType')
+                        if mediaType == 'podcast':
+                            episode_id = session.get('episodeId')
+                            if episode_id:
+                                formatted_item["episode_id"] = episode_id
+
+                        # Check for duplicates
                         if formatted_item not in choices:
                             choices.append(formatted_item)
                             valid_session_count += 1

@@ -405,8 +405,12 @@ async def bookshelf_libraries():
         return library_data
 
 
-async def bookshelf_item_progress(item_id):
-    endpoint = f"/me/progress/{item_id}"
+async def bookshelf_item_progress(item_id, episode_id=None):
+    if episode_id:
+        endpoint = f"/me/progress/{item_id}/{episode_id}"
+    else:
+        endpoint = f"/me/progress/{item_id}"
+
     r = await bookshelf_conn(GET=True, endpoint=endpoint)
     if r.status_code == 200:
         data = r.json()

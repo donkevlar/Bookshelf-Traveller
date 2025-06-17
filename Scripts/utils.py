@@ -141,14 +141,15 @@ async def add_progress_indicators(choices, timeout_seconds=2.5):
         
         item_id = choice.get('value')
         original_name = choice.get('name', '')
-        
+        episode_id = choice.get('episode_id')
+
         # Skip special items like "random" or items already with checkmarks
         if not item_id or item_id == "random" or "📚" in original_name or original_name.startswith('✅'):
             updated_choices.append(choice)
             continue
         
         try:
-            progress_data = await c.bookshelf_item_progress(item_id)
+            progress_data = await c.bookshelf_item_progress(item_id, episode_id)
             is_finished = progress_data.get('finished', 'False') == 'True'
             
             if is_finished:
@@ -159,7 +160,11 @@ async def add_progress_indicators(choices, timeout_seconds=2.5):
                     # "✅ " = 2 chars, so we have 98 chars left for the name
                     new_name = f"✅ {original_name[:98]}"
     
-                choice = {"name": new_name, "value": item_id}
+                # Preserve episode_id if it exists
+                updated_choice = {"name": new_name, "value": item_id}
+                if episode_id:
+                    updated_choice["episode_id"] = episode_id
+                choice = updated_choice
                 finished_count += 1
             
             updated_choices.append(choice)
