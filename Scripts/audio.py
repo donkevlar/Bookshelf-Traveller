@@ -42,29 +42,28 @@ def time_converter(time_sec: int) -> str:
 
 class AudioPlayBack(Extension):
     def __init__(self, bot):
-        # ABS Vars
+        # ABS Variables
         self.cover_image = ''
-        # Session VARS
-        self.sessionID = ''
         self.bookItemID = ''
         self.bookTitle = ''
         self.bookDuration = None
+        self.bookFinished = False
+        # User Variables
+        self.username = ''
+        self.user_type = ''
+        self.current_channel = None
+        self.active_guild_id = None
+        # Session Variables
+        self.sessionID = ''
         self.currentTime = 0.0
+        self.nextTime = None
         self.activeSessions = 0
+        self.stream_started = False
         self.sessionOwner = None
         self.announcement_message = None
         self.repeat_enabled = False
         self.needs_restart = False
-        self.stream_started = False
-        # Chapter VARS
-        self.currentChapter = None
-        self.chapterArray = None
-        self.currentChapterTitle = ''
-        self.newChapterTitle = ''
-        self.found_next_chapter = False
-        self.bookFinished = False
-        self.nextTime = None
-        # Audio VARS
+        # Audio Variables
         self.audioObj = AudioVolume
         self.context_voice_channel = None
         self.current_playback_time = 0
@@ -73,28 +72,38 @@ class AudioPlayBack(Extension):
         self.volume = 0.5
         self.placeholder = None
         self.playbackSpeed = 1.0
-        self.isPodcast = False
         self.updateFreqMulti = updateFrequency * self.playbackSpeed
         self.play_state = 'stopped'
         self.audio_message = None
-        # User Vars
-        self.username = ''
-        self.user_type = ''
-        self.current_channel = None
-        self.active_guild_id = None
-        # Series playback variables
-        self.seriesEnabled = True  # Default to enabled
+        # Chapter Variables
+        self.currentChapter = None
+        self.chapterArray = None
+        self.currentChapterTitle = ''
+        self.newChapterTitle = ''
+        self.found_next_chapter = False
+        # Series Variables
+        self.currentSeries = None  # Series metadata
+        self.seriesAutoplay = True   # Auto-progression for book series
         self.seriesList = []  # List of book IDs in series order
         self.seriesIndex = None  # Current position in series
         self.previousBookID = None
         self.previousBookTime = None
-        self.currentSeries = None  # Series metadata
         self.isLastBookInSeries = False
         self.isFirstBookInSeries = False
+        self.seriesBookCache = {}
+        # Podcast Variables
+        self.isPodcast = False
+        self.podcastAutoplay = True  # Auto-progression for podcast episodes
+        self.podcastEpisodes = []
+        self.currentEpisodeIndex = None
+        self.totalEpisodes = 0
+        self.isFirstEpisode = False
+        self.isLastEpisode = False
+        self.currentEpisodeTitle = ''
 
     # Tasks ---------------------------------
 
-    async def build_session(self, item_id: str, start_time: float = None, force_restart: bool = False):
+    async def build_session(self, item_id: str, start_time: float = None, force_restart: bool = False, episode_index: int = 0):
         """
         Unified method to build audio session for any playback scenario.
     
@@ -102,6 +111,7 @@ class AudioPlayBack(Extension):
         - item_id: The library item ID to build session for
         - start_time: Optional time to start from (if None, uses server's current time)
         - force_restart: If True, starts from beginning regardless of server progress
+        - episode_index: For podcasts, which episode to play (0 = newest)
     
         Returns:
         - Tuple: (audio_object, current_time, session_id, book_title, book_duration)
@@ -110,13 +120,51 @@ class AudioPlayBack(Extension):
             # Handle force restart by resetting server progress first
             if force_restart:
                 try:
-                    await c.bookshelf_mark_book_unfinished(item_id)
-                    logger.info("Reset server progress to beginning for restart")
+                    # First, check if this is a podcast by getting item details
+                    item_details = await c.bookshelf_get_item_details(item_id)
+                    media_type = item_details.get('mediaType', 'book')
+
+                    if media_type == 'podcast':
+                        # For podcasts, we need to get the episode list to find the episode ID
+                        if hasattr(self, 'podcastEpisodes') and self.podcastEpisodes and episode_index < len(self.podcastEpisodes):
+                            # Use existing episode data if available
+                            episode_id = self.podcastEpisodes[episode_index].get('id')
+                        else:
+                            # Get fresh episode data if not available
+                            episodes = await c.bookshelf_get_podcast_episodes(item_id)
+                            if episodes and episode_index < len(episodes):
+                                episode_id = episodes[episode_index].get('id')
+                            else:
+                                logger.warning(f"Could not find episode at index {episode_index} for podcast {item_id}")
+                                episode_id = None
+                    
+                        if episode_id:
+                            await c.bookshelf_mark_book_unfinished(item_id, episode_id)
+                            logger.info(f"Reset server progress for podcast episode {episode_id}")
+                        else:
+                            logger.warning(f"Could not determine episode ID for podcast restart, skipping unfinished marking")
+                    else:
+                        # For books, no episode ID needed
+                        await c.bookshelf_mark_book_unfinished(item_id)
+                        logger.info("Reset server progress to beginning for book restart")
+
                 except Exception as e:
                     logger.warning(f"Failed to reset server progress for restart: {e}")
 
             # Get fresh audio object and session
-            audio_obj, server_current_time, session_id, book_title, book_duration = await c.bookshelf_audio_obj(item_id)
+            result = await c.bookshelf_audio_obj(item_id, episode_index)
+            if not result:
+                raise Exception("Failed to get audio object")
+
+            if len(result) == 7:  # Podcast with episode info
+                audio_obj, server_current_time, session_id, book_title, book_duration, episode_id, episode_info = result
+                self.episodeInfo = episode_info
+                self.episodeId = episode_id
+            else:
+                # Book
+                audio_obj, server_current_time, session_id, book_title, book_duration, episode_id = result
+                self.episodeInfo = None
+                self.episodeId = None
         
             # Determine actual start time
             if force_restart:
@@ -234,7 +282,8 @@ class AudioPlayBack(Extension):
                     item_id=self.bookItemID,
                     session_id=self.sessionID,
                     current_time=updateFrequency,
-                    next_time=self.nextTime)
+                    next_time=self.nextTime,
+                    episode_id=getattr(self, 'episodeId', None))
 
                 self.currentTime = updatedTime
 
@@ -252,7 +301,22 @@ class AudioPlayBack(Extension):
                                 logger.info("Book completed with repeat enabled - triggering restart")
                                 self.needs_restart = True
                                 return  # Let the restart logic handle it
-                            elif self.seriesEnabled and self.currentSeries and not self.isLastBookInSeries:
+
+
+                            elif self.podcastAutoplay and self.isPodcast and not self.isLastEpisode:
+                                logger.info("Episode completed - moving to next episode")
+                
+                                # Move to next episode
+                                success = await self.move_to_podcast_episode(relative_move=1)
+                                if success:
+                                    logger.info("Successfully moved to next episode")
+                                    return  # Continue with the new episode
+                                else:
+                                    logger.error("Failed to move to next episode")
+                                    await self.cleanup_session("episode progression failed")
+                                    return
+
+                            elif self.seriesAutoplay and self.currentSeries and not self.isLastBookInSeries:
                                 logger.info("Book completed - moving to next book in series")
                     
                                 # Store current book as previous
@@ -440,6 +504,7 @@ class AudioPlayBack(Extension):
             self.sessionOwner = None
             self.play_state = 'stopped'
             self.stream_started = False
+            self.repeat_enabled = False
 
             # Clear message references
             self.audio_message = None
@@ -465,6 +530,16 @@ class AudioPlayBack(Extension):
             self.currentSeries = None
             self.isLastBookInSeries = False
             self.isFirstBookInSeries = False
+            self.seriesBookCache = {}
+
+            # Reset podcast context
+            self.podcastEpisodes = []
+            self.currentEpisodeIndex = None
+            self.totalEpisodes = 0
+            self.isFirstEpisode = False
+            self.isLastEpisode = False
+            self.currentEpisodeTitle = ''
+            self.episodeInfo = None
 
             # Reset audio variables
             self.volume = 0.5
@@ -544,26 +619,50 @@ class AudioPlayBack(Extension):
             preserved_active_guild_id = self.active_guild_id
             preserved_username = self.username
             preserved_user_type = self.user_type
-            preserved_is_podcast = self.isPodcast
             preserved_current_playback_time = self.current_playback_time
 
+            # Preserve series variables
             preserved_series = self.currentSeries
             preserved_series_list = self.seriesList.copy()
             preserved_series_index = self.seriesIndex
-            preserved_series_enabled = self.seriesEnabled
+            preserved_series_enabled = self.seriesAutoplay
             preserved_is_first = self.isFirstBookInSeries
             preserved_is_last = self.isLastBookInSeries
 
+            # Preserve podcast variables
+            preserved_is_podcast = self.isPodcast
+            preserved_podcast_episodes = self.podcastEpisodes.copy() if self.podcastEpisodes else []
+            preserved_current_episode_index = self.currentEpisodeIndex
+            preserved_total_episodes = self.totalEpisodes
+            preserved_is_first_episode = self.isFirstEpisode
+            preserved_is_last_episode = self.isLastEpisode
+            preserved_current_episode_title = self.currentEpisodeTitle
+            preserved_podcast_autoplay = self.podcastAutoplay
+            preserved_episode_info = getattr(self, 'episodeInfo', None)
+
             # Close current session
-            if self.sessionID:
-                await c.bookshelf_close_session(self.sessionID)
+            current_session_id = self.sessionID
+            if current_session_id:
+                logger.info(f"Closing current session {current_session_id} before restart")
+                await c.bookshelf_close_session(current_session_id)
         
             # Use unified session builder to create new session from beginning
-            audio, actual_start_time, session_id, book_title, book_duration = await self.build_session(
-                item_id=preserved_book_id,
-                force_restart=True
-            )
-        
+            if preserved_is_podcast and preserved_current_episode_index is not None:
+                # For podcasts, restart the current episode
+                audio, actual_start_time, session_id, book_title, book_duration = await self.build_session(
+                    item_id=preserved_book_id,
+                    force_restart=True,
+                    episode_index=preserved_current_episode_index
+                )
+            else:
+                # For books, restart from beginning
+                audio, actual_start_time, session_id, book_title, book_duration = await self.build_session(
+                    item_id=preserved_book_id,
+                    force_restart=True
+                )
+
+            logger.info(f"New session created: {session_id} (was: {current_session_id})")
+
             # Restore preserved properties
             self.bookTitle = preserved_title
             self.bookDuration = preserved_duration
@@ -580,12 +679,24 @@ class AudioPlayBack(Extension):
             self.isPodcast = preserved_is_podcast
             self.current_playback_time = preserved_current_playback_time
 
+            # Restore series variables
             self.currentSeries = preserved_series
             self.seriesList = preserved_series_list
             self.seriesIndex = preserved_series_index
-            self.seriesEnabled = preserved_series_enabled
+            self.seriesAutoplay = preserved_series_enabled
             self.isFirstBookInSeries = preserved_is_first
             self.isLastBookInSeries = preserved_is_last
+
+            # Restore podcast variables
+            self.podcastEpisodes = preserved_podcast_episodes
+            self.currentEpisodeIndex = preserved_current_episode_index
+            self.totalEpisodes = preserved_total_episodes
+            self.isFirstEpisode = preserved_is_first_episode
+            self.isLastEpisode = preserved_is_last_episode
+            self.currentEpisodeTitle = preserved_current_episode_title
+            self.podcastAutoplay = preserved_podcast_autoplay
+            if preserved_episode_info:
+                self.episodeInfo = preserved_episode_info
 
             self.currentTime = 0.0
         
@@ -595,14 +706,27 @@ class AudioPlayBack(Extension):
                 first_chapter = self.chapterArray[0]
                 self.currentChapter = first_chapter
                 self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
-        
+            elif self.isPodcast:
+                # For podcasts, set the episode title
+                if self.currentEpisodeIndex is not None and self.podcastEpisodes:
+                    current_episode = self.podcastEpisodes[self.currentEpisodeIndex]
+                    episode_number = current_episode.get('episode')
+                    if episode_number is not None:
+                        self.currentChapterTitle = f"Episode {episode_number}"
+                    else:
+                        if self.currentEpisodeIndex == 0:
+                            self.currentChapterTitle = "Latest Episode"
+                        else:
+                            self.currentChapterTitle = f"Episode {self.currentEpisodeIndex + 1}"
+
             # Reset playback state
             self.play_state = 'playing'
             self.audioObj = audio
         
             # Apply preserved volume to new audio object
             audio.volume = preserved_volume
-        
+
+            logger.info(f"Successfully restarted media from beginning. New session: {self.sessionID}")
             return True
         
         except Exception as e:
@@ -697,7 +821,7 @@ class AudioPlayBack(Extension):
                         self.found_next_chapter = False
                         return
 
-                elif self.seriesEnabled and self.currentSeries and not self.isLastBookInSeries:
+                elif self.seriesAutoplay and self.currentSeries and not self.isLastBookInSeries:
                     logger.info("Reached final chapter - moving to next book in series")                                                                                                                                        # Stop the session update task before moving to next book                                             if self.session_update.running:
 
                     # Stop the session update task before moving to next book
@@ -822,9 +946,36 @@ class AudioPlayBack(Extension):
         formatted_duration = time_converter(self.bookDuration) if self.bookDuration else "Unknown"
         formatted_current = time_converter(self.currentTime) if self.currentTime is not None else "Unknown"
 
-        # Prepare series info if available
+        # Prepare series/episode info if available
         series_info = None
-        if self.currentSeries and self.seriesIndex is not None:
+        if self.isPodcast and hasattr(self, 'currentEpisodeIndex') and self.currentEpisodeIndex is not None:
+            # Get actual episode number if available
+            current_episode = self.podcastEpisodes[self.currentEpisodeIndex]
+            episode_number = current_episode.get('episode')
+
+            # Position in chronological order (1 = newest, 2 = second newest, etc.)
+            position_in_list = self.currentEpisodeIndex + 1
+        
+            if episode_number is not None:
+                try:
+                    # Use actual episode number with chronological position
+                    episode_display = f"Episode {episode_number} ({position_in_list} of {self.totalEpisodes})"
+                except (ValueError, TypeError):
+                    # Fallback to position-based
+                    episode_display = f"Episode {position_in_list} ({position_in_list} of {self.totalEpisodes})"
+            else:
+                # No episode number available, use position-based with context
+                if self.currentEpisodeIndex == 0:
+                    episode_display = f"Latest Episode (1 of {self.totalEpisodes})"
+                else:
+                    episode_display = f"Episode {position_in_list} ({position_in_list} of {self.totalEpisodes})"
+        
+            series_info = {
+                'name': episode_display,
+                'current': self.currentEpisodeIndex + 1,
+                'total': self.totalEpisodes
+            }
+        elif self.currentSeries and self.seriesIndex is not None:
             series_info = {
                 'name': self.currentSeries['name'],
                 'current': self.seriesIndex + 1,
@@ -845,21 +996,26 @@ class AudioPlayBack(Extension):
             timestamp=formatted_time,
             version=s.versionNumber,
             repeat_enabled=self.repeat_enabled,
-            series_info=series_info
+            series_info=series_info,
+            is_podcast=self.isPodcast
         )
 
     # Commands --------------------------------
 
     # Main play command, place class variables here since this is required to play audio
-    @slash_command(name="play", description="Play audio from ABS server", dm_permission=False)
+    @slash_command(name="play", description="Play audio from AudiobookShelf", dm_permission=False)
     @slash_option(name="book", description="Enter a book title or 'random' for a surprise", required=True,
                   opt_type=OptionType.STRING,
                   autocomplete=True)
     @slash_option(name="startover",
                   description="Start the book from the beginning instead of resuming",
                   opt_type=OptionType.BOOLEAN)
+    @slash_option(name="episode",
+                  description="For podcasts: episode number to play (1 = newest, 2 = second newest, etc.)",
+                  opt_type=OptionType.INTEGER,
+                  min_value=1)
     @check_session_control("start")
-    async def play_audio(self, ctx: SlashContext, book: str, startover=False):
+    async def play_audio(self, ctx: SlashContext, book: str, startover=False, episode=1):
         if not self.bot.is_ready or not ctx.author.voice:
             await ctx.send(content="Bot is not ready or author not in voice channel, please try again later.",
                            ephemeral=True)
@@ -897,16 +1053,15 @@ class AudioPlayBack(Extension):
                 return
 
         try:
+            # First, determine if this is a podcast or book
+            item_details = await c.bookshelf_get_item_details(book)
+            media_type = item_details.get('mediaType', 'book')
+
             # Proceed with the normal playback flow using the book ID
             current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(item_id=book)
 
-            if current_chapter is None:
+            if current_chapter is None and not isPodcast:
                 await ctx.send(content="Error retrieving chapter information. The item may be invalid or inaccessible.", ephemeral=True)
-                return
-
-            if isPodcast:
-                await ctx.send(content="The content you attempted to play is currently not supported, aborting.",
-                              ephemeral=True)
                 return
 
             if bookFinished and not startover:
@@ -917,46 +1072,58 @@ class AudioPlayBack(Extension):
                 await ctx.send(content=f"Bot can only play one session at a time, please stop your other active session and try again! Current session owner: {self.sessionOwner}", ephemeral=True)
                 return
 
+            # Handle episode selection for podcasts
+            episode_index = 0  # Default to newest episode
+            if isPodcast and episode > 1:
+                episode_index = episode - 1  # Convert 1-based to 0-based
+
             # Use unified session builder
             audio, currentTime, sessionID, bookTitle, bookDuration = await self.build_session(
                 item_id=book,
                 # if True, start time will be zero
-                force_restart=startover
+                force_restart=startover,
+                episode_index=episode_index
             )
 
             self.currentTime = currentTime
+            self.isPodcast = isPodcast
 
-            await self.setup_series_context(book)
-
-            if startover:
-                if chapter_array and len(chapter_array) > 0:
-                    # Book has chapters - use first chapter
-                    chapter_array.sort(key=lambda x: float(x.get('start', 0)))
-                    first_chapter = chapter_array[0]
-                    self.currentChapter = first_chapter
-                    self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
-                else:
-                    # Book has no chapters - clear chapter info
-                    self.currentChapter = None
-                    self.currentChapterTitle = 'No Chapters'
+            # Setup context based on media type
+            if isPodcast:
+                await self.setup_podcast_context(book, episode_index)
+                # Clear chapter variables for podcasts
+                self.currentChapter = None
+                self.chapterArray = None
+                self.currentChapterTitle = 'No Chapters'
             else:
-                # Not starting over - use current chapter data or detect no chapters
-                if current_chapter and chapter_array and len(chapter_array) > 0:
-                    self.currentChapter = current_chapter
-                    self.currentChapterTitle = current_chapter.get('title', 'Chapter 1')
+                await self.setup_series_context(book)
+                
+                if startover:
+                    if chapter_array and len(chapter_array) > 0:
+                        # Book has chapters - use first chapter
+                        chapter_array.sort(key=lambda x: float(x.get('start', 0)))
+                        first_chapter = chapter_array[0]
+                        self.currentChapter = first_chapter
+                        self.currentChapterTitle = first_chapter.get('title', 'Chapter 1')
+                    else:
+                        # Book has no chapters - clear chapter info
+                        self.currentChapter = None
+                        self.currentChapterTitle = 'No Chapters'
                 else:
-                    # No chapter data available
-                    self.currentChapter = None
-                    self.currentChapterTitle = 'No Chapters'
-
+                    # Not starting over - use current chapter data or detect no chapters
+                    if current_chapter and chapter_array and len(chapter_array) > 0:
+                        self.currentChapter = current_chapter
+                        self.currentChapterTitle = current_chapter.get('title', 'Chapter 1')
+                    else:
+                        # No chapter data available
+                        self.currentChapter = None
+                        self.currentChapterTitle = 'No Chapters'
 
             # Get Book Cover URL
             cover_image = await c.bookshelf_cover_image(book)
 
             # Retrieve current user information
             username, user_type, user_locked = await c.bookshelf_auth_test()
-
-            # Class VARS
 
             # ABS User Vars
             self.username = username
@@ -970,7 +1137,6 @@ class AudioPlayBack(Extension):
             self.active_guild_id = ctx.guild_id
 
             # Chapter Vars
-            self.isPodcast = isPodcast
             self.chapterArray = chapter_array
             self.bookFinished = False  # Force locally to False. If it were True, it would've exited sooner. Startover needs this to be False.
             self.current_channel = ctx.channel_id
@@ -981,7 +1147,23 @@ class AudioPlayBack(Extension):
                 self.currentTime = 0.0
 
             # Create embedded message
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
+            display_chapter = self.currentChapterTitle
+            if isPodcast:
+                current_episode = self.podcastEpisodes[self.currentEpisodeIndex]
+                episode_number = current_episode.get('episode')
+                position_in_list = self.currentEpisodeIndex + 1
+    
+                if episode_number is not None:
+                    display_chapter = f"Episode {episode_number}"
+                else:
+                    if self.currentEpisodeIndex == 0:
+                        display_chapter = "Latest Episode"
+                    else:
+                        display_chapter = f"Episode {position_in_list}"
+            else:
+                display_chapter = self.currentChapterTitle
+
+            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=display_chapter)
 
             # check if bot currently connected to voice
             if not ctx.voice_state:
@@ -991,14 +1173,19 @@ class AudioPlayBack(Extension):
                     await ctx.author.voice.channel.connect()
                     self.session_update.start()
 
-                    # Customize message based on whether we're using random and/or startover
-                    start_message = "Beginning audio stream"
-                    if random_selected:
-                        start_message = f"🎲 Randomly selected: **{random_book_title}**\n{start_message}"
-                    if startover:
-                        start_message += " from the beginning!"
+                    # Customize message based on media type and options
+                    if isPodcast:
+                        episode_num = episode_index + 1
+                        total_eps = self.totalEpisodes
+                        start_message = f"🎙️ Starting podcast episode {episode_num}/{total_eps}: **{bookTitle}**"
                     else:
-                        start_message += "!"
+                        start_message = "Beginning audio stream"
+                        if random_selected:
+                            start_message = f"🎲 Randomly selected: **{random_book_title}**\n{start_message}"
+                        if startover:
+                            start_message += " from the beginning!"
+                        else:
+                            start_message += "!"
 
                     # Stop auto kill session task
                     if self.auto_kill_session.running:
@@ -1018,8 +1205,13 @@ class AudioPlayBack(Extension):
 
                     self.activeSessions += 1
 
-                    await self.client.change_presence(activity=Activity.create(name=f"{self.bookTitle}",
-                                                                               type=ActivityType.LISTENING))
+                    # Set appropriate presence
+                    if isPodcast:
+                        await self.client.change_presence(activity=Activity.create(name=f"🎙️ {self.bookTitle}",
+                                                                                   type=ActivityType.LISTENING))
+                    else:
+                        await self.client.change_presence(activity=Activity.create(name=f"{self.bookTitle}",
+                                                                                   type=ActivityType.LISTENING))
 
                     # Start audio playback
                     await ctx.voice_state.play(audio)
@@ -1029,12 +1221,12 @@ class AudioPlayBack(Extension):
                     if self.session_update.running:
                         self.session_update.stop()
                     # Close ABS session
-                    await c.bookshelf_close_session(sessionID)  # NOQA
+                    await c.bookshelf_close_session(sessionID)
                     # Cleanup discord interactions
                     if ctx.voice_state:
                         await ctx.author.voice.channel.disconnect()
                     if audio:
-                        audio.cleanup()  # NOQA
+                        audio.cleanup()
                     self.audio_message = None
                     self.announcement_message = None
                     self.context_voice_channel = None
@@ -1222,24 +1414,53 @@ class AudioPlayBack(Extension):
         else:
             return await ctx.send("Bot not in voice channel or an error has occured. Please try again later!", ephemeral=True)
 
-    @slash_command(name="toggle-series", description="Toggle automatic series progression on/off")
+    @slash_command(name="toggle-series-autoplay", description="Toggle automatic series progression on/off")
     @check_session_control()
-    async def toggle_series_mode(self, ctx: SlashContext):
+    async def toggle_series_autoplay(self, ctx: SlashContext):
         if not ctx.voice_state or self.play_state == 'stopped':
             await ctx.send("No active playback session found.", ephemeral=True)
             return
     
-        self.seriesEnabled = not self.seriesEnabled
-        status = "enabled" if self.seriesEnabled else "disabled"
+        if self.isPodcast:
+            await ctx.send("This command is for book series. Use `/toggle-podcast-autoplay` for podcasts.", ephemeral=True)
+            return
+        
+        if not self.currentSeries:
+            await ctx.send("Current book is not part of a series.", ephemeral=True)
+            return
+    
+        self.seriesAutoplay = not self.seriesAutoplay
+        status = "enabled" if self.seriesAutoplay else "disabled"
     
         series_info = ""
-        if self.currentSeries and self.seriesEnabled:
+        if self.currentSeries and self.seriesAutoplay:
             current_pos = self.seriesIndex + 1 if self.seriesIndex is not None else "?"
             total_books = len(self.seriesList)
             series_info = f"\nCurrently playing book {current_pos}/{total_books} in '{self.currentSeries['name']}'"
     
         await ctx.send(f"Series auto-progression {status}.{series_info}", ephemeral=True)
-        logger.info(f"Series mode {status} by {ctx.author}")
+
+    @slash_command(name="toggle-podcast-autoplay", description="Toggle automatic podcast episode progression on/off")
+    @check_session_control()
+    async def toggle_podcast_autoplay(self, ctx: SlashContext):
+        if not ctx.voice_state or self.play_state == 'stopped':
+            await ctx.send("No active playback session found.", ephemeral=True)
+            return
+    
+        if not self.isPodcast:
+            await ctx.send("This command is for podcasts. Use `/toggle-series-autoplay` for book series.", ephemeral=True)
+            return
+    
+        self.podcastAutoplay = not self.podcastAutoplay
+        status = "enabled" if self.podcastAutoplay else "disabled"
+    
+        episode_info = ""
+        if self.podcastAutoplay and self.podcastEpisodes:
+            current_pos = self.currentEpisodeIndex + 1 if self.currentEpisodeIndex is not None else "?"
+            total_episodes = len(self.podcastEpisodes)
+            episode_info = f"\nCurrently playing episode {current_pos}/{total_episodes}"
+    
+        await ctx.send(f"Podcast auto-progression {status}.{episode_info}", ephemeral=True)
 
     @slash_command(name="series-info", description="Show information about the current series")
     async def series_info_command(self, ctx: SlashContext):
@@ -1254,7 +1475,7 @@ class AudioPlayBack(Extension):
         series_name = self.currentSeries['name']
         current_book = self.seriesIndex + 1 if self.seriesIndex is not None else "?"
         total_books = len(self.seriesList)
-        auto_progression = "enabled" if self.seriesEnabled else "disabled"
+        auto_progression = "enabled" if self.seriesAutoplay else "disabled"
     
         # Get titles of previous and next books if available
         prev_book_info = ""
@@ -1322,28 +1543,46 @@ class AudioPlayBack(Extension):
         embed_message = self.create_announcement_embed(voice_channel, ctx.guild.name)
 
         try:
-            # Get detailed book information
-            book_details = await c.bookshelf_get_item_details(self.bookItemID)
-            author = book_details.get('author', 'Unknown Author')
-            series = book_details.get('series', '')
-            narrator = book_details.get('narrator', '')
-        
+            # Get detailed information
+            item_details = await c.bookshelf_get_item_details(self.bookItemID)
+            logger.info(f"Item details for announcement: {item_details}")
+
             # Build announcement message
             announcement_parts = ["📢 **Now Playing:**"]
             announcement_parts.append(f"**{self.bookTitle}**")
+    
+            if self.isPodcast:
+                # For podcasts, get podcast title and author
+                podcast_author = item_details.get('author', 'Unknown Podcast Host')
+                logger.info(f"Podcast author from item_details: '{podcast_author}'")
         
-            if series:
-                announcement_parts.append(f"*{series}*")
+                # Get the actual podcast title (not episode title)
+                podcast_endpoint = f"/items/{self.bookItemID}"
+                podcast_response = await c.bookshelf_conn(GET=True, endpoint=podcast_endpoint)
+                if podcast_response.status_code == 200:
+                    podcast_data = podcast_response.json()
+                    podcast_title = podcast_data['media']['metadata'].get('title', 'Unknown Podcast')
+                    announcement_parts.append(f"*from {podcast_title}*")
         
-            announcement_parts.append(f"by {author}")
-        
-            if narrator and narrator != 'Unknown Narrator':
-                announcement_parts.append(f"Read by {narrator}")
-        
+                if podcast_author and podcast_author != 'Unknown Podcast Host':
+                    announcement_parts.append(f"hosted by {podcast_author}")
+            else:
+                # Get detailed book information
+                author = item_details.get('author', 'Unknown Author')
+                series = item_details.get('series', '')
+                narrator = item_details.get('narrator', '')
+
+                if series:
+                    announcement_parts.append(f"*{series}*")
+
+                announcement_parts.append(f"by {author}")
+
+                if narrator and narrator != 'Unknown Narrator':
+                    announcement_parts.append(f"Read by {narrator}")
+
             announcement_parts.append(f"\nJoin us in {voice_channel.mention}!")
-        
             announcement_content = "\n".join(announcement_parts)
-        
+
         except Exception as e:
             logger.error(f"Error getting book details for announcement: {e}")
             # Fallback to basic announcement
@@ -1388,12 +1627,28 @@ class AudioPlayBack(Extension):
             description=f"**{self.bookTitle}**",
             color=0x3498db if self.play_state == 'playing' else (0xe67e22 if self.play_state == 'paused' else 0x95a5a6)
         )
+
+        # Get proper chapter/episode display
+        if self.isPodcast:
+            current_episode = self.podcastEpisodes[self.currentEpisodeIndex]
+            episode_number = current_episode.get('episode')
+            position_in_list = self.currentEpisodeIndex + 1
+        
+            if episode_number is not None:
+                chapter_display = f"Episode {episode_number}"
+            else:
+                if self.currentEpisodeIndex == 0:
+                    chapter_display = "Latest Episode"
+                else:
+                    chapter_display = f"Episode {position_in_list}"
+        else:
+            chapter_display = self.currentChapterTitle
     
         # Add playbook information
         playback_info = (
             f"**Status:** {self.play_state.title()}\n"
             f"**Progress:** {progress_percentage}%\n"
-            f"**Chapter:** {self.currentChapterTitle}\n"
+            f"**{'Episode' if self.isPodcast else 'Chapter'}:** {chapter_display}\n"
             f"**Current Time:** {formatted_current}\n"
             f"**Total Duration:** {formatted_duration}"
         )
@@ -1448,11 +1703,25 @@ class AudioPlayBack(Extension):
                     try:
                         # Get essential IDs
                         bookID = session.get('bookId')
+                        episodeID = session.get('episodeId') 
                         itemID = session.get('libraryItemId')
+                        mediaType = session.get('mediaType')
 
-                        # Skip sessions with missing essential data
-                        if not itemID or not bookID:
-                            logger.info(f"Skipping session with missing itemID or bookID")
+                        should_skip = False
+
+                        if mediaType == 'book':
+                            if not itemID or not bookID:
+                                logger.info(f"Skipping book session with missing itemID or bookID")
+                                should_skip = True
+                        elif mediaType == 'podcast':
+                            if not itemID or not episodeID:
+                                logger.info(f"Skipping podcast session with missing itemID or episodeID") 
+                                should_skip = True
+                        else:
+                            logger.info(f"Skipping session with unknown mediaType: {mediaType}")
+                            should_skip = True
+
+                        if should_skip:
                             skipped_session_count += 1
                             continue
 
@@ -1461,6 +1730,8 @@ class AudioPlayBack(Extension):
                         title = session.get('displayTitle')
                         subtitle = mediaMetadata.get('subtitle', '')
                         display_author = session.get('displayAuthor')
+
+                        logger.debug(f"Recent session: title='{title}', mediaType='{mediaType}', episodeID='{episodeID}', itemID='{itemID}'")
 
                         # Skip if both title and author are None (likely deleted item)
                         if title is None and display_author is None:
@@ -1477,6 +1748,10 @@ class AudioPlayBack(Extension):
                         if display_author is None:
                             logger.info(f"Found session with None author for itemID: {itemID}, title: {title}")
                             display_author = 'Unknown Author'
+
+                        # Add media type indicator to the name for podcasts
+                        if mediaType == 'podcast':
+                            title = f"🎙️ {title}"  # Add podcast emoji
 
                         # Format name with smart truncation
                         name = f"{title} | {display_author}"
@@ -1496,8 +1771,27 @@ class AudioPlayBack(Extension):
                         # Ensure we don't exceed Discord limit
                         name = name.encode("utf-8")[:100].decode("utf-8", "ignore")
 
+                        # Check if this is a podcast episode (has episodeId structure)
+                        episode_id = session.get('episodeId')
+
+                        if episode_id:
+                            # Use the full library item ID for podcasts
+                            formatted_item = {"name": name, "value": itemID}
+                        else:
+                            # Regular book session
+                            formatted_item = {"name": name, "value": itemID}
+
                         # Add to choices if not already there
                         formatted_item = {"name": name, "value": itemID}
+
+                        # Add episode_id field for podcasts
+                        mediaType = session.get('mediaType')
+                        if mediaType == 'podcast':
+                            episode_id = session.get('episodeId')
+                            if episode_id:
+                                formatted_item["episode_id"] = episode_id
+
+                        # Check for duplicates
                         if formatted_item not in choices:
                             choices.append(formatted_item)
                             valid_session_count += 1
@@ -1555,24 +1849,57 @@ class AudioPlayBack(Extension):
 
                         if r.status_code == 200:
                             data = r.json()
-                            dataset = data.get('book', [])
 
-                            for book in dataset:
-                                authors_list = []
-                                title = book['libraryItem']['media']['metadata']['title']
-                                authors_raw = book['libraryItem']['media']['metadata']['authors']
+                            book_dataset = data.get('book', [])
+                            podcast_dataset = data.get('podcast', [])
 
-                                for author in authors_raw:
-                                    name = author.get('name')
-                                    authors_list.append(name)
+                            logger.info(f"Library {lib_id.get('name')} search results: {len(book_dataset)} books, {len(podcast_dataset)} podcasts")
 
-                                author = ', '.join(authors_list)
-                                book_id = book['libraryItem']['id']
+                            # Process books
+                            for book in book_dataset:
+                                try:
+                                    authors_list = []
+                                    title = book['libraryItem']['media']['metadata']['title']
+                                    authors_raw = book['libraryItem']['media']['metadata'].get('authors', [])
 
-                                # Add to list if not already present (avoid duplicates)
-                                new_item = {'id': book_id, 'title': title, 'author': author}
-                                if not any(item['id'] == book_id for item in found_titles):
-                                    found_titles.append(new_item)
+                                    for author in authors_raw:
+                                        name = author.get('name')
+                                        if name:
+                                            authors_list.append(name)
+
+                                    author = ', '.join(authors_list) if authors_list else 'Unknown Author'
+                                    book_id = book['libraryItem']['id']
+
+                                    # Add to list if not already present (avoid duplicates)
+                                    new_item = {'id': book_id, 'title': title, 'author': author}
+                                    if not any(item['id'] == book_id for item in found_titles):
+                                        found_titles.append(new_item)
+                                        logger.debug(f"Added book: {title}")
+                                except Exception as e:
+                                    logger.warning(f"Error processing book result: {e}")
+    
+                            # Process podcasts
+                            for podcast in podcast_dataset:
+                                try:
+                                    title = podcast['libraryItem']['media']['metadata']['title']
+                                    # Podcasts have different author structure
+                                    podcast_metadata = podcast['libraryItem']['media']['metadata']
+                                    author = podcast_metadata.get('author', 'Unknown Author')
+                                    if not author or author == 'Unknown Author':
+                                        author = podcast_metadata.get('feedAuthor', 'Unknown Author')
+            
+                                    book_id = podcast['libraryItem']['id']
+
+                                    # Add podcast emoji to distinguish in search
+                                    title_with_emoji = f"🎙️ {title}"
+
+                                    # Add to list if not already present (avoid duplicates)
+                                    new_item = {'id': book_id, 'title': title_with_emoji, 'author': author}
+                                    if not any(item['id'] == book_id for item in found_titles):
+                                        found_titles.append(new_item)
+                                        logger.debug(f"Added podcast: {title}")
+                                except Exception as e:
+                                    logger.warning(f"Error processing podcast result: {e}")
 
                     except Exception as e:
                         logger.error(f"Error searching library {library_iD}: {e}")
@@ -1747,6 +2074,9 @@ class AudioPlayBack(Extension):
                 self.seriesIndex = self.seriesList.index(item_id)
                 self.isFirstBookInSeries = self.seriesIndex == 0
                 self.isLastBookInSeries = self.seriesIndex == len(self.seriesList) - 1
+
+                # Cache series book data for dropdown
+                await self._cache_series_book_data()
             
                 logger.info(f"Book {self.seriesIndex + 1}/{len(self.seriesList)} in series '{series_data['name']}'")
                 return True
@@ -1760,87 +2090,99 @@ class AudioPlayBack(Extension):
             self.seriesIndex = None
             self.isFirstBookInSeries = False
             self.isLastBookInSeries = False
+            self.seriesBookCache = {}
             return False
 
-    async def move_to_series_book(self, direction: str):
+    async def move_to_series_book(self, direction=None, target_index=None):
         """
-        Move to the next or previous book in the series
-    
+        Move to another book in the series - supports both direction and index patterns
+
         Args:
-            direction: "next" or "previous"
-    
+            direction: "next" or "previous" for sequential navigation (optional)
+            target_index: Specific index to jump to for menu selection (optional)
+
+        Note: Provide either direction OR target_index, not both
+
         Returns:
             bool: True if successful, False if failed or at series boundary
         """
         if not self.seriesList or self.seriesIndex is None:
             logger.warning(f"No series context available for {direction} book")
             return False
-    
-        # Calculate new index based on direction
-        if direction == "next":
-            if self.seriesIndex >= len(self.seriesList) - 1:
-                logger.info("Already at the last book in series")
+
+        # Determine target index based on input pattern
+        if direction is not None and target_index is None:
+            # Direction-based navigation
+            if direction == "next":
+                if self.seriesIndex >= len(self.seriesList) - 1:
+                    logger.info("Already at the last book in series")
+                    return False
+                new_index = self.seriesIndex + 1
+            elif direction == "previous":
+                if self.seriesIndex <= 0:
+                    logger.info("Already at the first book in series")
+                    return False
+                new_index = self.seriesIndex - 1
+            else:
+                logger.error(f"Invalid direction: {direction}")
                 return False
-            new_index = self.seriesIndex + 1
-            target_book_id = self.seriesList[new_index]
-
-            # Check if the target book is finished - if so, start from beginning
-            # Otherwise, let build_session respect the server's current position
-            try:
-                progress_data = await c.bookshelf_item_progress(target_book_id)
-                is_finished = progress_data.get('finished', 'False') == 'True'
-            
-                if is_finished:
-                    start_time = 0.0
-                    logger.info(f"Target book {target_book_id} is finished - starting from beginning")
-                else:
-                    start_time = None  # Let build_session use server's current position
-                    logger.info(f"Target book {target_book_id} not finished - will respect server position")
-                
-            except Exception as e:
-                logger.warning(f"Error checking next book progress, defaulting to server position: {e}")
-                start_time = None  # Let build_session decide
-
-        elif direction == "previous":
-            if self.seriesIndex <= 0:
-                logger.info("Already at the first book in series")
+        elif target_index is not None and direction is None:
+            # Index-based navigation for menu selection
+            if target_index < 0 or target_index >= len(self.seriesList):
+                logger.warning(f"Series book index {target_index} out of range (0-{len(self.seriesList) - 1})")
                 return False
-            new_index = self.seriesIndex - 1
-            target_book_id = self.seriesList[new_index]
-
-            # Check if the target book is finished - if so, start from beginning
-            # Otherwise, let build_session respect the server's current position
-            try:
-                progress_data = await c.bookshelf_item_progress(target_book_id)
-                is_finished = progress_data.get('finished', 'False') == 'True'
-            
-                if is_finished:
-                    start_time = 0.0
-                    logger.info(f"Target book {target_book_id} is finished - starting from beginning")
-                elif target_book_id == self.previousBookID and self.previousBookTime:
-                    start_time = self.previousBookTime
-                    logger.info(f"Resuming previous book at {start_time}s")
-                else:
-                    start_time = 0.0
-                    logger.info(f"No stored progress for previous book - starting from beginning")
-                
-            except Exception as e:
-                logger.warning(f"Error checking book progress, defaulting to beginning: {e}")
-                start_time = 0.0
-
+            new_index = target_index
         else:
-            logger.error(f"Invalid direction: {direction}")
+            logger.error("Must provide either direction OR target_index, not both or neither")
             return False
-    
-        # Store current book info as previous (for next moves)
-        if direction == "next":
-            self.previousBookID = self.bookItemID
-            self.previousBookTime = self.currentTime
-    
+
         target_book_id = self.seriesList[new_index]
-        logger.info(f"Moving to {direction} book in series: {target_book_id}")
+        logger.info(f"Moving to series book at index {new_index}: {target_book_id}")
     
         try:
+            # Determine start time based on navigation type
+            if direction == "next":
+                # Check if the target book is finished - if so, start from beginning
+                # Otherwise, let build_session respect the server's current position
+                try:
+                    progress_data = await c.bookshelf_item_progress(target_book_id)
+                    is_finished = progress_data.get('finished', 'False') == 'True'
+                
+                    if is_finished:
+                        start_time = 0.0
+                        logger.info(f"Target book {target_book_id} is finished - starting from beginning")
+                    else:
+                        start_time = None  # Let build_session use server's current position
+                        logger.info(f"Target book {target_book_id} not finished - will respect server position")
+                
+                except Exception as e:
+                    logger.warning(f"Error checking next book progress, defaulting to server position: {e}")
+                    start_time = None  # Let build_session decide
+
+            elif direction == "previous":
+                # For previous books, check if we have stored progress or if it's finished
+                try:
+                    progress_data = await c.bookshelf_item_progress(target_book_id)
+                    is_finished = progress_data.get('finished', 'False') == 'True'
+                
+                    if is_finished:
+                        start_time = 0.0
+                        logger.info(f"Target book {target_book_id} is finished - starting from beginning")
+                    elif target_book_id == self.previousBookID and self.previousBookTime:
+                        start_time = self.previousBookTime
+                        logger.info(f"Resuming previous book at {start_time}s")
+                    else:
+                        start_time = 0.0
+                        logger.info(f"No stored progress for previous book - starting from beginning")
+                
+                except Exception as e:
+                    logger.warning(f"Error checking book progress, defaulting to beginning: {e}")
+                    start_time = 0.0
+            else:
+                # For direct index navigation, respect server position
+                start_time = None
+                logger.debug(f"Direct index navigation - respecting server position")
+    
             # Stop current session
             if self.session_update.running:
                 self.session_update.stop()
@@ -1889,37 +2231,553 @@ class AudioPlayBack(Extension):
             logger.error(f"Error moving to {direction} book in series: {e}")
             return False
 
+    # Podcast Functions ---------------------------
 
-    # Component Callbacks ---------------------------
+    async def setup_podcast_context(self, item_id: str, episode_index: int = 0):
+        """Setup podcast episode context"""
+        try:
+            episodes = await c.bookshelf_get_podcast_episodes(item_id)
+            if not episodes:
+                return False
+            
+            self.podcastEpisodes = episodes
+            self.currentEpisodeIndex = episode_index
+            self.totalEpisodes = len(episodes)
+            self.isFirstEpisode = episode_index == 0
+            self.isLastEpisode = episode_index >= len(episodes) - 1
+        
+            current_episode = episodes[episode_index]
+            self.currentEpisodeTitle = current_episode.get('title', 'Unknown Episode')
+        
+            logger.info(f"Setup podcast context: Episode {episode_index + 1}/{len(episodes)}")
+            return True
+        
+        except Exception as e:
+            logger.error(f"Error setting up podcast context: {e}")
+            return False
+
+    async def move_to_podcast_episode(self, target_index=None, relative_move=None):
+        """
+        Move to an episode by absolute index or relative movement.
+
+        Args:
+            target_index: Absolute episode index (0-based) to navigate to
+            relative_move: Relative movement (+1 for next, -1 for previous)
+
+        Note: Provide either target_index OR relative_move, not both
+
+        Returns:
+            bool: True if successful, False if failed or at episode boundary
+        """
+        if not self.podcastEpisodes or self.currentEpisodeIndex is None:
+            logger.warning(f"No podcast context available for {direction} episode")
+            return False
+
+        # Calculate target index based on input
+        if target_index is not None:
+            new_index = target_index
+            operation_desc = f"episode {target_index + 1}"
+        elif relative_move is not None:
+            if relative_move == 1:  # next
+                if self.currentEpisodeIndex >= len(self.podcastEpisodes) - 1:
+                    logger.info("Already at the last episode")
+                    return False
+                new_index = self.currentEpisodeIndex + 1
+                operation_desc = "next episode"
+            elif relative_move == -1:  # previous
+                if self.currentEpisodeIndex <= 0:
+                    logger.info("Already at the first episode")
+                    return False
+                new_index = self.currentEpisodeIndex - 1
+                operation_desc = "previous episode"
+            else:
+                logger.error(f"Invalid relative_move: {relative_move}")
+                return False
+        else:
+            logger.error("Must provide either target_index or relative_move")
+            return False
+    
+        # Validate the target index
+        if new_index < 0 or new_index >= len(self.podcastEpisodes):
+            logger.warning(f"Episode index {new_index} out of range (0-{len(self.podcastEpisodes) - 1})")
+            return False
+
+        target_episode = self.podcastEpisodes[new_index]
+        target_episode_id = target_episode.get('id')
+        logger.info(f"Moving to {operation_desc}: {target_episode.get('title')}")
+
+        try:
+            # Stop current session
+            if self.session_update.running:
+                self.session_update.stop()
+            await c.bookshelf_close_session(self.sessionID)
+
+            # Build session for target episode - respects server position like series books
+            audio, currentTime, sessionID, episodeTitle, episodeDuration = await self.build_session(
+                item_id=self.bookItemID,
+                episode_index=new_index
+            )
+
+            # Update episode position
+            self.currentEpisodeIndex = new_index
+            self.isFirstEpisode = self.currentEpisodeIndex == 0
+            self.isLastEpisode = self.currentEpisodeIndex >= len(self.podcastEpisodes) - 1
+        
+            # Update audio state
+            self.audioObj = audio
+            self.currentTime = currentTime
+            self.sessionID = sessionID
+            self.bookTitle = episodeTitle  # Update title to episode title
+            self.bookDuration = episodeDuration
+            self.play_state = 'playing'
+            self.nextTime = None
+        
+            # Clear chapter info (podcasts don't have chapters)
+            self.currentChapter = None
+            self.chapterArray = None
+
+            # Set proper episode title for currentChapterTitle
+            episode_number = target_episode.get('episode')
+            position_in_list = new_index + 1
+        
+            if episode_number is not None:
+                self.currentChapterTitle = f"Episode {episode_number}"
+            else:
+                if new_index == 0:
+                    self.currentChapterTitle = "Latest Episode"
+                else:
+                    self.currentChapterTitle = f"Episode {position_in_list}"
+
+            # Update episode title
+            self.currentEpisodeTitle = target_episode.get('title', 'Unknown Episode')
+        
+            # Update cover image (could be episode-specific or podcast-general)
+            self.cover_image = await c.bookshelf_cover_image(self.bookItemID)
+        
+            self.session_update.start()
+            return True
+        
+        except Exception as e:
+            logger.error(f"Error moving to {direction} episode: {e}")
+            return False
+
+    # Component Callbacks Functions------------------
+
     def get_current_playback_buttons(self):
         """Get the current playback buttons based on current state"""
-        has_chapters = bool(
-            self.currentChapter and 
-            self.chapterArray and 
-            len(self.chapterArray) > 1 and
-            not self.isPodcast
-        )
+        logger.debug(f"get_current_playback_buttons called: seriesIndex={getattr(self, 'seriesIndex', None)}")
 
-        # Check if current book is part of a series
-        is_series = bool(self.currentSeries and len(self.seriesList) > 1)
+        # First check for chapters
+        has_chapters = False
+        if not self.isPodcast:  # Only books can have chapters
+            has_chapters = bool(
+                self.currentChapter and 
+                self.chapterArray and 
+                len(self.chapterArray) > 1
+            )
 
-        return get_playback_rows(
-            play_state=self.play_state,
-            repeat_enabled=self.repeat_enabled,
-            has_chapters=has_chapters,
-            is_podcast=self.isPodcast,
-            is_series=is_series,
-            is_first_book=self.isFirstBookInSeries,
-            is_last_book=self.isLastBookInSeries,
-            series_enabled=self.seriesEnabled
-        )
+        # Generate dropdown options
+        episode_options = None
+        series_options = None
+
+        if self.isPodcast:
+            # Generate episode options
+            episode_options = self._create_episode_options()
+            logger.debug(f"Generated {len(episode_options) if episode_options else 0} episode options")
+
+            # Podcasts get episode navigation
+            return get_playback_rows(
+                play_state=self.play_state,
+                repeat_enabled=self.repeat_enabled,
+                is_podcast=True,
+                has_chapters=False,  # Podcasts never have chapters
+                is_series=False,     # Podcasts don't use series navigation
+                is_first_episode=self.isFirstEpisode,
+                is_last_episode=self.isLastEpisode,
+                podcast_autoplay=self.podcastAutoplay,
+                episode_options=episode_options
+            )
+        else:
+            # Books get series navigation
+            is_series = bool(self.currentSeries and len(self.seriesList) > 1)
+
+            if is_series:
+                # Generate series options
+                series_options = self._create_series_options()
+                logger.debug(f"Generated {len(series_options) if series_options else 0} series options")
+
+            return get_playback_rows(
+                play_state=self.play_state,
+                repeat_enabled=self.repeat_enabled,
+                is_podcast=False,
+                has_chapters=has_chapters,
+                is_series=is_series,
+                is_first_book=self.isFirstBookInSeries,
+                is_last_book=self.isLastBookInSeries,
+                series_autoplay=self.seriesAutoplay,
+                series_options=series_options
+            )
+
+    async def update_callback_embed(self, ctx, update_buttons=True, stop_auto_kill=False):
+        """
+        Update playback embed for component callbacks with proper chapter/episode display
+    
+        Args:
+            ctx: Component context
+            update_buttons: Whether to update the button components as well
+            stop_auto_kill: Whether to stop the auto-kill session task
+        """
+        # Get proper display title
+        if self.isPodcast:
+            current_episode = self.podcastEpisodes[self.currentEpisodeIndex]
+            episode_number = current_episode.get('episode')
+            position_in_list = self.currentEpisodeIndex + 1
+        
+            if episode_number is not None:
+                display_chapter = f"Episode {episode_number}"
+            else:
+                if self.currentEpisodeIndex == 0:
+                    display_chapter = "Latest Episode"
+                else:
+                    display_chapter = f"Episode {position_in_list}"
+        else:
+            display_chapter = self.currentChapterTitle
+
+        # Generate embed
+        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=display_chapter)
+    
+        # Stop auto kill session task if requested
+        if stop_auto_kill and self.auto_kill_session.running:
+            logger.info("Stopping auto kill session backend task.")
+            self.auto_kill_session.stop()
+    
+        # Update UI
+        if update_buttons:
+            await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+        else:
+            await ctx.edit_origin(embed=embed_message)
+
+    async def shared_seek_callback(self, ctx: ComponentContext, seek_amount: float, is_forward: bool):
+        """
+        Shared logic for all seek component callbacks.
+    
+        Parameters:
+        - ctx: ComponentContext from the button callback
+        - seek_amount: Number of seconds to seek (positive value)
+        - is_forward: True for forward seeking, False for rewinding
+        """
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
+        if not ctx.voice_state:
+            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
+            return
+
+        await ctx.defer(edit_origin=True)
+        ctx.voice_state.channel.voice_state.player.stop()
+
+        # Use the unified method for seeking
+        result = await self.shared_seek(seek_amount, is_forward=is_forward)
+
+        if result is None:  # Book completed
+            await ctx.edit_origin(content="📚 Book completed!")
+            return
+
+        # Update UI
+        await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
+        await ctx.voice_state.channel.voice_state.play(self.audioObj)
+
+    def _create_media_options(self, media_type="series"):
+        """
+        Common function to create selection menus for both series and episodes
+    
+        Args:
+            media_type: "series" or "episode"
+    
+        Returns:
+            list: StringSelectOption objects for the dropdown
+        """
+        options = []
+    
+        if media_type == "series":
+            if not self.currentSeries or not self.seriesList:
+                return None
+            
+            media_list = self.seriesList
+            current_index = self.seriesIndex
+            cached_data = getattr(self, 'seriesBookCache', {})  # We'll need to add this cache
+        
+        elif media_type == "episode":
+            if not self.isPodcast or not self.podcastEpisodes:
+                return None
+            
+            media_list = self.podcastEpisodes
+            current_index = self.currentEpisodeIndex
+            cached_data = None  # Episodes have all data already
+        else:
+            return None
+
+        options = []
+
+        for index, item in enumerate(media_list):
+            if media_type == "series":
+                # Series book handling
+                book_id = item  # seriesList contains book IDs
+            
+                # Use cached data if available, otherwise use basic info
+                if book_id in cached_data:
+                    title = cached_data[book_id].get('title', 'Unknown Book')
+                    author = cached_data[book_id].get('author', 'Unknown Author')
+                else:
+                    # Fallback if not cached
+                    if index == current_index:
+                        title = self.bookTitle
+                        author = "Current Book"
+                    else:
+                        title = "Unknown Book"
+                        author = "Unknown Author"
+            
+                display_prefix = f"Book {index + 1}"
+                extra_info = author
+
+            else:
+                # Episode handling
+                episode = item  # podcastEpisodes contains episode objects
+                title = episode.get('title', 'Unknown Episode')
+                episode_number = episode.get('episode')
+
+                # Get Duration
+                audio_file = episode.get('audioFile', {})
+                episode_duration = audio_file.get('duration', 0) if audio_file else 0
+
+                # Format duration
+                if episode_duration and episode_duration > 0:
+                    from audio import time_converter
+                    extra_info = time_converter(int(episode_duration))
+                else:
+                    extra_info = "Unknown Duration"
+
+                # Create episode display prefix
+                position_in_list = index + 1
+                if episode_number is not None:
+                    display_prefix = f"Episode {episode_number}"
+                else:
+                    if index == 0:
+                        display_prefix = "Latest Episode"
+                    else:
+                        display_prefix = f"Episode {position_in_list}"
+        
+            # Mark current item
+            is_current = index == current_index
+
+            if media_type == "episode":
+                # For episodes: use episode title as label, episode number + duration as description
+                display_title = title
+                if len(display_title) > 100:
+                    display_title = display_title[:97] + "..."
+            
+                label = display_title
+                if is_current:
+                    label = f"⭐ {label}"
+            
+                if episode_number is not None:
+                    description = f"Episode {episode_number} • {extra_info}"
+                else:
+                    if index == 0:
+                        description = f"Latest Episode • {extra_info}"
+                    else:
+                        description = f"Episode {index + 1} • {extra_info}"
+            else:
+                # For series: use book number + title as label, author + duration as description
+                display_title = title
+                book_number = index + 1
+            
+                # Format as "Book # - Title"
+                full_label = f"Book {book_number} - {display_title}"
+                if len(full_label) > 100:
+                    # Truncate the title part if too long
+                    available_length = 100 - len(f"Book {book_number} - ") - 3
+                    display_title = display_title[:available_length] + "..."
+                    full_label = f"Book {book_number} - {display_title}"
+
+                label = full_label
+                if is_current:
+                    label = f"⭐ {label}"
+
+                # Get book duration from cached data if available
+                book_id = item
+                book_duration = ""
+                if book_id in cached_data and 'duration' in cached_data[book_id]:
+                    from audio import time_converter
+                    duration_seconds = cached_data[book_id]['duration']
+                    book_duration = f" • {time_converter(int(duration_seconds))}"
+            
+                description = f"{extra_info}{book_duration}"
+        
+            # Ensure label isn't too long (Discord limit is 100 chars)
+            if len(label) > 100:
+                label = label[:97] + "..."
+        
+            options.append(StringSelectOption(
+                label=label,
+                value=str(index),
+                description=description,
+            ))
+
+        # Discord select menus are limited to 25 options
+        if len(options) > 25:
+            current_idx = current_index if current_index is not None else 0
+        
+            # Show items around current selection
+            start_idx = max(0, current_idx - 12)  # 12 before + 1 current + 12 after = 25
+            end_idx = min(len(options), start_idx + 25)
+        
+            # If we're near the end, adjust start to show last 25 items
+            if end_idx - start_idx < 25:
+                start_idx = max(0, end_idx - 25)
+        
+            options = options[start_idx:end_idx]
+    
+        return options
+
+    def _create_episode_options(self):
+        """Create episode dropdown options"""
+        return self._create_media_options("episode")
+
+    def _create_series_options(self):
+        """Create series book dropdown options"""
+        return self._create_media_options("series")
+
+    async def _cache_series_book_data(self):
+        """Cache book titles and authors for series dropdown"""
+        if not self.currentSeries or not self.seriesList:
+           return
+    
+        self.seriesBookCache = {}
+    
+        for book_id in self.seriesList:
+            try:
+                book_details = await c.bookshelf_get_item_details(book_id)
+                self.seriesBookCache[book_id] = {
+                    'title': book_details.get('title', 'Unknown Book'),
+                    'author': book_details.get('author', 'Unknown Author'),
+                    'duration': book_details.get('duration', 0)
+                }
+            except Exception as e:
+                logger.error(f"Error caching series book data for {book_id}: {e}")
+                self.seriesBookCache[book_id] = {
+                    'title': 'Unknown Book',
+                    'author': 'Unknown Author',
+                    'duration': 0
+                }
+
+    async def handle_media_selection(self, ctx, media_type="series"):
+        """
+        Common function to handle selection from both series and episode menus
+    
+        Args:
+            ctx: ComponentContext
+            media_type: "series" or "episode"
+        """
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+    
+        try:
+            selected_value = ctx.values[0]
+            target_index = int(selected_value)
+        
+            # Validate selection based on media type
+            if media_type == "series":
+                if not self.currentSeries or not self.seriesList:
+                    await ctx.send("No series information available.", ephemeral=True)
+                    return
+            
+                if target_index == self.seriesIndex:
+                    await ctx.send("This book is already playing!", ephemeral=True)
+                    return
+            
+                if target_index < 0 or target_index >= len(self.seriesList):
+                    await ctx.send("Invalid book selection.", ephemeral=True)
+                    return
+            
+                # Get target info
+                target_id = self.seriesList[target_index]
+                target_details = await c.bookshelf_get_item_details(target_id)
+                target_name = target_details.get('title', 'Unknown Book')
+                display_name = f"Book {target_index + 1}: {target_name}"
+            
+            else:  # episode
+                if not self.isPodcast or not self.podcastEpisodes:
+                    await ctx.send("No podcast episode information available.", ephemeral=True)
+                    return
+            
+                if target_index == self.currentEpisodeIndex:
+                    await ctx.send("This episode is already playing!", ephemeral=True)
+                    return
+            
+                if target_index < 0 or target_index >= len(self.podcastEpisodes):
+                    await ctx.send("Invalid episode selection.", ephemeral=True)
+                    return
+            
+                # Get target info
+                target_episode = self.podcastEpisodes[target_index]
+                target_name = target_episode.get('title', 'Unknown Episode')
+                episode_number = target_episode.get('episode')
+            
+                if episode_number is not None:
+                    display_name = f"Episode {episode_number}: {target_name}"
+                else:
+                    if target_index == 0:
+                        display_name = f"Latest Episode: {target_name}"
+                    else:
+                        display_name = f"Episode {target_index + 1}: {target_name}"
+        
+            # Stop current playback
+            if ctx.voice_state and self.play_state == 'playing':
+                ctx.voice_state.channel.voice_state.player.stop()
+        
+            # Move to selected media
+            if media_type == "series":
+                # Store current position before moving
+                self.previousBookID = self.bookItemID
+                self.previousBookTime = self.currentTime
+
+                success = await self.move_to_series_book(target_index=target_index)
+            else:  # episode
+                success = await self.move_to_podcast_episode(target_index=target_index)
+        
+            if success:
+                logger.info(f"Successfully switched to {display_name}")
+                logger.debug(f"Updated series state: seriesIndex={self.seriesIndex}, bookTitle='{self.bookTitle}'")
+
+                # Update UI
+                await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
+
+                # Start new playback
+                if ctx.voice_state:
+                    await ctx.voice_state.channel.voice_state.play(self.audioObj)
+
+                logger.info(f"Successfully switched to {display_name}")
+
+            else:
+                media_name = "book" if media_type == "series" else "episode"
+                await ctx.send(f"Failed to switch to selected {media_name}.", ephemeral=True)
+        
+        except Exception as e:
+            logger.error(f"Error selecting {media_type}: {e}")
+            media_name = "book" if media_type == "series" else "episode"
+            await ctx.send(f"Error switching {media_name}s. Please try again.", ephemeral=True)
+
+    # Component Callbacks ---------------------------
 
     @component_callback('pause_audio_button')
     async def callback_pause_button(self, ctx: ComponentContext):
         if not await can_control_session(ctx, self):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
-        
+
         if ctx.voice_state:
             logger.info('Pausing Playback!')
             self.play_state = 'paused'
@@ -1929,8 +2787,7 @@ class AudioPlayBack(Extension):
 
             self.auto_kill_session.start()
 
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            await ctx.edit_origin(content="Play", components=self.get_current_playback_buttons(), embed=embed_message)
+            await self.update_callback_embed(ctx, update_buttons=True)
 
     @component_callback('play_audio_button')
     async def callback_play_button(self, ctx: ComponentContext):
@@ -1949,8 +2806,7 @@ class AudioPlayBack(Extension):
                 logger.info("Stopping auto kill session backend task.")
                 self.auto_kill_session.stop()
 
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            await ctx.edit_origin(components=self.get_current_playback_buttons(), embed=embed_message)
+            await self.update_callback_embed(ctx, update_buttons=True)
 
     @component_callback('repeat_button')
     async def callback_repeat_button(self, ctx: ComponentContext):
@@ -1960,9 +2816,7 @@ class AudioPlayBack(Extension):
             return
 
         self.repeat_enabled = not self.repeat_enabled
-
-        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-        await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+        await self.update_callback_embed(ctx, update_buttons=True)
 
     @component_callback('next_chapter_button')
     async def callback_next_chapter_button(self, ctx: ComponentContext):
@@ -1971,8 +2825,6 @@ class AudioPlayBack(Extension):
             return
 
         if ctx.voice_state:
-            logger.info('Moving to next chapter!')
-
             # Check if chapter data exists before attempting navigation
             if not self.currentChapter or not self.chapterArray:
                 logger.warning("No chapter data available for this book. Cannot navigate chapters.")
@@ -1981,7 +2833,6 @@ class AudioPlayBack(Extension):
                 return  # Return early without stopping playback
 
             await ctx.defer(edit_origin=True)
-            await ctx.edit_origin(components=self.get_current_playback_buttons())
 
             # Stop current playback
             ctx.voice_state.channel.voice_state.player.stop()
@@ -1998,24 +2849,11 @@ class AudioPlayBack(Extension):
 
             if self.found_next_chapter:
                 # Normal successful navigation or restart
-                chapter_title = self.newChapterTitle if self.newChapterTitle else self.currentChapterTitle
-                embed_message = self.modified_message(color=ctx.author.accent_color, chapter=chapter_title)
-
-                # Stop auto kill session task
-                if self.auto_kill_session.running:
-                    logger.info("Stopping auto kill session backend task.")
-                    self.auto_kill_session.stop()
-
-                await ctx.edit(embed=embed_message, components=self.get_current_playback_buttons())
+                await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
                 await ctx.voice_state.channel.voice_state.play(self.audioObj)
-
             elif session_was_cleaned_up and is_last_chapter:
-                # Book completed - this is expected, not an error
                 await ctx.edit_origin(content="📚 Book completed!")
-                # Don't show any error message - this is successful completion
-            
             else:
-                # Actual navigation failure (not book completion)
                 await ctx.send(content="Failed to navigate to next chapter.", ephemeral=True)
                 # Restart playback since we stopped it
                 if ctx.voice_state and ctx.voice_state.channel:
@@ -2023,7 +2861,7 @@ class AudioPlayBack(Extension):
 
             # Reset variable
             self.found_next_chapter = False
-            self.newChapterTitle = ''  # Clear after use
+            self.newChapterTitle = ''
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
@@ -2034,50 +2872,32 @@ class AudioPlayBack(Extension):
             return
 
         if ctx.voice_state:
-            logger.info('Moving to previous chapter!')
-
+            # Check if chapter data exists before attempting navigation
             if not self.currentChapter or not self.chapterArray:
-                logger.warning("No chapter data available for this book. Cannot navigate chapters.")
                 await ctx.send(content="This book doesn't have chapter information. Chapter navigation is not available.", 
                               ephemeral=True)
                 return  # Return early without stopping playback
 
             await ctx.defer(edit_origin=True)
 
-            if self.play_state == 'playing':
-                await ctx.edit_origin(components=self.get_current_playback_buttons())
-                ctx.voice_state.channel.voice_state.player.stop()
-            elif self.play_state == 'paused':
-                await ctx.edit_origin(components=self.get_current_playback_buttons())
-                ctx.voice_state.channel.voice_state.player.stop()
-            else:
-                await ctx.send(content='Error with previous chapter command, bot not active or voice not connected!', ephemeral=True)
-                return
+            ctx.voice_state.channel.voice_state.player.stop()
 
             # Find previous chapter
             await self.move_chapter(relative_move=-1)
 
             # Check if move_chapter succeeded before proceeding
             if self.found_next_chapter:
-                embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.newChapterTitle)
-
-                # Stop auto kill session task
-                if self.auto_kill_session.running:
-                    logger.info("Stopping auto kill session backend task.")
-                    self.auto_kill_session.stop()
-
-                await ctx.edit(embed=embed_message, components=self.get_current_playback_buttons())
+                await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
                 ctx.voice_state.channel.voice_state.player.stop()
-                await ctx.voice_state.channel.voice_state.play(self.audioObj)  # NOQA
+                await ctx.voice_state.channel.voice_state.play(self.audioObj)
             else:
-                # Previous chapter navigation failure is always an actual error
-                # (since going before first chapter just goes to first chapter)
                 await ctx.send(content="Failed to navigate to previous chapter.", ephemeral=True)
                 if ctx.voice_state and ctx.voice_state.channel:
                     await ctx.voice_state.channel.voice_state.play(self.audioObj)
 
-            # Resetting Variable
+            # Reset Variable
             self.found_next_chapter = False
+            self.newChapterTitle = ''
         else:
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
 
@@ -2120,14 +2940,7 @@ class AudioPlayBack(Extension):
         success = await self.move_to_series_book("next")
     
         if success:
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-        
-            # Stop auto kill session task
-            if self.auto_kill_session.running:
-                logger.info("Stopping auto kill session backend task.")
-                self.auto_kill_session.stop()
-        
-            await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+            await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
             await ctx.voice_state.channel.voice_state.play(self.audioObj)
         else:
             await ctx.send(content="Failed to move to next book in series.", ephemeral=True)
@@ -2156,30 +2969,100 @@ class AudioPlayBack(Extension):
         success = await self.move_to_series_book("previous")
     
         if success:
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-        
-            # Stop auto kill session task
-            if self.auto_kill_session.running:
-                logger.info("Stopping auto kill session backend task.")
-                self.auto_kill_session.stop()
-        
-            await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+            # Update UI
+            await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
             await ctx.voice_state.channel.voice_state.play(self.audioObj)
         else:
             await ctx.send(content="Failed to move to previous book in series.", ephemeral=True)
 
-    @component_callback('toggle_series_button')
-    async def callback_toggle_series_button(self, ctx: ComponentContext):
+    @component_callback('toggle_series_auto_button')
+    async def callback_toggle_series_auto_button(self, ctx: ComponentContext):
         """Toggle series auto-progression mode"""
-        self.seriesEnabled = not self.seriesEnabled
-        status = "enabled" if self.seriesEnabled else "disabled"
+        status = "enabled" if self.seriesAutoplay else "disabled"
+
+        # Update UI
+        self.seriesAutoplay = not self.seriesAutoplay
+        await self.update_callback_embed(ctx, update_buttons=True)
+
+    @component_callback('next_episode_button')
+    async def callback_next_episode_button(self, ctx: ComponentContext):
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
+        if not ctx.voice_state:
+            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
+            return
     
-        # Update the embed and buttons
-        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-        await ctx.edit_origin(embed=embed_message, components=self.get_current_playback_buttons())
+        if not self.isPodcast:
+            await ctx.send(content="Current item is not a podcast.", ephemeral=True)
+            return
+
+        await ctx.defer(edit_origin=True)
+
+        # Stop current playback
+        if self.play_state == 'playing':
+            ctx.voice_state.channel.voice_state.player.stop()
+
+        # Move to next episode
+        success = await self.move_to_podcast_episode(relative_move=1)
+
+        if success:
+            # Update UI
+            await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
+            await ctx.voice_state.channel.voice_state.play(self.audioObj)
+        else:
+            await ctx.send(content="Failed to move to next episode.", ephemeral=True)
+
+    @component_callback('previous_episode_button')
+    async def callback_previous_episode_button(self, ctx: ComponentContext):
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
+        if not ctx.voice_state:
+            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
+            return
     
-        # Send a brief status message
-        await ctx.send(f"Series auto-progression {status}.", ephemeral=True)
+        if not self.isPodcast:
+            await ctx.send(content="Current item is not a podcast.", ephemeral=True)
+            return
+
+        await ctx.defer(edit_origin=True)
+
+        # Stop current playback
+        if self.play_state == 'playing':
+            ctx.voice_state.channel.voice_state.player.stop()
+
+        # Move to previous episode
+        success = await self.move_to_podcast_episode(relative_move=-1)
+
+        if success:
+            await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
+            await ctx.voice_state.channel.voice_state.play(self.audioObj)
+        else:
+            await ctx.send(content="Failed to move to previous episode.", ephemeral=True)
+
+    @component_callback('toggle_podcast_auto_button')
+    async def callback_toggle_podcast_auto_button(self, ctx: ComponentContext):
+        """Toggle episode auto-progression mode for podcasts"""
+        if not await can_control_session(ctx, self):
+            await ctx.send("You don't have permission to control this session.", ephemeral=True)
+            return
+
+        # Update UI
+        self.podcastAutoplay = not self.podcastAutoplay
+        await self.update_callback_embed(ctx, update_buttons=True)
+
+    @component_callback('series_select_menu')
+    async def series_select_callback(self, ctx: ComponentContext):
+        """Handle book selection from the series dropdown"""
+        await self.handle_media_selection(ctx, media_type="series")
+
+    @component_callback('episode_select_menu')
+    async def episode_select_callback(self, ctx: ComponentContext):
+        """Handle episode selection from the episode dropdown"""
+        await self.handle_media_selection(ctx, media_type="episode")
 
     @component_callback('volume_up_button')
     async def callback_volume_up_button(self, ctx: ComponentContext):
@@ -2195,10 +3078,8 @@ class AudioPlayBack(Extension):
             audio.volume = min(1.0, self.volume + adjustment)
             self.volume = audio.volume
 
-            # Create embedded message
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            await ctx.edit_origin(embed=embed_message)
-
+            # Update UI
+            await self.update_callback_embed(ctx, update_buttons=False)
             logger.info(f"Set Volume {round(self.volume * 100)}")  # NOQA
 
     @component_callback('volume_down_button')
@@ -2215,49 +3096,9 @@ class AudioPlayBack(Extension):
             audio.volume = max(0.0, self.volume - adjustment)
             self.volume = audio.volume
 
-            # Create embedded message
-            embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-            await ctx.edit_origin(embed=embed_message)
-
+            # Update UI
+            await self.update_callback_embed(ctx, update_buttons=False)
             logger.info(f"Set Volume {round(self.volume * 100)}")  # NOQA
-
-    async def shared_seek_callback(self, ctx: ComponentContext, seek_amount: float, is_forward: bool):
-        """
-        Shared logic for all seek component callbacks.
-    
-        Parameters:
-        - ctx: ComponentContext from the button callback
-        - seek_amount: Number of seconds to seek (positive value)
-        - is_forward: True for forward seeking, False for rewinding
-        """
-        if not await can_control_session(ctx, self):
-            await ctx.send("You don't have permission to control this session.", ephemeral=True)
-            return
-
-        if not ctx.voice_state:
-            await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
-            return
-
-        await ctx.defer(edit_origin=True)
-        ctx.voice_state.channel.voice_state.player.stop()
-
-        # Use the unified method for seeking
-        result = await self.shared_seek(seek_amount, is_forward=is_forward)
-
-        if result is None:  # Book completed
-            await ctx.edit_origin(content="📚 Book completed!")
-            return
-
-        # Update the embedded message with new info
-        embed_message = self.modified_message(color=ctx.author.accent_color, chapter=self.currentChapterTitle)
-
-        # Stop auto kill session task
-        if self.auto_kill_session.running:
-            logger.info("Stopping auto kill session backend task.")
-            self.auto_kill_session.stop()
-
-        await ctx.edit_origin(embed=embed_message)
-        await ctx.voice_state.channel.voice_state.play(self.audioObj)
 
     @component_callback('forward_button')
     async def callback_forward_button(self, ctx: ComponentContext):
@@ -2289,9 +3130,8 @@ class AudioPlayBack(Extension):
 
         Returns audio object ready for playback.
         """
-        # Stop current playback and session
+        # Stop session update
         self.session_update.stop()
-        await c.bookshelf_close_session(self.sessionID)
 
         # Use our current tracked position as the baseline for seeking
         current_time = self.currentTime
@@ -2340,7 +3180,32 @@ class AudioPlayBack(Extension):
                             await self.cleanup_session("restart failed")
                             return None
 
-                    elif self.seriesEnabled and self.currentSeries and not self.isLastBookInSeries:
+                    elif self.podcastAutoplay and self.isPodcast and not self.isLastEpisode:
+                        # Handle podcast episode progression
+                        logger.info("Seeked past episode end - moving to next episode")
+        
+                        if self.session_update.running:
+                            self.session_update.stop()
+        
+                        # Mark current episode as finished
+                        episode_id = getattr(self, 'episodeId', None)
+                        try:
+                            await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID, episode_id)
+                            logger.info(f"Successfully marked episode {episode_id} as finished before progression")
+                        except Exception as e:
+                            logger.warning(f"Failed to mark episode as finished before progression: {e}")
+        
+                        # Move to next episode
+                        success = await self.move_to_podcast_episode(relative_move=1)
+                        if success:
+                            self.session_update.start()
+                            return self.audioObj
+                        else:
+                            logger.error("Failed to move to next episode")
+                            await self.cleanup_session("episode progression failed")
+                            return None
+
+                    elif self.seriesAutoplay and self.currentSeries and not self.isLastBookInSeries:
                         logger.info("Seeked past book end (with chapters) - moving to next book in series")
             
                         if self.session_update.running:
@@ -2356,8 +3221,20 @@ class AudioPlayBack(Extension):
                             return None
 
                     else:
-                        logger.info("Seeked past book end (no chapters, no repeat) - marking complete and cleaning up")
-                        await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID)
+                        # Final fallback - mark as complete and cleanup
+                        if self.isPodcast:
+                            logger.info("Seeked past final episode - marking complete and cleaning up")
+                        else:
+                            logger.info("Seeked past book end - marking complete and cleaning up")
+        
+                        # Mark as finished while we still have session info
+                        episode_id = getattr(self, 'episodeId', None) if self.isPodcast else None
+                        try:
+                            await c.bookshelf_mark_book_finished(self.bookItemID, self.sessionID, episode_id)
+                            logger.info(f"Successfully marked {'episode' if episode_id else 'book'} as finished via session sync")
+                        except Exception as e:
+                            logger.warning(f"Failed to mark as finished via session sync: {e}")
+        
                         await self.cleanup_session("completed via seek past end")
                         return None
         
@@ -2412,7 +3289,8 @@ class AudioPlayBack(Extension):
                                 await self.cleanup_session("restart failed")
                                 return None
 
-                        elif self.seriesEnabled and self.currentSeries and not self.isLastBookInSeries:
+                       # Note no podcast logic here as they don't have chapters
+                        elif self.seriesAutoplay and self.currentSeries and not self.isLastBookInSeries:
                             logger.info("Seeked past book end (with chapters) - moving to next book in series")
             
                             if self.session_update.running:

@@ -698,6 +698,12 @@ class PrimaryCommands(Extension):
 
                     formatted_item = {"name": name, "value": itemID}
 
+                    # Add episode_id field for podcasts
+                    if sessions.get('mediaType') == 'podcast':
+                        episode_id = sessions.get('episodeId')
+                        if episode_id:
+                            formatted_item["episode_id"] = episode_id
+
                     if formatted_item not in choices and bookID is not None:
                         count += 1
                         choices.append(formatted_item)
