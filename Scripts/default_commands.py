@@ -9,7 +9,7 @@ from datetime import datetime
 # Local file imports
 import bookshelfAPI as c
 import settings
-from utils import ownership_check, is_bot_owner, add_progress_indicators
+from utils import ownership_check, is_bot_owner, add_progress_indicators, get_extension_instance
 
 # Logger Config
 logger = logging.getLogger("bot")
@@ -339,6 +339,26 @@ class PrimaryCommands(Extension):
             logger.warning(
                 f'User:{ctx.user} (ID: {ctx.user.id}) | Error occurred: {e} | Command Name: recently-added')
 
+    # Callback method for discover slash command
+    async def callback_interaction_discover(self, interaction: InteractionContext):
+        # Callback the current page's attributes from the embed
+        current_embed = interaction.message.embeds[0]
+        itemID = current_embed.url.rsplit("/", 1)[-1]
+        bookName = current_embed.title
+        logger.info(f"Title: {bookName}, itemID: {itemID}")
+
+        # Get the already loaded extension instead of recreating it
+        playback = get_extension_instance(self.bot, "AudioPlayBack")
+
+        if playback:
+            await playback._play_audio_core(interaction, book=itemID) # NOQA
+        else:
+            logger.error("Failed to retrieve AudioPlayBack extension.")
+            await interaction.send("Failed to play selected book, please try again later.")
+
+        # Attempt to play something
+        await playback.play_audio(interaction, book=itemID)
+
     @slash_command(name="discover", description="Discover 10 random books from your library")
     @slash_option(name="library", description="Select a specific library (optional)", 
                  opt_type=OptionType.STRING, autocomplete=True, required=False)
@@ -351,7 +371,9 @@ class PrimaryCommands(Extension):
             # Get all books from specified library or all libraries
             all_books = []
             libraries = await c.bookshelf_libraries()
-        
+
+
+
             if library:
                 # Use specific library
                 if library in [lib_id for name, (lib_id, audiobooks_only) in libraries.items()]:
@@ -466,6 +488,8 @@ class PrimaryCommands(Extension):
                     if img_url and "https" in img_url:
                         bookshelf_url = img_url
                     embed_message.url = f"{bookshelf_url}/item/{book_id}"
+
+                    # TODO Add a play button to the discover embed
                 
                     # Add footer
                     embed_message.footer = f"{settings.bookshelf_traveller_footer} | Random Discovery"
@@ -493,7 +517,12 @@ class PrimaryCommands(Extension):
                 )
             else:
                 from interactions.ext.paginators import Paginator
+
                 paginator = Paginator.create_from_embeds(self.bot, *embeds, timeout=300)
+                paginator.show_callback_button = True
+                paginator.callback_button_emoji = PartialEmoji(name='▶️')
+                paginator.callback = self.callback_interaction_discover
+
                 filter_text = f" from {library}" if library else ""
                 genre_text = f" in genre '{genre}'" if genre else ""
             
@@ -547,7 +576,6 @@ class PrimaryCommands(Extension):
                 try:
                     if isinstance(addedDate, str):
                         # If it's already a string, try to parse it
-                        from datetime import datetime
                         converted_added_date = datetime.fromisoformat(addedDate.replace('Z', '+00:00'))
                         formatted_addedDate = converted_added_date.strftime('%Y-%m-%d')
                     else:
