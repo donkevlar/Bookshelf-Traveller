@@ -1682,11 +1682,11 @@ class AudioPlayBack(Extension):
         embed_message.add_field(name="📖 Playback Status", value=playback_info, inline=True)
 
         try:
-            listener_count = len(voice_channel.voice_members) if voice_channel else 0
+            listener_count = len(voice_channel.voice_members) - 1 if voice_channel else 0  # L - 1 since the bot was counted previously
             channel_info = (
                 f"**Channel:** {voice_channel.mention if voice_channel else 'Unknown'}\n"
                 f"**Server:** {guild_name}\n"
-                f"**Listeners:** {listener_count}\n"
+                f"**Listeners:** {listener_count}\n"  
                 f"Click channel name above to join!"
             )
             embed_message.add_field(name="🔊 Channel Info", value=channel_info, inline=True)
