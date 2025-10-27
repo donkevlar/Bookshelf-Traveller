@@ -314,6 +314,19 @@ class WishList(Extension):
             await ctx.send(f"Failed to remove {book} from your wishlist, please visit logs for additional details.",
                            ephemeral=True)
 
+    async def remove_wish_item_callback(self, ctx: InteractionContext):
+        try:
+            current_page = ctx.message.embeds[0]
+            print(current_page.title)
+            book_id = current_page.title
+            result = mark_book_as_downloaded(discord_id=ctx.author_id, title=book_id)
+            if result:
+                await ctx.send(content=f"Successfully Removed Item **{book_id}** from your wishlist! The list will be refreshed after the command is next used"
+                                       f".", ephemeral=True)
+        except Exception as e:
+            logger.error(f"An error occurred while attempting to remove a wishlist item: {e}")
+
+    # TODO Add delete button to this command
     @slash_command(name='wishlist', description='View your wishlist')
     @slash_option(name='user', description='View a users specific wishlist. Admin Command.', autocomplete=True, required=False, opt_type=OptionType.STRING)
     async def view_wishlist(self, ctx: SlashContext, user=0):
@@ -332,6 +345,12 @@ class WishList(Extension):
 
         if embeds:
             paginator = Paginator.create_from_embeds(self.client, *embeds)
+            paginator.show_callback_button = True
+            paginator.callback_button_emoji = PartialEmoji(name="🗑️")
+            paginator.hide_buttons_on_stop = True
+            paginator_comp = paginator.create_components()
+            paginator.callback = self.remove_wish_item_callback
+
             await paginator.send(ctx, ephemeral=True)
         else:
             await ctx.send(

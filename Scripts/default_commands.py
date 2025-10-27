@@ -349,15 +349,12 @@ class PrimaryCommands(Extension):
 
         # Get the already loaded extension instead of recreating it
         playback = get_extension_instance(self.bot, "AudioPlayBack")
-
+        # Attempt to play something
         if playback:
             await playback._play_audio_core(interaction, book=itemID) # NOQA
         else:
             logger.error("Failed to retrieve AudioPlayBack extension.")
             await interaction.send("Failed to play selected book, please try again later.")
-
-        # Attempt to play something
-        await playback.play_audio(interaction, book=itemID)
 
     @slash_command(name="discover", description="Discover 10 random books from your library")
     @slash_option(name="library", description="Select a specific library (optional)", 
