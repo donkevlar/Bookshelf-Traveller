@@ -1,5 +1,5 @@
 requests
-discord-py-interactions~=5.14.0
+discord-py-interactions~=5.15.0
 python-dotenv~=1.0.1
 httpx
 json5
