@@ -17,6 +17,8 @@ Make sure that you select all intents when setting up your bot and that you have
 
 **If you provide the `CLIENT_ID` environment variable, an invite link will be generated when the bot starts up for you. :)**
 
+Note: To find the CLIENT_ID value go to the discord developer portal, click on OAUTH2, under client information you'll see the client id.
+
 **Ownership by default will allow only you to control the bot, to disable this, use the env variable `OWNER_ONLY`.** 
 
 **When using commands that use images, i.e. `/media_progress` or `/recent_sessions`, 
