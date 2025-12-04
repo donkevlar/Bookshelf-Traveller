@@ -9,22 +9,22 @@
 
 A fully featured Audiobookshelf discord bot with playback and administrative functionality. Enjoy your travels! :)
 
-You'll need to create your own discord application in order to do this, this is fairly straight forward, here is a guide:
+You'll need to create your own discord application in order to do this. This is fairly straightforward; here is a guide:
 
 [Create a Discord App - Getting Started](https://discord.com/developers/docs/getting-started#step-1-creating-an-app)
 
-Make sure that you select all intents when setting up your bot and that you have created a url to add it to your desired discord server.
+Make sure that you select all intents when setting up your bot and that you have created a URL to add it to your desired discord server.
 
 **If you provide the `CLIENT_ID` environment variable, an invite link will be generated when the bot starts up for you. :)**
 
-Note: To find the CLIENT_ID value go to the discord developer portal, click on OAUTH2, under client information you'll see the client id.
+Note: To find the CLIENT_ID value, go to the discord developer portal, click on OAUTH2, and under client information you'll see the client id.
 
-**Ownership by default will allow only you to control the bot, to disable this, use the env variable `OWNER_ONLY`.** 
+**Ownership by default will allow only you to control the bot. To disable this, use the env variable `OWNER_ONLY`.** 
 
 **When using commands that use images, i.e. `/media_progress` or `/recent_sessions`, 
 the server must use an `HTTPS` connection due to a requirement from discord's API. If not, no image will be generated.**
 
-**Important note regarding `HTTPS` connections. I've experienced a lot of issues when streaming audio from my server to discord using a https connection as the source. I have yet to confirm if this is a double NAT issue, a reverse proxy issue or otherwise. I suggest you utilize a direct connection to your server i.e. `http://127.0.0.1:13378` if you intend to listen to an audiobook for more than 15 minutes at a time. As a workaround for including images, I've added the `OPT_IMAGE_URL` env variable. If this is utilized (With an https connection) the bot will use this link for all images instead of the initial server url.**
+**Important note regarding `HTTPS` connections: I've experienced a lot of issues when streaming audio from my server to discord using an https connection as the source. I have yet to confirm if this is a double NAT issue, a reverse proxy issue, or otherwise. I suggest you utilize a direct connection to your server, i.e. `http://127.0.0.1:13378`, if you intend to listen to an audiobook for more than 15 minutes at a time. As a workaround for including images, I've added the `OPT_IMAGE_URL` env variable. If this is utilized (with an https connection), the bot will use this link for all images instead of the initial server URL.**
 
 ### Troubleshooting
 **Before reporting an issue, please make sure that you enable `DEBUG_MODE=true`. You can use this when reporting an issue as it will describe all backend services and any script-related problems.**
@@ -34,22 +34,54 @@ the server must use an `HTTPS` connection due to a requirement from discord's AP
 
 | ENV Variables      | Description                                                                                                                                                | Type      | Required? |
 |--------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------|-----------|
-| `DISCORD_TOKEN`    | Discord API Token                                                                                                                                          | *String*  | **YES**   |
-| `bookshelfToken`   | Bookshelf User Token (All user types work, but some will limit your interaction options.)                                                                  | *String*  | **YES**   |
-| `bookshelfURL`     | Bookshelf url with protocol and port, ex: http://localhost:80                                                                                              | *String*  | **YES**   |
-| `PLAYBACK_ROLE`    | A discord role id, used if you want other users to have access to playback.                                                                                | *Integer* | **NO**    |
-| `OWNER_ONLY`       | By default set to `True`. Only allow bot owner or role owners (if enabled) to use the bot.                                                                 | *Boolean* | **NO**    |
-| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to be ephemeral (shown only to you).                                                                      | *Boolean* | **NO**    |
-| `MULTI_USER`       | By default set to `True`, disable this to re-enable admin controls (Conditional on the user logged in.) and to remove the /login and /select options       | *Boolean* | **NO**    |
 | `AUDIO_ENABLED`    | By default set to `True`, disable if you want to remove the ability for audio playback.                                                                    | *Boolean* | **NO**    |
-| `OPT_IMAGE_URL`    | Optional HTTPS URL for generating cover images and sending them to the discord API. This is primarily if you experience similar issues as mentioned above. | *String*  | **NO**    |
-| `TIMEZONE`         | Default set to `America/Toronto`                                                                                                                           | *String*  | **NO**    |
-| `DEFAULT_PROVIDER` | Experimental, set the default search provider for certain commands.                                                                                        | *String*  | **NO**    |
+| `bookshelfToken`   | Bookshelf User Token (All user types work, but some will limit your interaction options.)                                                                  | *String*  | **YES**   |
+| `bookshelfURL`     | Bookshelf URL with protocol and port, ex: http://localhost:80                                                                                              | *String*  | **YES**   |
+| `DB_HOST`          | Database host address (required if using MariaDB). Example: `localhost`                                                                                    | *String*  | **NO**    |
+| `DB_NAME`          | Database name (required if using MariaDB). Example: `bookshelf`                                                                                            | *String*  | **NO**    |
+| `DB_PASSWORD`      | Database password (required if using MariaDB)                                                                                                              | *String*  | **NO**    |
+| `DB_PORT`          | Database port (required if using MariaDB). Default: `3306`                                                                                                 | *Integer* | **NO**    |
+| `DB_TYPE`          | Database type to use. Options: `sqlite` (default) or `mariadb`                                                                                             | *String*  | **NO**    |
+| `DB_USER`          | Database username (required if using MariaDB)                                                                                                              | *String*  | **NO**    |
 | `DEBUG_MODE`       | By default, set to `False`. It enables verbose logs and also disables all notifications.                                                                   | *Boolean* | **NO**    |
+| `DEFAULT_PROVIDER` | Experimental, set the default search provider for certain commands.                                                                                        | *String*  | **NO**    |
+| `DISCORD_TOKEN`    | Discord API Token                                                                                                                                          | *String*  | **YES**   |
+| `EPHEMERAL_OUTPUT` | By default set to `True`, this sets all commands to be ephemeral (shown only to you).                                                                      | *Boolean* | **NO**    |
 | `FFMPEG_DEBUG`     | By default, set to `False`. It creates FFmpeg logs inside the appdata folder.                                                                              | *Boolean* | **NO**    |
+| `MULTI_USER`       | By default set to `True`, disable this to re-enable admin controls (conditional on the user logged in) and to remove the /login and /select options.       | *Boolean* | **NO**    |
+| `OPT_IMAGE_URL`    | Optional HTTPS URL for generating cover images and sending them to the discord API. This is primarily if you experience similar issues as mentioned above. | *String*  | **NO**    |
+| `OWNER_ONLY`       | By default set to `True`. Only allow bot owner or role owners (if enabled) to use the bot.                                                                 | *Boolean* | **NO**    |
+| `PLAYBACK_ROLE`    | A discord role ID, used if you want other users to have access to playback.                                                                                | *Integer* | **NO**    |
+| `TIMEZONE`         | Default set to `America/Toronto`                                                                                                                           | *String*  | **NO**    |
+
+### Database Configuration
+
+By default, the bot uses SQLite for local database storage. For production environments or multi-instance deployments, MariaDB/MySQL is supported.
+
+#### SQLite (Default)
+No additional configuration needed. Database files are stored in the `db/` directory.
+
+#### MariaDB/MySQL Setup
+1. Create a database and user:
+```sql
+CREATE DATABASE bookshelf CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'bookshelf_user'@'%' IDENTIFIED BY 'your_password';
+GRANT ALL PRIVILEGES ON bookshelf.* TO 'bookshelf_user'@'%';
+FLUSH PRIVILEGES;
+```
+
+2. Set the following environment variables:
+```
+DB_TYPE=mariadb
+DB_HOST=localhost
+DB_PORT=3306
+DB_USER=bookshelf_user
+DB_PASSWORD=your_password
+DB_NAME=bookshelf
+```
 
 ## Installation
-**Current Installation method is by docker container, however, you can also run main.py within a project folder.**
+**Current installation method is by docker container; however, you can also run main.py within a project folder.**
 
 ### Docker Container
 Docker Container Available:
@@ -107,7 +139,7 @@ Requirements: **Python 3.10 or above**.
 
 [FFmpeg](https://www.ffmpeg.org/download.html)
 
-you'll also need an '.env' file for loading the above [ENV Variables](https://github.com/donkevlar/Bookshelf-Traveller/blob/master/README.md#environmental-variables)
+You'll also need a '.env' file for loading the above [ENV Variables](https://github.com/donkevlar/Bookshelf-Traveller/blob/master/README.md#environmental-variables)
 
 #### Step 1: Navigate to Directory
 Open your terminal and navigate to your desired folder. 
@@ -121,13 +153,13 @@ git clone https://github.com/donkevlar/Bookshelf-Traveller.git
 
 *Windows*
 ```
-pip install discord-py-interactions && pip install discord.py-interactions[voice] && pip install python-dotenv && pip install requests && pip install httpx
+pip install -r requirements.txt
 ```
 *Linux Debian/Ubuntu*
 
-For all os options visit [Interactions.py](https://interactions-py.github.io/interactions.py/Guides/23%20Voice/#__tabbed_1_2)
+For all OS options visit [Interactions.py](https://interactions-py.github.io/interactions.py/Guides/23%20Voice/#__tabbed_1_2)
 ```
-pip install discord-py-interactions && pip install discord.py-interactions[voice] && pip install python-dotenv && pip install requests && pip install httpx
+pip install -r requirements.txt
 ```
 ```
 sudo apt install ffmpeg libffi-dev libnacl-dev
@@ -139,28 +171,28 @@ Make sure that you are in the `/Bookshelf-Traveller` directory.
 python main.py
 ```
 ## Bot Commands
-The following Commands are available:
+The following commands are available:
 
-**By default, setup as '/' commands, or a.k.a. app commands**
+**By default, set up as '/' commands, or a.k.a. app commands**
 Here's the list of commands sorted alphabetically:
 
 | Command               | Description                                                                                                | Arguments                                          | Additional Information                                                                                                                                                                                                                        | Additional Functionality                                                                                                     |
 |-----------------------|------------------------------------------------------------------------------------------------------------|----------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
-| `/active-task`        | Pulls all active tasks, this is a server wide command. (Sees all users, channels, etc)                     |                                                    |                                                                                                                                                                                                                                               |                                                                                                                              |
-| `/add-book`           | Add a book to your wishlist, this command is open server wide.                                             | `title`, `provider`, `force`                       | Most successful searches will appear on audible, but others are available by default. Note that even if a title is specific, sometimes that can result in too many options and the bot returning nothing. Use a series name when this occurs. | **Autocomplete**                                                                                                             |
-| `/add-user`           | Will create a user, requires username, password                                                            | `name`, `password`, `user_type`, optional: `email` | only with ABS admin token. Otherwise disabled. *MULTI_USER must be False.                                                                                                                                                                     |
+| `/active-task`        | Pulls all active tasks, this is a server-wide command. (Sees all users, channels, etc.)                   |                                                    |                                                                                                                                                                                                                                               |                                                                                                                              |
+| `/add-book`           | Add a book to your wishlist, this command is open server-wide.                                             | `title`, `provider`, `force`                       | Most successful searches will appear on audible, but others are available by default. Note that even if a title is specific, sometimes that can result in too many options and the bot returning nothing. Use a series name when this occurs. | **Autocomplete**                                                                                                             |
+| `/add-user`           | Will create a user, requires username, password                                                            | `name`, `password`, `user_type`, optional: `email` | Only with ABS admin token. Otherwise disabled. *MULTI_USER must be False.                                                                                                                                                                     |
 | `/all-libraries`      | Displays all current libraries with their ID                                                               |                                                    |                                                                                                                                                                                                                                               |
 | `/announce`           | Creates a public link for people to join the voice channel                                                 |                                                    |                                                                                                                                                                                                                                               |
-| `/book-list-csv`      | Get complete list of items in a given library, outputs a csv                                               | `libraryid`                                        | only with ABS admin token. Otherwise disabled. *MULTI_USER must be False.                                                                                                                                                                     | **Autocomplete Enabled & Cover Images**                                                                                      |
+| `/book-list-csv`      | Get complete list of items in a given library, outputs a CSV                                               | `libraryid`                                        | Only with ABS admin token. Otherwise disabled. *MULTI_USER must be False.                                                                                                                                                                     | **Autocomplete Enabled & Cover Images**                                                                                      |
 | `/change-chapter`     | Changes chapter in currently playing audio                                                                 | `type`: `next`, `previous`                         |                                                                                                                                                                                                                                               |
 | `/discover`           | Provides 10 random books to the user                                                                       |                                                    |                                                                                                                                                                                                                                               |
 | `/listening-stats`    | Pulls your total listening time                                                                            |                                                    |                                                                                                                                                                                                                                               |
 | `/login`              | Login using ABS username and password.                                                                     | `username`, `password`                             |                                                                                                                                                                                                                                               |
 | `/media-progress`     | Searches for the media item's progress                                                                     | `book_title`                                       | Features autocomplete, simply type in the name of the book and it will return the name and ID for you.                                                                                                                                        | **Autocomplete Enabled & Cover Images**                                                                                      |
-| `/new-book-check`     | Will lookback using the given search period for any recently added books. Can be used as a recurring task. | `minutes`, `enable_task`, `disable_task`           | Use the `minutes` argument for a live use case. Note: This does not affect the task timing. Default task is set to refresh every 5 minutes.                                                                                                   |
+| `/new-book-check`     | Will look back using the given search period for any recently added books. Can be used as a recurring task.| `minutes`, `enable_task`, `disable_task`           | Use the `minutes` argument for a live use case. Note: This does not affect the task timing. Default task is set to refresh every 5 minutes.                                                                                                   |
 | `/pause`              | Pause audio                                                                                                |                                                    |                                                                                                                                                                                                                                               |
 | `/ping`               | Displays the latency between your server and the discord server shard                                      |                                                    |                                                                                                                                                                                                                                               |
-| `/play`               | Start a new audio session from server, syncs automatically                                                 | `book`                                             |                                                                                                                                                                                                                                               | Autocomplete provides up to the last 10 titles you've listened to. Also, Provides a full embedded UI with playback controls. |
+| `/play`               | Start a new audio session from server, syncs automatically                                                 | `book`                                             |                                                                                                                                                                                                                                               | Autocomplete provides up to the last 10 titles you've listened to. Also, provides a full embedded UI with playback controls. |
 | `/remove-book`        | Mark a book as downloaded in your wishlist                                                                 |                                                    |                                                                                                                                                                                                                                               |                                                                                                                              |
 | `/recent-sessions`    | Will display ***up to*** 10 recent sessions in a filtered and formatted way.                               |                                                    |                                                                                                                                                                                                                                               |
 | `/recently-added`     | Will display ***up to*** 10 recently added books.                                                          |                                                    |                                                                                                                                                                                                                                               |
@@ -174,7 +206,7 @@ Here's the list of commands sorted alphabetically:
 | `/user-search`        | Search for a specific user by name                                                                         | `name`                                             | Only with ABS admin token. Current public release only has name, but will be updated to include search by ID, or by using the autocomplete. Only with ABS admin token. Otherwise disabled. *MULTI_USER must be False.                         | **Autocomplete Enabled**                                                                                                     |
 | `/volume`             | Adjusts the bot's volume in the currently connected channel.                                               | `volume`: integer between `0 & 100`                | Default volume is set to 50%.                                                                                                                                                                                                                 |
 | `/view-all-wishlists` | View all active or inactive wishlists of all submitted wishlists. Admin/owner command only.                |                                                    |                                                                                                                                                                                                                                               |                                                                                                                              |
-| `/wishlist`           | View your wishlist. Server wide command.                                                                   |                                                    |                                                                                                                                                                                                                                               |                                                                                                                              |
+| `/wishlist`           | View your wishlist. Server-wide command.                                                                   |                                                    |                                                                                                                                                                                                                                               |                                                                                                                              |
 
 ### Alternative Packages
 Audio-only packages have been deprecated. Please use the environmental variables to modify how you would like your bot to function.
@@ -187,7 +219,7 @@ Play any of your audiobooks directly in discord! This also works with Xbox or Mo
 ![image](https://github.com/user-attachments/assets/9a74535e-b81a-480d-adb9-b84953c7e4ce)
 
 #### Multi-Channel Notifications (/setup-task)
-Monitor and track what is added to your ABS server by utilizing the book check tasks. Select which channels you want the notifications to be subscribed, multiple channel notifications are supported! 
+Monitor and track what is added to your ABS server by utilizing the book check tasks. Select which channels you want the notifications to be subscribed to; multiple channel notifications are supported! 
 
 #### /wishlist
 Create a customized wishlist, with direct messages so that your other server members can subscribe to see when something they wishlisted gets added. 
@@ -195,7 +227,7 @@ Create a customized wishlist, with direct messages so that your other server mem
 ![image](https://github.com/user-attachments/assets/7e2ae50f-2606-4af5-8478-85189419ff40)
 
 #### /recent-sessions
-List your most recent-sessions.
+List your most recent sessions.
 
 ![img.png](images/img.png)
 
