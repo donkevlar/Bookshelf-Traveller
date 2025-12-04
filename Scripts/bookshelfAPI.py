@@ -9,6 +9,7 @@ from collections import defaultdict
 from datetime import datetime
 
 import httpx
+from httpx import Timeout
 import requests
 
 from dotenv import load_dotenv
@@ -24,6 +25,21 @@ keep_active = False
 
 optional_image_url = OPT_IMAGE_URL
 
+# Timeout configuration (in seconds)
+HTTPX_TIMEOUT_CONNECT = float(os.getenv('HTTPX_TIMEOUT_CONNECT', '10.0'))
+HTTPX_TIMEOUT_READ = float(os.getenv('HTTPX_TIMEOUT_READ', '60.0'))
+HTTPX_TIMEOUT_WRITE = float(os.getenv('HTTPX_TIMEOUT_WRITE', '10.0'))
+HTTPX_TIMEOUT_POOL = float(os.getenv('HTTPX_TIMEOUT_POOL', '10.0'))
+
+# Create timeout configuration
+HTTPX_TIMEOUT = Timeout(
+    connect=HTTPX_TIMEOUT_CONNECT,
+    read=HTTPX_TIMEOUT_READ,
+    write=HTTPX_TIMEOUT_WRITE,
+    pool=HTTPX_TIMEOUT_POOL
+)
+
+
 def time_converter(time_sec: int) -> str:
     """
     :param time_sec:
@@ -33,6 +49,7 @@ def time_converter(time_sec: int) -> str:
     minutes = int((time_sec % 3600) // 60)
     seconds = int(time_sec % 60)
     return f"{hours:02}:{minutes:02}:{seconds:02}"
+
 
 # Simple Success Message
 def successMSG(endpoint, status):
@@ -64,9 +81,8 @@ async def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET
     link = f'{API_URL}{endpoint}{tokenInsert}{additional_params}'
     if __name__ == '__main__':
         print(link)
-
     # Create an HTTPX client
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
         if GET:
             if Headers:
                 r = await client.get(link, headers=Headers)
@@ -250,15 +266,15 @@ async def bookshelf_get_item_details(book_id) -> dict:
             # For podcasts, calculate total duration from episodes
             episodes = data['media'].get('episodes', [])
             duration_sec = sum(int(episode.get('duration', 0)) for episode in episodes)
-            
+
             # Podcasts don't have series in the same way books do
             series = ''
-            
+
             # For podcasts, "narrators" might be the host(s)
             if not narrators_list:
                 # Try to get host information or use author as fallback
                 narrators_list = authors_list if authors_list else ['Unknown Host']
-                
+
         else:  # book
             # Books have series and audio files
             series_raw = data['media']['metadata'].get('series', [])
@@ -422,7 +438,7 @@ async def bookshelf_item_progress(item_id, episode_id=None):
         # Keep as seconds and format with time_converter
         currentTime_seconds = int(data['currentTime'])
         duration_seconds = int(data['duration'])
-        
+
         lastUpdate = data['lastUpdate'] / 1000
 
         # Convert lastUpdate Time from unix to standard time
@@ -445,6 +461,7 @@ async def bookshelf_item_progress(item_id, episode_id=None):
         }
 
         return formatted_info
+
 
 async def bookshelf_mark_book_finished(item_id: str, session_id: str, episode_id: str = None):
     """
@@ -482,11 +499,11 @@ async def bookshelf_mark_book_finished(item_id: str, session_id: str, episode_id
             # Get duration from audioFile
             audio_file = episode_data.get("audioFile", {})
             duration = audio_file.get("duration", 0) if audio_file else 0
-            
+
             if not duration or int(duration) <= 0:
                 logger.error(f"Invalid episode duration for episode {episode_id}: {duration}")
                 return False
-            
+
             total_duration = int(duration)
             logger.info(f"Marking podcast episode {episode_id} as finished (duration: {total_duration}s)")
 
@@ -520,17 +537,19 @@ async def bookshelf_mark_book_finished(item_id: str, session_id: str, episode_id
         # Use PATCH method for progress update
         async with httpx.AsyncClient() as client:
             bookshelfURL = os.environ.get("bookshelfURL")
-            bookshelfToken = os.environ.get("bookshelfToken") 
+            bookshelfToken = os.environ.get("bookshelfToken")
             api_url = f"{bookshelfURL}/api{progress_endpoint}?token={bookshelfToken}"
 
-            progress_response = await client.patch(api_url, json=progress_update, 
-                                                 headers={'Content-Type': 'application/json'})
+            progress_response = await client.patch(api_url, json=progress_update,
+                                                   headers={'Content-Type': 'application/json'})
 
             if progress_response.status_code == 200:
-                logger.info(f"Successfully marked {media_type} {'episode ' + episode_id if episode_id else item_id} as finished")
+                logger.info(
+                    f"Successfully marked {media_type} {'episode ' + episode_id if episode_id else item_id} as finished")
                 return True
             else:
-                logger.warning(f"Failed to update progress endpoint. Status: {progress_response.status_code}, Response: {progress_response.text}")
+                logger.warning(
+                    f"Failed to update progress endpoint. Status: {progress_response.status_code}, Response: {progress_response.text}")
                 return False
 
     except Exception as e:
@@ -563,7 +582,7 @@ async def bookshelf_mark_book_unfinished(item_id: str, episode_id: str = None):
             if not episode_id:
                 logger.error(f"Episode ID required for podcast {item_id} but not provided")
                 return False
-            
+
             # Use the podcast episode progress endpoint
             progress_endpoint = f"/me/progress/{item_id}/{episode_id}"
             logger.info(f"Marking podcast episode {episode_id} as unfinished")
@@ -582,18 +601,19 @@ async def bookshelf_mark_book_unfinished(item_id: str, episode_id: str = None):
         # Use PATCH method for progress update
         async with httpx.AsyncClient() as client:
             bookshelfURL = os.environ.get("bookshelfURL")
-            bookshelfToken = os.environ.get("bookshelfToken") 
+            bookshelfToken = os.environ.get("bookshelfToken")
             api_url = f"{bookshelfURL}/api{progress_endpoint}?token={bookshelfToken}"
 
-            progress_response = await client.patch(api_url, json=progress_update, 
-                                                 headers={'Content-Type': 'application/json'})
+            progress_response = await client.patch(api_url, json=progress_update,
+                                                   headers={'Content-Type': 'application/json'})
 
             if progress_response.status_code == 200:
                 media_name = f"podcast episode {episode_id}" if episode_id else f"book {item_id}"
                 logger.info(f"Successfully marked {media_name} as not finished")
                 return True
             else:
-                logger.error(f"404 SOURCE: Failed to update progress endpoint {progress_endpoint}. Status: {progress_response.status_code}, Response: {progress_response.text}")
+                logger.error(
+                    f"404 SOURCE: Failed to update progress endpoint {progress_endpoint}. Status: {progress_response.status_code}, Response: {progress_response.text}")
                 return False
 
     except Exception as e:
@@ -700,7 +720,7 @@ async def bookshelf_get_series_id(series_name: str):
     try:
         libraries = await bookshelf_libraries()
         logger.info(f"Searching for series '{series_name}' across {len(libraries)} libraries")
-        
+
         for name, (library_id, audiobooks_only) in libraries.items():
             logger.debug(f"Checking library '{name}' (ID: {library_id})")
 
@@ -709,7 +729,7 @@ async def bookshelf_get_series_id(series_name: str):
 
             r = await bookshelf_conn(endpoint=endpoint, GET=True, params=params)
             logger.debug(f"Raw series response: {r.text}")
-            
+
             logger.debug(f"Series endpoint status for library '{name}': {r.status_code}")
             if r.status_code == 200:
                 data = r.json()
@@ -721,18 +741,19 @@ async def bookshelf_get_series_id(series_name: str):
                     found_name = series_item.get('name', '').strip()
                     target_name = series_name.lower()
                     found_name_lower = found_name.lower()
-                    
+
                     if found_name_lower == target_name:
                         series_id = series_item.get('id')
                         books = series_item.get('books', [])
-                        logger.info(f"Found series '{series_name}' with ID {series_id} and {len(books)} books in library '{name}'")
+                        logger.info(
+                            f"Found series '{series_name}' with ID {series_id} and {len(books)} books in library '{name}'")
                         return series_id, library_id, books
             else:
                 logger.warning(f"Failed to get series from library '{name}'. Status: {r.status_code}")
 
         logger.debug(f"Series '{series_name}' not found in any library")
         return None, None
-        
+
     except Exception as e:
         logger.error(f"Error searching for series '{series_name}': {e}")
         return None, None
@@ -747,20 +768,20 @@ async def bookshelf_get_podcast_episodes(item_id: str):
     try:
         endpoint = f"/items/{item_id}"
         r = await bookshelf_conn(GET=True, endpoint=endpoint)
-        
+
         if r.status_code != 200:
             logger.error(f"Failed to get podcast episodes for {item_id}")
             return []
-            
+
         data = r.json()
         media_type = data.get('mediaType', '')
-        
+
         if media_type != 'podcast':
             logger.warning(f"Item {item_id} is not a podcast")
             return []
-            
+
         episodes = data.get('media', {}).get('episodes', [])
-        
+
         def get_sort_key(episode):
             """
             Create a sort key that prioritizes episode number, then falls back to published date.
@@ -769,7 +790,7 @@ async def bookshelf_get_podcast_episodes(item_id: str):
             """
             episode_num = episode.get('episode')
             published_at = episode.get('publishedAt') or 0
-            
+
             if episode_num is not None:
                 try:
                     # Episodes with numbers: use negative episode number for desc sort
@@ -787,11 +808,11 @@ async def bookshelf_get_podcast_episodes(item_id: str):
 
         # Sort episodes: numbered episodes first (by episode number desc), then unnumbered (by date desc)
         episodes_sorted = sorted(episodes, key=get_sort_key)
-        
+
         # Add index to each episode (0-based)
         for index, episode in enumerate(episodes_sorted):
             episode['episode_index'] = index
-            
+
         # Log the sorting result for debugging
         logger.info(f"Found {len(episodes_sorted)} episodes for podcast {item_id}")
         if episodes_sorted:
@@ -799,9 +820,9 @@ async def bookshelf_get_podcast_episodes(item_id: str):
             first_title = first_episode.get('title', 'Unknown')
             first_num = first_episode.get('episode', 'No number')
             logger.debug(f"First episode after sort: '{first_title}' (Episode: {first_num})")
-            
+
         return episodes_sorted
-        
+
     except Exception as e:
         logger.error(f"Error getting podcast episodes for {item_id}: {e}")
         return []
@@ -985,7 +1006,7 @@ async def bookshelf_get_current_chapter(item_id: str, current_time=0):
             if chapter_array:
                 foundChapter = chapter_array[0]
                 return foundChapter, chapter_array, book_finished, isPodcast
-            
+
             # If no chapters at all
             return {}, [], book_finished, isPodcast
 
@@ -993,6 +1014,7 @@ async def bookshelf_get_current_chapter(item_id: str, current_time=0):
         logger.error(f"Error in bookshelf_get_current_chapter for item {item_id}: {e}")
         # Return default values instead of None
         return {}, [], False, False  # Default empty values that are unpacked correctly
+
 
 async def bookshelf_audio_obj(item_id: str, episode_index: int = 0):
     """
@@ -1017,11 +1039,11 @@ async def bookshelf_audio_obj(item_id: str, episode_index: int = 0):
     # First, get the item details to determine media type
     item_endpoint = f"/items/{item_id}"
     item_response = await bookshelf_conn(GET=True, endpoint=item_endpoint)
-    
+
     if item_response.status_code != 200:
         logger.error(f"Failed to get item details for {item_id}")
         return None
-    
+
     item_data = item_response.json()
     mediaType = item_data.get("mediaType", "unknown")
     logger.info(f"Item {item_id} mediaType: {mediaType}")
@@ -1039,7 +1061,7 @@ async def bookshelf_audio_obj(item_id: str, episode_index: int = 0):
 
     if mediaType == "podcast":
         episodes = await bookshelf_get_podcast_episodes(item_id)
-        
+
         if not episodes:
             logger.error("No episodes found in podcast")
             return None
@@ -1055,7 +1077,7 @@ async def bookshelf_audio_obj(item_id: str, episode_index: int = 0):
         selected_episode = episodes[episode_index]
         episode_id_for_session = selected_episode.get('id')
         episode_title = selected_episode.get('title', 'Unknown Episode')
-        
+
         # Store episode info for later use
         episode_info = {
             'title': episode_title,
@@ -1147,7 +1169,9 @@ async def bookshelf_audio_obj(item_id: str, episode_index: int = 0):
         # Books returns 6-tuple structure without episode_info
         return onlineURL, currentTime, session_id, bookTitle, bookDuration, episode_id
 
-async def bookshelf_session_update(session_id: str, item_id: str, current_time: float, next_time=None, mark_finished=False, episode_id=None):
+
+async def bookshelf_session_update(session_id: str, item_id: str, current_time: float, next_time=None,
+                                   mark_finished=False, episode_id=None):
     """
     :param session_id:
     :param item_id:
@@ -1241,6 +1265,7 @@ async def bookshelf_session_update(session_id: str, item_id: str, current_time: 
 
     # If we reach here, something went wrong - return default values
     return updatedTime, duration, serverCurrentTime, finished_book
+
 
 # Need to  revisit this at some point
 async def bookshelf_close_session(session_id: str):
