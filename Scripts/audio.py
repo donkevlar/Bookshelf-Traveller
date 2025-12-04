@@ -77,6 +77,7 @@ class AudioPlayBack(Extension):
         self.updateFreqMulti = updateFrequency * self.playbackSpeed
         self.play_state = 'stopped'
         self.audio_message = None
+        self.needs_encoder = True
         # Chapter Variables
         self.currentChapter = None
         self.chapterArray = None
@@ -202,7 +203,7 @@ class AudioPlayBack(Extension):
             # Build audio object
             preserved_vol = self.volume if hasattr(self, 'volume') and self.volume is not None else 0.5
             audio = AudioVolume(audio_obj)
-            audio.buffer_seconds = 1
+            audio.buffer_seconds = 3
             audio.locked_stream = True
             audio.ffmpeg_before_args = f"-re -ss {actual_start_time}"
             audio.ffmpeg_args = f""
@@ -732,6 +733,7 @@ class AudioPlayBack(Extension):
 
             # Apply preserved volume to new audio object
             audio.volume = preserved_volume
+
 
             logger.info(f"Successfully restarted media from beginning. New session: {self.sessionID}")
             return True

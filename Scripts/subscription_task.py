@@ -1,8 +1,10 @@
 import os
-import sqlite3
 import time
 import logging
 import sys
+import asyncio
+from typing import Optional, List, Tuple
+from abc import ABC, abstractmethod
 
 import bookshelfAPI as c
 import settings as s
@@ -24,14 +26,430 @@ logger = logging.getLogger("bot")
 # VARS
 TASK_FREQUENCY = 5
 
-# Create new relative path
-db_path = 'db/tasks.db'
-os.makedirs(os.path.dirname(db_path), exist_ok=True)
+# Database configuration from environment variables
+DB_TYPE = os.getenv('DB_TYPE', 'sqlite').lower()  # 'sqlite' or 'mariadb'
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_PORT = int(os.getenv('DB_PORT', '3306'))
+DB_USER = os.getenv('DB_USER', 'root')
+DB_PASSWORD = os.getenv('DB_PASSWORD', '')
+DB_NAME = os.getenv('DB_NAME', 'bookshelf')
 
-# Initialize sqlite3 connection
 
-conn = sqlite3.connect(db_path)
-cursor = conn.cursor()
+# Abstract Database Interface for Tasks
+class TaskDatabaseInterface(ABC):
+    @abstractmethod
+    async def connect(self):
+        pass
+
+    @abstractmethod
+    async def close(self):
+        pass
+
+    @abstractmethod
+    async def create_tasks_table(self):
+        pass
+
+    @abstractmethod
+    async def create_version_table(self):
+        pass
+
+    @abstractmethod
+    async def insert_data(self, discord_id: int, channel_id: int, task: str, server_name: str, token: str) -> bool:
+        pass
+
+    @abstractmethod
+    async def insert_version(self, version: str) -> bool:
+        pass
+
+    @abstractmethod
+    async def search_version_db(self) -> List[Tuple]:
+        pass
+
+    @abstractmethod
+    async def remove_task_db(self, task: str = '', discord_id: int = 0, db_id: int = 0) -> bool:
+        pass
+
+    @abstractmethod
+    async def search_task_db(self, discord_id: int = 0, task: str = '', channel_id: int = 0,
+                             override_response: str = '') -> Optional[List[Tuple]]:
+        pass
+
+
+# SQLite Implementation for Tasks
+class SQLiteTaskDatabase(TaskDatabaseInterface):
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+        self.conn = None
+        self.cursor = None
+
+    async def connect(self):
+        import aiosqlite
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        self.conn = await aiosqlite.connect(self.db_path)
+        self.cursor = await self.conn.cursor()
+        logger.info(f"Connected to SQLite task database: {self.db_path}")
+
+    async def close(self):
+        if self.conn:
+            await self.conn.close()
+
+    async def create_tasks_table(self):
+        await self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS tasks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                discord_id INTEGER NOT NULL,
+                channel_id INTEGER NOT NULL,
+                task TEXT NOT NULL,
+                server_name TEXT NOT NULL,
+                token TEXT,
+                UNIQUE(channel_id, task)
+            )
+        ''')
+
+        # Check if 'token' column exists
+        await self.cursor.execute("PRAGMA table_info(tasks)")
+        columns = [column[1] for column in await self.cursor.fetchall()]
+        if 'token' not in columns:
+            await self.cursor.execute("ALTER TABLE tasks ADD COLUMN token TEXT")
+
+        await self.conn.commit()
+
+    async def create_version_table(self):
+        await self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS version_control (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                version TEXT,
+                UNIQUE(version)
+            )
+        ''')
+        await self.conn.commit()
+
+    async def insert_data(self, discord_id: int, channel_id: int, task: str, server_name: str, token: str) -> bool:
+        try:
+            await self.cursor.execute('''
+                INSERT INTO tasks (discord_id, channel_id, task, server_name, token) VALUES (?, ?, ?, ?, ?)''',
+                                      (int(discord_id), int(channel_id), task, server_name, token))
+            await self.conn.commit()
+            logger.info(f"Inserted: {discord_id} into tasks table!")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to insert: {discord_id} with task {task}. Error: {e}")
+            return False
+
+    async def insert_version(self, version: str) -> bool:
+        try:
+            await self.cursor.execute('''INSERT INTO version_control (version) VALUES (?)''', (version,))
+            await self.conn.commit()
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to insert version: {version}. Error: {e}")
+            return False
+
+    async def search_version_db(self) -> List[Tuple]:
+        await self.cursor.execute('''SELECT id, version FROM version_control''')
+        rows = await self.cursor.fetchall()
+        return rows
+
+    async def remove_task_db(self, task: str = '', discord_id: int = 0, db_id: int = 0) -> bool:
+        logger.warning(f'Attempting to delete task {task} with discord id {discord_id} from db!')
+        try:
+            if task != '' and discord_id != 0:
+                await self.cursor.execute("DELETE FROM tasks WHERE task = ? AND discord_id = ?",
+                                          (task, int(discord_id)))
+                await self.conn.commit()
+                logger.info(f"Successfully deleted task {task} with discord id {discord_id} from db!")
+                return True
+            elif db_id != 0:
+                await self.cursor.execute("DELETE FROM tasks WHERE id = ?", (int(db_id),))
+                await self.conn.commit()
+                logger.info(f"Successfully deleted task with id {db_id}")
+                return True
+        except Exception as e:
+            logger.error(f"Error while attempting to delete {task}: {e}")
+            return False
+
+    async def search_task_db(self, discord_id: int = 0, task: str = '', channel_id: int = 0,
+                             override_response: str = '') -> Optional[List[Tuple]]:
+        override = False
+
+        if override_response != '':
+            response = override_response
+            logger.warning(response)
+            override = True
+        else:
+            logger.info('Initializing sqlite db search for subscription task module.')
+
+        if channel_id != 0 and task == '' and discord_id == 0:
+            option = 1
+            if not override:
+                logger.info(f'OPTION {option}: Searching db using channel ID in tasks table.')
+            await self.cursor.execute('''
+                SELECT discord_id, task FROM tasks WHERE channel_id = ?
+            ''', (channel_id,))
+            rows = await self.cursor.fetchall()
+
+        elif discord_id != 0 and task != '' and channel_id == 0:
+            option = 2
+            if not override:
+                logger.info(f'OPTION {option}: Searching db using discord ID and task name in tasks table.')
+            await self.cursor.execute('''
+                SELECT channel_id, server_name FROM tasks WHERE discord_id = ? AND task = ?
+            ''', (discord_id, task))
+            rows = await self.cursor.fetchone()
+
+        elif discord_id != 0 and task == '' and channel_id == 0:
+            option = 3
+            if not override:
+                logger.info(f'OPTION {option}: Searching db using discord ID in tasks table.')
+            await self.cursor.execute('''
+                SELECT task, channel_id, id, token FROM tasks WHERE discord_id = ?
+            ''', (discord_id,))
+            rows = await self.cursor.fetchall()
+
+        elif task != '':
+            option = 4
+            if not override:
+                logger.info(f'OPTION {option}: Searching db using task name in tasks table.')
+            await self.cursor.execute('''
+                SELECT task, channel_id, id, token FROM tasks WHERE task = ?
+            ''', (task,))
+            rows = await self.cursor.fetchall()
+
+        else:
+            option = 5
+            if not override:
+                logger.info(f'OPTION {option}: Searching db using no arguments in tasks table.')
+            await self.cursor.execute('''SELECT discord_id, task, channel_id, server_name FROM tasks''')
+            rows = await self.cursor.fetchall()
+
+        if rows:
+            if not override:
+                logger.info(
+                    f'Successfully found query using option: {option} using table tasks in subscription task module.')
+        else:
+            if not override:
+                logger.warning('Query returned null using table tasks, an error may follow.')
+
+        return rows
+
+
+# MariaDB Implementation for Tasks
+class MariaDBTaskDatabase(TaskDatabaseInterface):
+    def __init__(self, host: str, port: int, user: str, password: str, database: str):
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.database = database
+        self.pool = None
+
+    async def connect(self):
+        import aiomysql
+        self.pool = await aiomysql.create_pool(
+            host=self.host,
+            port=self.port,
+            user=self.user,
+            password=self.password,
+            db=self.database,
+            autocommit=True
+        )
+        logger.info(f"Connected to MariaDB task database: {self.database}")
+
+    async def close(self):
+        if self.pool:
+            self.pool.close()
+            await self.pool.wait_closed()
+
+    async def create_tasks_table(self):
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS tasks (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        discord_id BIGINT NOT NULL,
+                        channel_id BIGINT NOT NULL,
+                        task TEXT NOT NULL,
+                        server_name TEXT NOT NULL,
+                        token TEXT,
+                        UNIQUE KEY unique_channel_task (channel_id, task(255))
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                ''')
+
+    async def create_version_table(self):
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS version_control (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        version TEXT,
+                        UNIQUE KEY unique_version (version(255))
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                ''')
+
+    async def insert_data(self, discord_id: int, channel_id: int, task: str, server_name: str, token: str) -> bool:
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute('''
+                        INSERT INTO tasks (discord_id, channel_id, task, server_name, token) 
+                        VALUES (%s, %s, %s, %s, %s)''',
+                                         (int(discord_id), int(channel_id), task, server_name, token))
+            logger.info(f"Inserted: {discord_id} into tasks table!")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to insert: {discord_id} with task {task}. Error: {e}")
+            return False
+
+    async def insert_version(self, version: str) -> bool:
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute('''INSERT INTO version_control (version) VALUES (%s)''', (version,))
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to insert version: {version}. Error: {e}")
+            return False
+
+    async def search_version_db(self) -> List[Tuple]:
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute('''SELECT id, version FROM version_control''')
+                rows = await cursor.fetchall()
+                return rows
+
+    async def remove_task_db(self, task: str = '', discord_id: int = 0, db_id: int = 0) -> bool:
+        logger.warning(f'Attempting to delete task {task} with discord id {discord_id} from db!')
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    if task != '' and discord_id != 0:
+                        await cursor.execute("DELETE FROM tasks WHERE task = %s AND discord_id = %s",
+                                             (task, int(discord_id)))
+                        logger.info(f"Successfully deleted task {task} with discord id {discord_id} from db!")
+                        return True
+                    elif db_id != 0:
+                        await cursor.execute("DELETE FROM tasks WHERE id = %s", (int(db_id),))
+                        logger.info(f"Successfully deleted task with id {db_id}")
+                        return True
+        except Exception as e:
+            logger.error(f"Error while attempting to delete {task}: {e}")
+            return False
+
+    async def search_task_db(self, discord_id: int = 0, task: str = '', channel_id: int = 0,
+                             override_response: str = '') -> Optional[List[Tuple]]:
+        override = False
+
+        if override_response != '':
+            response = override_response
+            logger.warning(response)
+            override = True
+        else:
+            logger.info('Initializing MariaDB search for subscription task module.')
+
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                if channel_id != 0 and task == '' and discord_id == 0:
+                    option = 1
+                    if not override:
+                        logger.info(f'OPTION {option}: Searching db using channel ID in tasks table.')
+                    await cursor.execute('''
+                        SELECT discord_id, task FROM tasks WHERE channel_id = %s
+                    ''', (channel_id,))
+                    rows = await cursor.fetchall()
+
+                elif discord_id != 0 and task != '' and channel_id == 0:
+                    option = 2
+                    if not override:
+                        logger.info(f'OPTION {option}: Searching db using discord ID and task name in tasks table.')
+                    await cursor.execute('''
+                        SELECT channel_id, server_name FROM tasks WHERE discord_id = %s AND task = %s
+                    ''', (discord_id, task))
+                    rows = await cursor.fetchone()
+
+                elif discord_id != 0 and task == '' and channel_id == 0:
+                    option = 3
+                    if not override:
+                        logger.info(f'OPTION {option}: Searching db using discord ID in tasks table.')
+                    await cursor.execute('''
+                        SELECT task, channel_id, id, token FROM tasks WHERE discord_id = %s
+                    ''', (discord_id,))
+                    rows = await cursor.fetchall()
+
+                elif task != '':
+                    option = 4
+                    if not override:
+                        logger.info(f'OPTION {option}: Searching db using task name in tasks table.')
+                    await cursor.execute('''
+                        SELECT task, channel_id, id, token FROM tasks WHERE task = %s
+                    ''', (task,))
+                    rows = await cursor.fetchall()
+
+                else:
+                    option = 5
+                    if not override:
+                        logger.info(f'OPTION {option}: Searching db using no arguments in tasks table.')
+                    await cursor.execute('''SELECT discord_id, task, channel_id, server_name FROM tasks''')
+                    rows = await cursor.fetchall()
+
+                if rows:
+                    if not override:
+                        logger.info(
+                            f'Successfully found query using option: {option} using table tasks in subscription task module.')
+                else:
+                    if not override:
+                        logger.warning('Query returned null using table tasks, an error may follow.')
+
+                return rows
+
+
+# Database Factory for Tasks
+def create_task_database() -> TaskDatabaseInterface:
+    if DB_TYPE == 'mariadb':
+        return MariaDBTaskDatabase(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME)
+    else:
+        db_path = 'db/tasks.db'
+        return SQLiteTaskDatabase(db_path)
+
+
+# Global database instance
+task_db: Optional[TaskDatabaseInterface] = None
+
+
+async def initialize_task_database():
+    global task_db
+    task_db = create_task_database()
+    await task_db.connect()
+    await task_db.create_tasks_table()
+    await task_db.create_version_table()
+    logger.info(f"Initialized tasks database using {DB_TYPE}")
+
+
+async def close_task_database():
+    global task_db
+    if task_db:
+        await task_db.close()
+
+
+# Wrapper functions for backward compatibility
+async def insert_data(discord_id: int, channel_id: int, task: str, server_name: str, token: str) -> bool:
+    return await task_db.insert_data(discord_id, channel_id, task, server_name, token)
+
+
+async def insert_version(version: str) -> bool:
+    return await task_db.insert_version(version)
+
+
+async def search_version_db() -> List[Tuple]:
+    return await task_db.search_version_db()
+
+
+async def remove_task_db(task: str = '', discord_id: int = 0, db_id: int = 0) -> bool:
+    return await task_db.remove_task_db(task, discord_id, db_id)
+
+
+async def search_task_db(discord_id: int = 0, task: str = '', channel_id: int = 0,
+                         override_response: str = '') -> Optional[List[Tuple]]:
+    return await task_db.search_task_db(discord_id, task, channel_id, override_response)
 
 
 async def conn_test():
@@ -52,158 +470,6 @@ async def conn_test():
     else:
         logger.info(f"ABS user logged in as NON-ADMIN with type: {user_type}")
     return ADMIN_USER
-
-
-def tasks_table_create():
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY,
-            discord_id INTEGER NOT NULL,
-            channel_id INTEGER NOT NULL,
-            task TEXT NOT NULL,
-            server_name TEXT NOT NULL,
-            token TEXT,
-            UNIQUE(channel_id, task)
-        )
-    ''')
-
-    # Check if 'token' column exists
-    cursor.execute("PRAGMA table_info(tasks)")
-    columns = [column[1] for column in cursor.fetchall()]
-    if 'token' not in columns:
-        cursor.execute("ALTER TABLE tasks ADD COLUMN token TEXT")
-
-
-def version_table_create():
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS version_control (
-        id INTEGER PRIMARY KEY,
-        version TEXT,
-        UNIQUE(version)
-)
-    ''')
-    conn.commit()
-
-
-# Initialize table
-logger.info("Initializing tasks table")
-tasks_table_create()
-
-logger.info("Initializing versions table")
-version_table_create()
-
-
-def insert_data(discord_id: int, channel_id: int, task, server_name, token):
-    try:
-        cursor.execute('''
-        INSERT INTO tasks (discord_id, channel_id, task, server_name, token) VALUES (?, ?, ?, ?, ?)''',
-                       (int(discord_id), int(channel_id), task, server_name, token))
-        conn.commit()
-        logger.info(f"Inserted: {discord_id} into tasks table!")
-        return True
-    except sqlite3.IntegrityError:
-        logger.warning(f"Failed to insert: {discord_id} with task {task} already exists.")
-        return False
-
-
-def insert_version(version):
-    try:
-        cursor.execute('''INSERT INTO version_control (version) VALUES (?)''', (version,))
-        conn.commit()
-        return True
-    except sqlite3.IntegrityError:
-        logger.warning(f"Failed to insert: {version} as it already exists.")
-        return False
-
-
-def search_version_db():
-    cursor.execute('''
-    SELECT id, version FROM version_control
-    ''')
-    rows = cursor.fetchall()
-    return rows
-
-
-def remove_task_db(task='', discord_id=0, db_id=0):
-    logger.warning(f'Attempting to delete task {task} with discord id {discord_id} from db!')
-    try:
-        if task != '' and discord_id != 0:
-            cursor.execute("DELETE FROM tasks WHERE task = ? AND discord_id = ?", (task, int(discord_id)))
-            conn.commit()
-            logger.info(f"Successfully deleted task {task} with discord id {discord_id} from db!")
-            return True
-        elif db_id != 0:
-            cursor.execute("DELETE FROM tasks WHERE id = ?", (int(db_id),))
-            conn.commit()
-            logger.info(f"Successfully deleted task with id {db_id}")
-            return True
-    except sqlite3.Error as e:
-        logger.error(f"Error while attempting to delete {task}: {e}")
-        return False
-
-
-def search_task_db(discord_id=0, task='', channel_id=0, override_response='') -> ():
-    override = False
-
-    if override_response != '':
-        response = override_response
-        logger.warning(response)
-        override = True
-    else:
-        logger.info('Initializing sqlite db search for subscription task module.')
-
-    if channel_id != 0 and task == '' and discord_id == 0:
-        option = 1
-        if not override:
-            logger.info(f'OPTION {option}: Searching db using channel ID in tasks table.')
-        cursor.execute('''
-        SELECT discord_id, task FROM tasks WHERE channel_id = ?
-        ''', (channel_id, task))
-        rows = cursor.fetchall()
-
-    elif discord_id != 0 and task != '' and channel_id == 0:
-        option = 2
-        if not override:
-            logger.info(f'OPTION {option}: Searching db using discord ID and task name in tasks table.')
-        cursor.execute('''
-                SELECT channel_id, server_name FROM tasks WHERE discord_id = ? AND task = ?
-                ''', (discord_id, task))
-        rows = cursor.fetchone()
-
-    elif discord_id != 0 and task == '' and channel_id == 0:
-        option = 3
-        if not override:
-            logger.info(f'OPTION {option}: Searching db using discord ID in tasks table.')
-        cursor.execute('''
-                        SELECT task, channel_id, id, token FROM tasks WHERE discord_id = ?
-                        ''', (discord_id,))
-        rows = cursor.fetchall()
-
-    elif task != '':
-        option = 4
-        if not override:
-            logger.info(f'OPTION {option}: Searching db using task name in tasks table.')
-        cursor.execute('''
-                        SELECT task, channel_id, id, token FROM tasks WHERE task = ?
-                        ''', (task,))
-        rows = cursor.fetchall()
-
-    else:
-        option = 5
-        if not override:
-            logger.info(f'OPTION {option}: Searching db using no arguments in tasks table.')
-        cursor.execute('''SELECT discord_id, task, channel_id, server_name FROM tasks''')
-        rows = cursor.fetchall()
-
-    if rows:
-        if not override:
-            logger.info(
-                f'Successfully found query using option: {option} using table tasks in subscription task module.')
-    else:
-        if not override:
-            logger.warning('Query returned null using table tasks, an error may follow.')
-
-    return rows
 
 
 async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
@@ -264,40 +530,34 @@ class SubscriptionTask(Extension):
         self.previous_token = None
         self.bot.admin_token = None
 
-    async def get_server_name_db(self, discord_id=0, task='new-book-check'):
-        cursor.execute('''
-                SELECT server_name FROM tasks WHERE discord_id = ? OR task = ?
-                ''', (int(discord_id), task))
-        rows = cursor.fetchone()
-        if rows:
-            for row in rows:
-                logger.debug(f'Setting server nickname to {row}')
-                self.ServerNickName = row
-        return rows
+    async def get_server_name_db(self, discord_id: int = 0, task: str = 'new-book-check'):
+        result = await search_task_db(discord_id=discord_id, task=task)
+        if result:
+            server_name = result[1] if isinstance(result, tuple) else result[0][1]
+            logger.debug(f'Setting server nickname to {server_name}')
+            self.ServerNickName = server_name
+        return result
 
     async def send_user_wishlist(self, discord_id: int, title: str, author: str, embed: list):
         user = await self.bot.fetch_user(discord_id)
-        result = search_task_db(discord_id=discord_id, task='new-book-check')
+        result = await search_task_db(discord_id=discord_id, task='new-book-check')
         name = ''
 
         if result:
             try:
                 name = result[1]
-            except TypeError as error:
+            except (TypeError, IndexError) as error:
                 logger.error(f"Couldn't assign server name, {error}")
                 name = "Audiobookshelf"
         # Wishlist message
         msg = f"Hello **{user.display_name}**, one of your wishlisted books has become available! **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**!"
         if len(embed) > 10:
             for emb in embed:
-
-                await user.send(content=msg,
-                                embed=emb)
+                await user.send(content=msg, embed=emb)
         else:
-            await user.send(content=msg,
-                            embeds=embed)  # NOQA
+            await user.send(content=msg, embeds=embed)
 
-    async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):  # NOQA
+    async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):
         bookshelfURL = os.getenv("bookshelfURL", "http://127.0.0.1")
         img_url = os.getenv('OPT_IMAGE_URL')
 
@@ -325,7 +585,7 @@ class SubscriptionTask(Extension):
                 wishlisted = False
                 cover_link = await c.bookshelf_cover_image(bookID) or "https://your-default-cover-url.com"
 
-                wl_search = search_wishlist_db(title=title)
+                wl_search = await search_wishlist_db(title=title)
                 if wl_search:
                     wishlisted = True
                     wishlist_titles.append(title)
@@ -360,7 +620,7 @@ class SubscriptionTask(Extension):
                             # Send notification and update database
                             await self.send_user_wishlist(discord_id=discord_id, title=title, author=author,
                                                           embed=embeds)
-                            mark_book_as_downloaded(discord_id=discord_id, title=search_title)
+                            await mark_book_as_downloaded(discord_id=discord_id, title=search_title)
 
             return embeds
 
@@ -414,7 +674,7 @@ class SubscriptionTask(Extension):
                 logger.info(f"Total Found Books: {count}")
 
         except Exception as e:
-            logger.error(f"Error occured while attempting to get finished book: {e}")
+            logger.error(f"Error occurred while attempting to get finished book: {e}")
 
         return book_list
 
@@ -463,7 +723,7 @@ class SubscriptionTask(Extension):
         return embeds
 
     @staticmethod
-    async def embed_color_selector(color=0):
+    async def embed_color_selector(color: int = 0):
         color = int(color)
         selected_color = FlatUIColors.CARROT
         # Yellow
@@ -490,7 +750,7 @@ class SubscriptionTask(Extension):
     @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def newBookTask(self):
         logger.info("Initializing new-book-check task!")
-        search_result = search_task_db(task='new-book-check')
+        search_result = await search_task_db(task='new-book-check')
         if search_result:
             if self.ServerNickName == '':
                 await self.get_server_name_db()
@@ -549,7 +809,7 @@ class SubscriptionTask(Extension):
     @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def finishedBookTask(self):
         logger.info('Initializing Finished Book Task!')
-        search_result = search_task_db(task='finished-book-check')
+        search_result = await search_task_db(task='finished-book-check')
 
         if search_result:
             self.previous_token = os.getenv('bookshelfToken')
@@ -625,7 +885,7 @@ class SubscriptionTask(Extension):
             logger.info('Activating New Book Task! A message will follow.')
             if not self.newBookTask.running:
                 operationSuccess = False
-                search_result = search_task_db(ctx.author_id, task='new-book-check')
+                search_result = await search_task_db(ctx.author_id, task='new-book-check')
                 if search_result:
                     print(search_result)
                     operationSuccess = True
@@ -696,7 +956,19 @@ class SubscriptionTask(Extension):
         success = False
         task_instruction = ''
         task_num = int(task)
-        user_result = search_user_db(user=user)
+
+        # Check if search_user_db is async or sync
+        try:
+            import inspect
+            if inspect.iscoroutinefunction(search_user_db):
+                user_result = await search_user_db(user=user)
+            else:
+                user_result = search_user_db(user=user)
+        except Exception as e:
+            logger.error(f"Error searching user db: {e}")
+            await ctx.send("Failed to retrieve user information. Please check logs.", ephemeral=True)
+            return
+
         token = user_result[0]
 
         match task_num:
@@ -705,8 +977,8 @@ class SubscriptionTask(Extension):
                 task_name = 'new-book-check'
                 task_command = '`/new-book-check disable_task: True`'
                 task_instruction = f'Task is now active. To disable, use **{task_command}**'
-                result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
-                                     server_name=server_name, token=token)
+                result = await insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
+                                           server_name=server_name, token=token)
 
                 if result:
                     success = True
@@ -719,8 +991,8 @@ class SubscriptionTask(Extension):
                 task_name = 'finished-book-check'
                 task_command = '`/remove-task task:finished-book-check`'
                 task_instruction = f'Task is now active. To disable, use **{task_command}**'
-                result = insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
-                                     server_name=server_name, token=token)
+                result = await insert_data(discord_id=ctx.author_id, channel_id=channel.id, task=task_name,
+                                           server_name=server_name, token=token)
 
                 if result:
                     success = True
@@ -747,7 +1019,7 @@ class SubscriptionTask(Extension):
                   autocomplete=True, required=True,
                   opt_type=OptionType.STRING)
     async def remove_task_command(self, ctx: SlashContext, task):
-        result = remove_task_db(db_id=task)
+        result = await remove_task_db(db_id=task)
         if result:
             await ctx.send("Successfully removed task!", ephemeral=True)
         else:
@@ -757,7 +1029,7 @@ class SubscriptionTask(Extension):
     async def active_tasks_command(self, ctx: SlashContext):
         embeds = []
         success = False
-        result = search_task_db()
+        result = await search_task_db()
         if result:
             for discord_id, task, channel_id, server_name in result:
                 channel = await self.bot.fetch_channel(channel_id)
@@ -795,7 +1067,7 @@ class SubscriptionTask(Extension):
     @remove_task_command.autocomplete('task')
     async def remove_task_auto_comp(self, ctx: AutocompleteContext):
         choices = []
-        result = search_task_db(discord_id=ctx.author_id)
+        result = await search_task_db(discord_id=ctx.author_id)
         if result:
             for task, channel_id, db_id, token in result:
                 channel = await self.bot.fetch_channel(channel_id)
@@ -821,7 +1093,18 @@ class SubscriptionTask(Extension):
     async def user_search_task(self, ctx: AutocompleteContext):
         choices = []
         users_ = []
-        user_result = search_user_db()
+        # Check if search_user_db is async or sync
+        try:
+            # Try calling it as async
+            import inspect
+            if inspect.iscoroutinefunction(search_user_db):
+                user_result = await search_user_db()
+            else:
+                user_result = search_user_db()
+        except Exception as e:
+            logger.error(f"Error searching user db: {e}")
+            user_result = None
+
         if user_result:
             for user in user_result:
                 username = user[0]
@@ -837,9 +1120,21 @@ class SubscriptionTask(Extension):
     # Auto Start Task if db is populated
     @listen()
     async def tasks_startup(self, event: Startup):
+        # Wait for database to be initialized
+        max_attempts = 10
+        for attempt in range(max_attempts):
+            if task_db is not None:
+                break
+            logger.debug(f"Waiting for database initialization... attempt {attempt + 1}/{max_attempts}")
+            await asyncio.sleep(0.5)
+
+        if task_db is None:
+            logger.error("Database not initialized after waiting. Tasks will not start.")
+            return
+
         init_msg = bool(os.getenv('INITIALIZED_MSG', False))
         # Check if new version
-        version_result = search_version_db()
+        version_result = await search_version_db()
         version_list = [v[1] for v in version_result]
         print("Saved Versions: ", version_result)
         print("Current Version: ", s.versionNumber)
@@ -847,9 +1142,9 @@ class SubscriptionTask(Extension):
             logger.warning("New version detected! To ensure this module functions properly remove any existing tasks!")
             await event.bot.owner.send(
                 f'New version detected! To ensure the task subscription module functions properly remove any existing tasks with command `/remove-task`! Current Version: **{s.versionNumber}**')
-            insert_version(s.versionNumber)
+            await insert_version(s.versionNumber)
 
-        result = search_task_db(
+        result = await search_task_db(
             override_response="Initialized subscription task module, verifying if any tasks are enabled...")
         task_name = "new-book-check"
         task_list = []
