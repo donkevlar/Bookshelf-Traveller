@@ -13,7 +13,8 @@ from interactions import *
 import bookshelfAPI as c
 import db_additions
 import settings
-from subscription_task import conn_test
+from subscription_task import conn_test, initialize_task_database, close_task_database
+from wishlist import initialize_database as initialize_wishlist_database, close_database as close_wishlist_database
 from interactions.api.events import *
 
 # Pulls from bookshelf file
@@ -80,7 +81,6 @@ if server_status_code != 200:
 else:
     logger.info(f'Current Server Status = {server_status_code}, Good to go!')
 
-
 # Bot basic setup
 bot = Client(intents=Intents.DEFAULT, logger=logger)
 
@@ -88,6 +88,22 @@ bot = Client(intents=Intents.DEFAULT, logger=logger)
 # Event listener
 @listen()
 async def on_startup(event: Startup):
+    # Initialize databases in the bot's event loop
+    logger.info("Initializing async databases...")
+    try:
+        await initialize_wishlist_database()
+        logger.info("Wishlist database initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize wishlist database: {e}")
+        raise
+
+    try:
+        await initialize_task_database()
+        logger.info("Task database initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize task database: {e}")
+        raise
+
     # Startup Sequence
     print(f'Bot is ready. Logged in as {bot.user}')
 
@@ -103,7 +119,12 @@ async def on_startup(event: Startup):
         user_info = c.bookshelf_user_login(token=user_token)
         username = user_info['username']
         if username != '':
-            mu.insert_data(discord_id=owner_id, user=username, token=user_token)
+            # Check if multi_user also needs async conversion
+            try:
+                mu.insert_data(discord_id=owner_id, user=username, token=user_token)
+            except Exception as e:
+                # If multi_user is also async
+                await mu.insert_data(discord_id=owner_id, user=username, token=user_token)
             logger.info(f'Registered initial user {username} successfully')
             if not DEBUG_MODE and INITIALIZED_MSG:
                 await owner.send(f'Bot is ready. Logged in as {bot.user}. ABS user: {username} signed in.')
@@ -118,6 +139,23 @@ async def on_startup(event: Startup):
             os.putenv('INITIALIZED_MSG', "False")
 
     logger.info('Bot has finished loading, it is now safe to use! :)')
+
+
+@listen()
+async def on_disconnect(event):
+    """Handle bot shutdown and cleanup"""
+    logger.info("Bot is shutting down, closing database connections...")
+    try:
+        await close_wishlist_database()
+        logger.info("Wishlist database closed successfully")
+    except Exception as e:
+        logger.error(f"Error closing wishlist database: {e}")
+
+    try:
+        await close_task_database()
+        logger.info("Task database closed successfully")
+    except Exception as e:
+        logger.error(f"Error closing task database: {e}")
 
 
 # Main Loop
@@ -156,22 +194,7 @@ if __name__ == '__main__':
     else:
         logger.warning("MULTI_USER module disabled!")
 
-    # Check if any db need modifications
-    logger.debug("Altering default database columns")
-
-    try:
-        from wishlist import wishlist_conn
-
-        secondary_command = '''
-            UPDATE wishlist
-            SET downloaded = 0
-            WHERE downloaded IS NULL'''
-        db_additions.add_column_to_db(db_connection=wishlist_conn, table_name='wishlist', column_name='downloaded',
-                                      secondary_execute=secondary_command)
-
-    except Exception as e:
-        logger.debug(f"Error occured while attempting to alter original databases")
-        logger.debug(e)
+    logger.info("Extensions loaded. Database will initialize when bot starts.")
 
     # Start Bot
     bot.start(settings.DISCORD_API_SECRET)

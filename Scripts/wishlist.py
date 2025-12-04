@@ -1,114 +1,295 @@
 import json
-
 import json5
 import logging
 import os
-import sqlite3
+from typing import Optional, List, Tuple
+from abc import ABC, abstractmethod
 
 from interactions.ext.paginators import Paginator
-
 import bookshelfAPI as c
-
 from interactions import *
-
 from settings import DEBUG_MODE, DEFAULT_PROVIDER, bookshelf_traveller_footer
 
 logger = logging.getLogger("bot")
 
-# Create new relative path
-tasks_db_path = 'db/wishlist.db'
-os.makedirs(os.path.dirname(tasks_db_path), exist_ok=True)
+# Database configuration from environment variables
+DB_TYPE = os.getenv('DB_TYPE', 'sqlite').lower()  # 'sqlite' or 'mariadb'
+DB_HOST = os.getenv('DB_HOST', 'localhost')
+DB_PORT = int(os.getenv('DB_PORT', '3306'))
+DB_USER = os.getenv('DB_USER', 'root')
+DB_PASSWORD = os.getenv('DB_PASSWORD', '')
+DB_NAME = os.getenv('DB_NAME', 'bookshelf')
 
-# Initialize sqlite3 connection
 
-wishlist_conn = sqlite3.connect(tasks_db_path)
-wishlist_cursor = wishlist_conn.cursor()
+# Abstract Database Interface
+class DatabaseInterface(ABC):
+    @abstractmethod
+    async def connect(self):
+        pass
+
+    @abstractmethod
+    async def close(self):
+        pass
+
+    @abstractmethod
+    async def create_wishlist_table(self):
+        pass
+
+    @abstractmethod
+    async def insert_wishlist_data(self, title: str, author: str, description: str, cover: str,
+                                   provider: str, provider_id: str, discord_id: int, data: str) -> bool:
+        pass
+
+    @abstractmethod
+    async def search_wishlist_db(self, discord_id: int = 0, title: str = "", provider_id: str = "") -> List[Tuple]:
+        pass
+
+    @abstractmethod
+    async def update_wishlist_db(self, discord_id: int, downloaded: int, title: str):
+        pass
+
+    @abstractmethod
+    async def search_all_wishlists(self) -> List[Tuple]:
+        pass
 
 
-def wishlist_table_create():
-    wishlist_cursor.execute('''
+# SQLite Implementation
+class SQLiteDatabase(DatabaseInterface):
+    def __init__(self, db_path: str):
+        self.db_path = db_path
+        self.conn = None
+        self.cursor = None
+
+    async def connect(self):
+        import aiosqlite
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        self.conn = await aiosqlite.connect(self.db_path)
+        self.cursor = await self.conn.cursor()
+        logger.info(f"Connected to SQLite database: {self.db_path}")
+
+    async def close(self):
+        if self.conn:
+            await self.conn.close()
+
+    async def create_wishlist_table(self):
+        await self.cursor.execute('''
 CREATE TABLE IF NOT EXISTS wishlist (
-id INTEGER PRIMARY KEY,
-title TEXT NOT NULL,
-author TEXT NOT NULL,
-description TEXT NOT NULL,
-cover TEXT,
-provider TEXT NOT NULL,
-provider_id TEXT NOT NULL, 
-discord_id INTEGER NOT NULL,
-book_data TEXT NOT NULL,
-downloaded INTEGER NOT NULL DEFAULT 0,
-UNIQUE(title, author)
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    author TEXT NOT NULL,
+    description TEXT NOT NULL,
+    cover TEXT,
+    provider TEXT NOT NULL,
+    provider_id TEXT NOT NULL, 
+    discord_id INTEGER NOT NULL,
+    book_data TEXT NOT NULL,
+    downloaded INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(title, author)
 )
-                        ''')
+        ''')
+        await self.conn.commit()
+
+    async def insert_wishlist_data(self, title: str, author: str, description: str, cover: str,
+                                   provider: str, provider_id: str, discord_id: int, data: str) -> bool:
+        try:
+            await self.cursor.execute('''
+INSERT INTO wishlist (title, author, description, cover, provider, provider_id, discord_id, book_data) 
+VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                                      (str(title), str(author), str(description), str(cover), str(provider),
+                                       str(provider_id), int(discord_id), str(data)))
+            await self.conn.commit()
+            logger.info(f"Inserted: {title} by author {author}")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to insert: {title}. Error: {e}")
+            return False
+
+    async def search_wishlist_db(self, discord_id: int = 0, title: str = "", provider_id: str = "") -> List[Tuple]:
+        logger.debug('Searching for books in wishlist db!')
+
+        if discord_id == 0 and title == "":
+            await self.cursor.execute(
+                '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data 
+                   FROM wishlist WHERE downloaded = 0''')
+        elif discord_id != 0 and title == "":
+            logger.debug("Searching wishlist db using discord id!")
+            await self.cursor.execute(
+                '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data 
+                   FROM wishlist WHERE discord_id = ? AND downloaded = 0''', (discord_id,))
+        elif title != "" or provider_id != '':
+            await self.cursor.execute(
+                '''SELECT discord_id, book_data, title FROM wishlist 
+                   WHERE (title LIKE ? OR provider_id = ?) AND downloaded = 0''',
+                (f'%{title}%', provider_id))
+
+        rows = await self.cursor.fetchall()
+        return rows
+
+    async def update_wishlist_db(self, discord_id: int, downloaded: int, title: str):
+        await self.cursor.execute(
+            '''UPDATE wishlist SET downloaded = ? WHERE title = ? AND discord_id = ?''',
+            (downloaded, title, discord_id)
+        )
+        await self.conn.commit()
+
+    async def search_all_wishlists(self) -> List[Tuple]:
+        await self.cursor.execute('''
+SELECT title, author, description, cover, provider, provider_id, discord_id, book_data, downloaded 
+FROM wishlist''')
+        rows = await self.cursor.fetchall()
+        return rows
 
 
-# Initialize Table
-logger.info("Initializing wishlist table")
-wishlist_table_create()
+# MariaDB Implementation
+class MariaDBDatabase(DatabaseInterface):
+    def __init__(self, host: str, port: int, user: str, password: str, database: str):
+        self.host = host
+        self.port = port
+        self.user = user
+        self.password = password
+        self.database = database
+        self.pool = None
+
+    async def connect(self):
+        import aiomysql
+        self.pool = await aiomysql.create_pool(
+            host=self.host,
+            port=self.port,
+            user=self.user,
+            password=self.password,
+            db=self.database,
+            autocommit=True
+        )
+        logger.info(f"Connected to MariaDB database: {self.database}")
+
+    async def close(self):
+        if self.pool:
+            self.pool.close()
+            await self.pool.wait_closed()
+
+    async def create_wishlist_table(self):
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute('''
+CREATE TABLE IF NOT EXISTS wishlist (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title TEXT NOT NULL,
+    author TEXT NOT NULL,
+    description TEXT NOT NULL,
+    cover TEXT,
+    provider TEXT NOT NULL,
+    provider_id TEXT NOT NULL, 
+    discord_id BIGINT NOT NULL,
+    book_data LONGTEXT NOT NULL,
+    downloaded TINYINT NOT NULL DEFAULT 0,
+    UNIQUE KEY unique_title_author (title(255), author(255))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                ''')
+
+    async def insert_wishlist_data(self, title: str, author: str, description: str, cover: str,
+                                   provider: str, provider_id: str, discord_id: int, data: str) -> bool:
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute('''
+INSERT INTO wishlist (title, author, description, cover, provider, provider_id, discord_id, book_data) 
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
+                                         (str(title), str(author), str(description), str(cover), str(provider),
+                                          str(provider_id), int(discord_id), str(data)))
+            logger.info(f"Inserted: {title} by author {author}")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to insert: {title}. Error: {e}")
+            return False
+
+    async def search_wishlist_db(self, discord_id: int = 0, title: str = "", provider_id: str = "") -> List[Tuple]:
+        logger.debug('Searching for books in wishlist db!')
+
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                if discord_id == 0 and title == "":
+                    await cursor.execute(
+                        '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data 
+                           FROM wishlist WHERE downloaded = 0''')
+                elif discord_id != 0 and title == "":
+                    logger.debug("Searching wishlist db using discord id!")
+                    await cursor.execute(
+                        '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data 
+                           FROM wishlist WHERE discord_id = %s AND downloaded = 0''', (discord_id,))
+                elif title != "" or provider_id != '':
+                    await cursor.execute(
+                        '''SELECT discord_id, book_data, title FROM wishlist 
+                           WHERE (title LIKE %s OR provider_id = %s) AND downloaded = 0''',
+                        (f'%{title}%', provider_id))
+
+                rows = await cursor.fetchall()
+                return rows
+
+    async def update_wishlist_db(self, discord_id: int, downloaded: int, title: str):
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    '''UPDATE wishlist SET downloaded = %s WHERE title = %s AND discord_id = %s''',
+                    (downloaded, title, discord_id)
+                )
+
+    async def search_all_wishlists(self) -> List[Tuple]:
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute('''
+SELECT title, author, description, cover, provider, provider_id, discord_id, book_data, downloaded 
+FROM wishlist''')
+                rows = await cursor.fetchall()
+                return rows
 
 
-def insert_wishlist_data(title: str, author: str, description: str, cover: str, provider: str, provider_id: str,
-                         discord_id: int, data: str):
-    try:
-        wishlist_cursor.execute('''
-        INSERT INTO wishlist (title, author, description, cover, provider, provider_id, discord_id, book_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                                (str(title), str(author), str(description), str(cover), str(provider), str(provider_id),
-                                 int(discord_id), str(data)))
-        wishlist_conn.commit()
-        logger.info(f"Inserted: {title} by author {author}")
-        return True
-    except sqlite3.IntegrityError:
-        logger.warning(f"Failed to insert: {title}. title and author already exists under this discord_id.")
-        return False
+# Database Factory
+def create_database() -> DatabaseInterface:
+    if DB_TYPE == 'mariadb':
+        return MariaDBDatabase(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME)
+    else:
+        tasks_db_path = 'db/wishlist.db'
+        return SQLiteDatabase(tasks_db_path)
 
 
-def search_wishlist_db(discord_id: int = 0, title="", provider_id=""):
-    logger.debug('Searching for books in wishlist db!')
-    if discord_id == 0 and title == "":
-        wishlist_cursor.execute(
-            '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist AND downloaded = 0''')
-
-        rows = wishlist_cursor.fetchall()
-    elif discord_id != 0 and title == "":
-        logger.debug("Searching wishlist db using discord id!")
-        wishlist_cursor.execute(
-            '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data FROM wishlist WHERE discord_id = ? AND downloaded = 0''',
-            (discord_id,))
-
-        rows = wishlist_cursor.fetchall()
-
-    elif title != "" and discord_id == 0 or provider_id != '':
-        wishlist_cursor.execute(
-            '''SELECT discord_id, book_data, title FROM wishlist WHERE title LIKE ? AND downloaded = 0 OR provider_id = ? AND downloaded = 0''',
-            (title, provider_id))
-
-        rows = wishlist_cursor.fetchall()
-
-    return rows  # NOQA
+# Global database instance
+db: Optional[DatabaseInterface] = None
 
 
-def updated_wishlist_db(discord_id: int, downloaded: int, title: str):
-    wishlist_cursor.execute(
-        '''
-        UPDATE wishlist set downloaded = ? Where title = ? AND discord_id = ?
-        ''', (downloaded, title, discord_id)
-    )
-    wishlist_conn.commit()
+async def initialize_database():
+    global db
+    db = create_database()
+    await db.connect()
+    await db.create_wishlist_table()
+    logger.info(f"Initialized wishlist table using {DB_TYPE}")
 
 
-def search_all_wishlists():
-    wishlist_cursor.execute('''
-    SELECT title, author, description, cover, provider, provider_id, discord_id, book_data, downloaded FROM wishlist'''
-                            )
-
-    rows = wishlist_cursor.fetchall()
-
-    return rows
+async def close_database():
+    global db
+    if db:
+        await db.close()
 
 
-async def wishlist_search_embed(title: str, title_desc: str, author: str, cover: str, additional_info: str, footer='',
-                                requested_by=''):
+# Wrapper functions for backward compatibility
+async def insert_wishlist_data(title: str, author: str, description: str, cover: str, provider: str,
+                               provider_id: str, discord_id: int, data: str) -> bool:
+    return await db.insert_wishlist_data(title, author, description, cover, provider, provider_id, discord_id, data)
+
+
+async def search_wishlist_db(discord_id: int = 0, title: str = "", provider_id: str = "") -> List[Tuple]:
+    return await db.search_wishlist_db(discord_id, title, provider_id)
+
+
+async def updated_wishlist_db(discord_id: int, downloaded: int, title: str):
+    await db.update_wishlist_db(discord_id, downloaded, title)
+
+
+async def search_all_wishlists() -> List[Tuple]:
+    return await db.search_all_wishlists()
+
+
+async def wishlist_search_embed(title: str, title_desc: str, author: str, cover: str, additional_info: str,
+                                footer='', requested_by=''):
     embed_message = Embed(title=title, description=title_desc)
     if requested_by != '':
         embed_message.add_field(name='Requested By:', value=requested_by)
@@ -120,14 +301,14 @@ async def wishlist_search_embed(title: str, title_desc: str, author: str, cover:
     return embed_message
 
 
-def mark_book_as_downloaded(title: str, discord_id: int):
-    logger.warning(f'Attempting to delete user {title} from db!')
+async def mark_book_as_downloaded(title: str, discord_id: int) -> bool:
+    logger.warning(f'Attempting to mark book {title} as downloaded from db!')
     try:
-        updated_wishlist_db(discord_id=discord_id, downloaded=1, title=title)
-        logger.info(f"Successfully deleted title {title} from db!")
+        await updated_wishlist_db(discord_id=discord_id, downloaded=1, title=title)
+        logger.info(f"Successfully marked title {title} as downloaded in db!")
         return True
-    except sqlite3.Error as e:
-        logger.error(f"Error while attempting to delete {title}: {e}")
+    except Exception as e:
+        logger.error(f"Error while attempting to update {title}: {e}")
         return False
 
 
@@ -173,10 +354,10 @@ class WishList(Extension):
     # Multi-Use Functions
     async def wishlist_view_embed(self, author_id, search_all=False):
         if search_all:
-            result = search_all_wishlists()
+            result = await search_all_wishlists()
             logger.debug(f"View All Result: {result}")
         else:
-            result = search_wishlist_db(author_id)
+            result = await search_wishlist_db(author_id)
         embeds = []
         count = 0
         if result:
@@ -196,7 +377,6 @@ class WishList(Extension):
 
                 if search_all:
                     discord_id = item[6]
-
                     download_status = item[8]
 
                     if download_status == 1:
@@ -244,7 +424,6 @@ class WishList(Extension):
 
         if force:
             self.forceWishlist = True
-
             logger.debug(book_search)
 
         if nudge:
@@ -254,11 +433,9 @@ class WishList(Extension):
             self.nudgeOwner = False
 
         # Sort by age
-
         book_search = sorted(book_search, key=lambda x: x.get('publishedYear') or '')
 
         for books in book_search:
-
             book_title = books.get('title')
             book_author = books.get('author')
             book_published = books.get('publishedYear')
@@ -282,7 +459,7 @@ class WishList(Extension):
                     book_list.append(books)
 
         components = StringSelectMenu(
-            options,  # NOQA
+            options,
             min_values=1,
             max_values=1,
             placeholder="",
@@ -298,16 +475,16 @@ class WishList(Extension):
                 await ctx.send(f"No results found for title **{title}**", ephemeral=True)
 
         except Exception as e:
-            logger.error(f"Error occured: {e}")
+            logger.error(f"Error occurred: {e}")
             await ctx.send(
-                f"An error occured while trying to search for book title {title}. Normally this occurs if the title has a bad typo or if there are too many results. Visit logs for details.")
+                f"An error occurred while trying to search for book title {title}. Normally this occurs if the title has a bad typo or if there are too many results. Visit logs for details.")
 
     @slash_command(name='remove-book', description="Manually remove a book from your wishlist.")
     @slash_option(name='book', description='Your wishlist of books. Note: If empty, no books were found.',
                   opt_type=OptionType.STRING, required=True, autocomplete=True)
     async def remove_book_command(self, ctx: SlashContext, book: str):
         await ctx.defer(ephemeral=True)
-        result = mark_book_as_downloaded(discord_id=ctx.author_id, title=book)
+        result = await mark_book_as_downloaded(discord_id=ctx.author_id, title=book)
         if result:
             await ctx.send(f"Successfully removed {book} from your wishlist!", ephemeral=True)
         else:
@@ -319,22 +496,22 @@ class WishList(Extension):
             current_page = ctx.message.embeds[0]
             print(current_page.title)
             book_id = current_page.title
-            result = mark_book_as_downloaded(discord_id=ctx.author_id, title=book_id)
+            result = await mark_book_as_downloaded(discord_id=ctx.author_id, title=book_id)
             if result:
-                await ctx.send(content=f"Successfully Removed Item **{book_id}** from your wishlist! The list will be refreshed after the command is next used"
-                                       f".", ephemeral=True)
+                await ctx.send(
+                    content=f"Successfully Removed Item **{book_id}** from your wishlist! The list will be refreshed after the command is next used.",
+                    ephemeral=True)
         except Exception as e:
             logger.error(f"An error occurred while attempting to remove a wishlist item: {e}")
 
-    # TODO Add delete button to this command
     @slash_command(name='wishlist', description='View your wishlist')
-    @slash_option(name='user', description='View a users specific wishlist. Admin Command.', autocomplete=True, required=False, opt_type=OptionType.STRING)
+    @slash_option(name='user', description='View a users specific wishlist. Admin Command.', autocomplete=True,
+                  required=False, opt_type=OptionType.STRING)
     async def view_wishlist(self, ctx: SlashContext, user=0):
         user = int(user)
         if user == 0:
             logger.info('Wishlist: default option selected')
             embeds = await self.wishlist_view_embed(ctx.author_id)
-
         else:
             if ctx.bot.owner == ctx.author:
                 logger.info('Wishlist: user search option selected (Admin Exclusive)')
@@ -366,7 +543,6 @@ class WishList(Extension):
         if embeds:
             paginator = Paginator.create_from_embeds(self.client, *embeds)
             await paginator.send(ctx, ephemeral=True)
-
         else:
             await ctx.send(
                 "You currently don't have any items in your wishlist db. Please use **`/add-book`** to add items to your wishlist.",
@@ -376,7 +552,7 @@ class WishList(Extension):
     @remove_book_command.autocomplete('book')
     async def book_search_autocomplete(self, ctx: AutocompleteContext):
         choices = []
-        result = search_wishlist_db(ctx.author_id)
+        result = await search_wishlist_db(ctx.author_id)
         if result:
             for item in result:
                 book_data = json5.loads(item[7])
@@ -388,8 +564,7 @@ class WishList(Extension):
     async def add_book_provider_auto(self, ctx: AutocompleteContext):
         user_input = ctx.input_text
         providers = ['google', 'openlibrary', 'itunes', 'audible', 'audible.ca', 'audible.uk', 'audible.au',
-                     'audible.fr',
-                     'audible.it', 'audible.in', 'audible.es', 'fantlab']
+                     'audible.fr', 'audible.it', 'audible.in', 'audible.es', 'fantlab']
         providers.sort()
         choices = []
         for provider in providers:
@@ -406,7 +581,7 @@ class WishList(Extension):
         found_users = []
         user = None
         if ctx.author == ctx.bot.owner:
-            result = search_all_wishlists()
+            result = await search_all_wishlists()
             if result:
                 for item in result:
                     user = item[6] or 0
@@ -417,7 +592,8 @@ class WishList(Extension):
                         user_obj = await self.bot.fetch_user(user)
                         choices.append({"name": user_obj.display_name, "value": str(user_obj.id)})
         else:
-            logger.info(f"User: {ctx.author.display_name} not authorized to receive autocomplete prompt! Returning None.")
+            logger.info(
+                f"User: {ctx.author.display_name} not authorized to receive autocomplete prompt! Returning None.")
             pass
         await ctx.send(choices=choices)
 
@@ -453,7 +629,7 @@ class WishList(Extension):
                 components_: list[ActionRow] = [
                     ActionRow(
                         StringSelectMenu(
-                            options,  # NOQA
+                            options,
                             min_values=1,
                             max_values=1,
                             placeholder=placeholder,
@@ -518,10 +694,9 @@ class WishList(Extension):
         else:
             provider_id = self.selectedBook.get('id')
 
-        result = insert_wishlist_data(title=title, author=author, description=description, cover=cover,
-                                      provider=provider,
-                                      provider_id=provider_id, discord_id=discord_id,
-                                      data=str(json.dumps(self.selectedBook)))
+        result = await insert_wishlist_data(title=title, author=author, description=description, cover=cover,
+                                            provider=provider, provider_id=provider_id, discord_id=discord_id,
+                                            data=str(json.dumps(self.selectedBook)))
         if result:
             logger.info('Successfully added book to wishlist db!')
             await ctx.edit_origin(content=f"Successfully added title **{title}** to your wishlist!",
@@ -548,5 +723,3 @@ class WishList(Extension):
 
         # Reset Class Vars
         self.selectedBook = None
-        self.messageString = ''
-        self.nudgeOwner = False

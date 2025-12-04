@@ -6,15 +6,17 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # Version Info
-versionNumber = 'V1.3.6b'
+versionNumber = 'V1.3.7 '
 
 COMMAND_COUNT = 0
 
 # Determine Platform
 current_platform = platform.system()
 
+
 def str2bool(value):
     return str(value).strip().lower() in ("1", "true", "yes")
+
 
 # Debug Mode
 DEBUG_MODE = str2bool(os.environ.get('DEBUG_MODE', "True"))
@@ -135,6 +137,5 @@ LOGGING_CONFIG = {
         },
     },
 }
-
 
 dictConfig(LOGGING_CONFIG)

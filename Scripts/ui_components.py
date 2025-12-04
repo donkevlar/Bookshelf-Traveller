@@ -1,11 +1,12 @@
 from interactions import ActionRow, Button, ButtonStyle, Embed, StringSelectMenu, StringSelectOption
 
+
 # --- Playback Rows ---
 
 def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=False,
-                     has_chapters=True, is_series=False, is_first_book=False, is_last_book=False, 
-                     series_autoplay=True, is_first_episode=False, is_last_episode=False,
-                     podcast_autoplay=True, episode_options=None, series_options=None):
+                      has_chapters=True, is_series=False, is_first_book=False, is_last_book=False,
+                      series_autoplay=True, is_first_episode=False, is_last_episode=False,
+                      podcast_autoplay=True, episode_options=None, series_options=None):
     """Build dynamic playback control rows based on state"""
     is_paused = play_state == "paused"
     rows = []
@@ -43,7 +44,7 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
     else:
         # Books without chapters and podcasts get large time jumps
         rows.append(ActionRow(
-           # Uses Braille blank space (U+2800), Discord trims regular spaces
+            # Uses Braille blank space (U+2800), Discord trims regular spaces
             Button(style=ButtonStyle.PRIMARY, label="⠀⠀⠀-5m⠀⠀⠀", custom_id='rewind_button_large'),
             Button(style=ButtonStyle.PRIMARY, label="⠀⠀⠀+5m⠀⠀⠀", custom_id='forward_button_large')
         ))
@@ -53,9 +54,9 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
         # Podcast episode navigation
         rows.append(ActionRow(
             Button(
-                disabled=is_first_episode, 
-                style=ButtonStyle.PRIMARY, 
-                label="← Newer", 
+                disabled=is_first_episode,
+                style=ButtonStyle.PRIMARY,
+                label="← Newer",
                 custom_id="previous_episode_button"
             ),
             Button(
@@ -64,9 +65,9 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
                 custom_id="toggle_podcast_auto_button"
             ),
             Button(
-                disabled=is_last_episode, 
-                style=ButtonStyle.PRIMARY, 
-                label="Older →", 
+                disabled=is_last_episode,
+                style=ButtonStyle.PRIMARY,
+                label="Older →",
                 custom_id="next_episode_button"
             )
         ))
@@ -74,9 +75,9 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
         # Book series navigation
         rows.append(ActionRow(
             Button(
-                disabled=is_first_book, 
-                style=ButtonStyle.PRIMARY, 
-                label="Prior Book", 
+                disabled=is_first_book,
+                style=ButtonStyle.PRIMARY,
+                label="Prior Book",
                 custom_id="previous_book_button"
             ),
             Button(
@@ -85,9 +86,9 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
                 custom_id="toggle_series_auto_button"
             ),
             Button(
-                disabled=is_last_book, 
-                style=ButtonStyle.PRIMARY, 
-                label="Next Book", 
+                disabled=is_last_book,
+                style=ButtonStyle.PRIMARY,
+                label="Next Book",
                 custom_id="next_book_button"
             )
         ))
@@ -118,11 +119,12 @@ def get_playback_rows(play_state="playing", repeat_enabled=False, is_podcast=Fal
 
     return rows
 
+
 # --- Embeds ---
 
-def create_playback_embed(book_title, chapter_title, progress, current_time, duration, 
-                           username, user_type, cover_image, color, volume, timestamp, version, 
-                           repeat_enabled=False, series_info=None, is_podcast=False):
+def create_playback_embed(book_title, chapter_title, progress, current_time, duration,
+                          username, user_type, cover_image, color, volume, timestamp, version,
+                          repeat_enabled=False, series_info=None, is_podcast=False):
     """Playback embed"""
     emoji = "🎙️" if is_podcast else "📖"
 
@@ -169,6 +171,7 @@ def create_playback_embed(book_title, chapter_title, progress, current_time, dur
 
     return embed
 
+
 def create_book_info_embed(title, author, series, description, cover_url, color, additional_info=None):
     embed = Embed(title=title, description=description, color=color)
     embed.add_field(name="Author", value=author, inline=False)
@@ -180,6 +183,7 @@ def create_book_info_embed(title, author, series, description, cover_url, color,
     embed.footer = "Powered by Bookshelf Traveller 🕮"
     return embed
 
+
 # --- Common Buttons ---
 
 def get_confirmation_buttons(confirm_id="confirm_button", cancel_id="cancel_button"):
@@ -187,6 +191,7 @@ def get_confirmation_buttons(confirm_id="confirm_button", cancel_id="cancel_butt
         Button(style=ButtonStyle.SUCCESS, label="Confirm", custom_id=confirm_id),
         Button(style=ButtonStyle.DANGER, label="Cancel", custom_id=cancel_id)
     )
+
 
 def get_wishlist_buttons(request_id="request_button", cancel_id="cancel_button"):
     return ActionRow(
