@@ -1213,7 +1213,7 @@ class SubscriptionTask(Extension):
                     book_list = await self.getFinishedBooks()
                     if not book_list:
                         logger.info('No finished books found for this channel.')
-                        continue  # Changed from return to continue
+                        continue
 
                     embeds = await self.FinishedBookEmbeds(book_list)
                     if not embeds:
@@ -1259,9 +1259,13 @@ class SubscriptionTask(Extension):
                     else:
                         logger.info(f"All finished books already sent to channel {channel_id}, skipping message")
 
-                # Reset Vars - moved outside the loop
-                os.environ['bookshelfToken'] = self.previous_token
-                logger.info(f'Returned Active Token to: {self.previous_token}')
+                # Reset Vars - moved outside the loop with None check
+                if self.previous_token is not None:
+                    os.environ['bookshelfToken'] = self.previous_token
+                    logger.info(f'Returned Active Token to: {self.previous_token}')
+                else:
+                    logger.warning("Previous token was None, skipping token restoration")
+
                 self.previous_token = None
                 self.admin_token = None
                 logger.info("Successfully completed finished-book-check task!")
