@@ -18,20 +18,20 @@ from datetime import datetime, timedelta
 from interactions.ext.paginators import Paginator
 from dotenv import load_dotenv
 
-# Enable dot env outside of docker
+# Load environment variables
 load_dotenv()
 
-# Logger Config
+# Logger configuration
 logger = logging.getLogger("bot")
 
-# VARS
-TASK_FREQUENCY = 5
+# Task configuration
+TASK_FREQUENCY = 5  # Task execution interval in minutes
 
-# Generate unique instance ID for this bot instance
+# Generate unique instance ID for distributed locking
 INSTANCE_ID = str(uuid.uuid4())
 
 # Database configuration from environment variables
-DB_TYPE = os.getenv('DB_TYPE', 'sqlite').lower()  # 'sqlite' or 'mariadb'
+DB_TYPE = os.getenv('DB_TYPE', 'sqlite').lower()  # Options: 'sqlite' or 'mariadb'
 DB_HOST = os.getenv('DB_HOST', 'localhost')
 DB_PORT = int(os.getenv('DB_PORT', '3306'))
 DB_USER = os.getenv('DB_USER', 'root')
@@ -723,16 +723,21 @@ async def mark_message_as_sent(channel_id: int, book_id: str, message_type: str)
 
 
 async def conn_test():
-    # Will print username when successful
+    """
+    Test Audiobookshelf connection and verify user permissions.
+
+    Returns:
+        bool: True if user is admin/root, False otherwise
+    """
     auth_test, user_type, user_locked = await c.bookshelf_auth_test()
     logger.info(f"Logging user in and verifying role.")
 
-    # Quit if user is locked
+    # Exit if user account is locked
     if user_locked:
-        logger.warning("User locked from logging in, please unlock via web gui.")
-        sys.exit("User locked from logging in, please unlock via web gui.")
+        logger.warning("User locked from logging in, please unlock via web GUI.")
+        sys.exit("User locked from logging in, please unlock via web GUI.")
 
-    # Check if ABS user is an admin
+    # Verify admin privileges
     ADMIN_USER = False
     if user_type == "root" or user_type == "admin":
         ADMIN_USER = True
@@ -743,14 +748,21 @@ async def conn_test():
 
 
 async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
+    """
+    Retrieve books added within the specified time period.
+
+    Args:
+        task_frequency: Lookback period in minutes (default: TASK_FREQUENCY)
+
+    Returns:
+        list: Books added within the time period with metadata
+    """
     logger.debug("Initializing NewBookList function")
     items_added = []
     current_time = datetime.now()
 
     libraries = await c.bookshelf_libraries()
-
     library_count = len(libraries)
-
     logger.debug(f'Found {library_count} libraries')
 
     time_minus_delta = current_time - timedelta(minutes=task_frequency)
@@ -791,7 +803,7 @@ async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
 
 class SubscriptionTask(Extension):
     def __init__(self, bot):
-        # Channel object has 3 main properties .name, .id, .type
+        """Initialize the subscription task extension."""
         self.TaskChannel = None
         self.TaskChannelID = None
         self.ServerNickName = ''
@@ -801,15 +813,23 @@ class SubscriptionTask(Extension):
         self.bot.admin_token = None
 
     async def get_server_name_db(self, discord_id: int = 0, task: str = 'new-book-check'):
+        """
+        Retrieve server nickname from database.
+
+        Args:
+            discord_id: Discord user ID
+            task: Task name to search for
+
+        Returns:
+            Database query result
+        """
         result = await search_task_db(discord_id=discord_id, task=task)
         if result:
             try:
                 # Handle different return formats from search_task_db
                 if isinstance(result, tuple) and len(result) > 1:
-                    # Single tuple result (option 2: discord_id + task)
                     server_name = result[1]
                 elif isinstance(result, list) and len(result) > 0:
-                    # List of tuples
                     server_name = result[0][1] if len(result[0]) > 1 else result[0][0]
                 else:
                     server_name = "Audiobookshelf"
@@ -822,6 +842,15 @@ class SubscriptionTask(Extension):
         return result
 
     async def send_user_wishlist(self, discord_id: int, title: str, author: str, embed: list):
+        """
+        Send wishlist notification to user when their requested book becomes available.
+
+        Args:
+            discord_id: Discord user ID to notify
+            title: Book title
+            author: Book author
+            embed: Discord embed message
+        """
         user = await self.bot.fetch_user(discord_id)
         result = await search_task_db(discord_id=discord_id, task='new-book-check')
         name = ''
@@ -832,7 +861,8 @@ class SubscriptionTask(Extension):
             except (TypeError, IndexError) as error:
                 logger.error(f"Couldn't assign server name, {error}")
                 name = "Audiobookshelf"
-        # Wishlist message
+
+        # Compose wishlist notification message
         msg = f"Hello **{user.display_name}**, one of your wishlisted books has become available! **{title}** by author **{author}** is now available on your Audiobookshelf server: **{name}**!"
         if len(embed) > 10:
             for emb in embed:
@@ -841,6 +871,16 @@ class SubscriptionTask(Extension):
             await user.send(content=msg, embeds=embed)
 
     async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):
+        """
+        Create embed messages for newly added books.
+
+        Args:
+            task_frequency: Lookback period in minutes
+            enable_notifications: Whether to send wishlist notifications
+
+        Returns:
+            list: Discord embed messages for new books
+        """
         bookshelfURL = os.getenv("bookshelfURL", "http://127.0.0.1")
         img_url = os.getenv('OPT_IMAGE_URL')
 
@@ -909,6 +949,12 @@ class SubscriptionTask(Extension):
 
     @staticmethod
     async def getFinishedBooks():
+        """
+        Retrieve books that users have finished within the task frequency period.
+
+        Returns:
+            list: Finished books with user and completion information
+        """
         current_time = datetime.now()
         book_list = []
         try:
@@ -937,12 +983,12 @@ class SubscriptionTask(Extension):
                             displayTitle = media.get('displayTitle')
                             finished = bool(media.get('isFinished'))
 
-                            # Verify it's a book and not a podcast and the book is finished
+                            # Only process finished books (not podcasts)
                             if media_type == 'book' and finished:
 
                                 finishedAtTime = int(media.get('finishedAt'))
 
-                                # Convert time to regular format
+                                # Format timestamp for display
                                 formatted_time = finishedAtTime / 1000
                                 formatted_time = datetime.fromtimestamp(formatted_time)
                                 formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
@@ -962,6 +1008,15 @@ class SubscriptionTask(Extension):
         return book_list
 
     async def FinishedBookEmbeds(self, book_list: list):
+        """
+        Create embed messages for finished books.
+
+        Args:
+            book_list: List of finished books with metadata
+
+        Returns:
+            list: Discord embed messages for finished books
+        """
         count = 0
         embeds = []
         serverURL = os.getenv("bookshelfURL", "http://127.0.0.1")
@@ -1060,44 +1115,68 @@ class SubscriptionTask(Extension):
                     os.environ['bookshelfToken'] = self.admin_token
 
                     new_titles = await newBookList()
-                    if new_titles:
-                        logger.debug(f"New Titles Found: {new_titles}")
-                    else:
-                        logger.info("No new books found, marking task as complete.")
-                        return
+                    if not new_titles:
+                        logger.info("No new books found for this channel.")
+                        continue  # Changed from return to continue
 
                     if len(new_titles) > 10:
                         logger.warning("Found more than 10 titles")
 
                     embeds = await self.NewBookCheckEmbed(enable_notifications=True)
-                    if embeds:
+                    if not embeds:
+                        logger.warning("No embeds created despite having new titles")
+                        continue
 
-                        channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
-                        if channel_query:
-                            logger.debug(f"Found Channel: {channel_id}")
-                            logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
+                    channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
+                    if not channel_query:
+                        logger.warning(f"Could not fetch channel {channel_id}")
+                        continue
 
-                            if len(embeds) < 10:
-                                msg = await channel_query.send(content="New books have been added to your library!")
-                                await msg.edit(embeds=embeds)
-                            else:
-                                await channel_query.send(content="New books have been added to your library!")
-                                for embed in embeds:
-                                    await channel_query.send(embed=embed)
+                    logger.debug(f"Found Channel: {channel_id}")
+                    logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
 
-                                # Reset admin token
-                                self.admin_token = None
+                    # Check message tracking to prevent duplicate notifications
+                    books_to_send = []
+                    for idx, item in enumerate(new_titles):
+                        book_id = item.get('id')
+                        already_sent = await has_message_been_sent(channel_id, book_id, 'new-book')
 
-                    # Reset Vars
-                    os.environ['bookshelfToken'] = self.previous_token
-                    logger.info(f'Returned Active Token to: {self.previous_token}')
-                    self.previous_token = None
-                    logger.info("Successfully completed new-book-check task!")
+                        if not already_sent:
+                            books_to_send.append(idx)
+                            await mark_message_as_sent(channel_id, book_id, 'new-book')
+                        else:
+                            logger.debug(f"Skipping duplicate message for book {book_id} in channel {channel_id}")
+
+                    # Send only unsent book notifications
+                    if books_to_send:
+                        embeds_to_send = [embeds[i] for i in books_to_send if i < len(embeds)]
+
+                        if len(embeds_to_send) < 10:
+                            msg = await channel_query.send(content="New books have been added to your library!")
+                            await msg.edit(embeds=embeds_to_send)
+                        else:
+                            await channel_query.send(content="New books have been added to your library!")
+                            for embed in embeds_to_send:
+                                await channel_query.send(embed=embed)
+
+                        logger.info(f"Sent {len(embeds_to_send)} new book notifications to channel {channel_id}")
+                    else:
+                        logger.info(f"All books already sent to channel {channel_id}, skipping message")
+
+                # Reset Vars - moved outside the loop
+                os.environ['bookshelfToken'] = self.previous_token
+                logger.info(f'Returned Active Token to: {self.previous_token}')
+                self.previous_token = None
+                self.admin_token = None
+                logger.info("Successfully completed new-book-check task!")
 
             # If active but no result, disable task and send owner message.
             else:
                 logger.warning("Task 'new-book-check' was active, but setup check failed.")
                 self.newBookTask.stop()
+
+        except Exception as e:
+            logger.error(f"Error in newBookTask: {e}", exc_info=True)
 
         finally:
             # Always release the lock
@@ -1130,44 +1209,73 @@ class SubscriptionTask(Extension):
                     logger.info(f"Appending Active Token! {masked}")
                     os.environ['bookshelfToken'] = self.admin_token
 
-                    # Any Bookshelf Related Calls Need to be made below
+                    # Fetch finished books
                     book_list = await self.getFinishedBooks()
-                    if book_list:
-                        logger.info('Finished books found! Creating embeds.')
-                    else:
-                        logger.info('No finished books found! Aborting!')
-                        return
+                    if not book_list:
+                        logger.info('No finished books found for this channel.')
+                        continue
 
                     embeds = await self.FinishedBookEmbeds(book_list)
-                    if embeds:
+                    if not embeds:
+                        logger.warning("No embeds created despite having finished books")
+                        continue
 
-                        channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
-                        if channel_query:
-                            logger.debug(f"Found Channel: {channel_id}")
-                            logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
+                    channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
+                    if not channel_query:
+                        logger.warning(f"Could not fetch channel {channel_id}")
+                        continue
 
-                            if len(embeds) < 10:
-                                msg = await channel_query.send(
-                                    content="These books have been recently finished in your library!")
-                                await msg.edit(embeds=embeds)
-                            else:
-                                await channel_query.send(
-                                    content="These books have been recently finished in your library!")
-                                for embed in embeds:
-                                    await channel_query.send(embed=embed)
+                    logger.debug(f"Found Channel: {channel_id}")
+                    logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
 
-                        # Reset admin token
-                        self.admin_token = None
+                    # Check message tracking to prevent duplicate notifications
+                    books_to_send = []
+                    for idx, item in enumerate(book_list):
+                        book_id = item.get('libraryItemId')
+                        already_sent = await has_message_been_sent(channel_id, book_id, 'finished-book')
 
-                        # Reset Vars
-                        os.environ['bookshelfToken'] = self.previous_token
-                        logger.info(f'Returned Active Token to: {self.previous_token}')
-                        self.previous_token = None
-                        logger.info("Successfully completed finished-book-check task!")
+                        if not already_sent:
+                            books_to_send.append(idx)
+                            await mark_message_as_sent(channel_id, book_id, 'finished-book')
+                        else:
+                            logger.debug(
+                                f"Skipping duplicate message for finished book {book_id} in channel {channel_id}")
+
+                    # Send only unsent finished book notifications
+                    if books_to_send:
+                        embeds_to_send = [embeds[i] for i in books_to_send if i < len(embeds)]
+
+                        if len(embeds_to_send) < 10:
+                            msg = await channel_query.send(
+                                content="These books have been recently finished in your library!")
+                            await msg.edit(embeds=embeds_to_send)
+                        else:
+                            await channel_query.send(
+                                content="These books have been recently finished in your library!")
+                            for embed in embeds_to_send:
+                                await channel_query.send(embed=embed)
+
+                        logger.info(f"Sent {len(embeds_to_send)} finished book notifications to channel {channel_id}")
+                    else:
+                        logger.info(f"All finished books already sent to channel {channel_id}, skipping message")
+
+                # Reset Vars - moved outside the loop with None check
+                if self.previous_token is not None:
+                    os.environ['bookshelfToken'] = self.previous_token
+                    logger.info(f'Returned Active Token to: {self.previous_token}')
+                else:
+                    logger.warning("Previous token was None, skipping token restoration")
+
+                self.previous_token = None
+                self.admin_token = None
+                logger.info("Successfully completed finished-book-check task!")
 
             else:
                 logger.warning("Task 'finished-book-check' was active, but setup check failed.")
                 self.finishedBookTask.stop()
+
+        except Exception as e:
+            logger.error(f"Error in finishedBookTask: {e}", exc_info=True)
 
         finally:
             # Always release the lock
@@ -1371,6 +1479,7 @@ class SubscriptionTask(Extension):
     # Autocomplete Functions ---------------------------------------------
     @task_setup.autocomplete('task')
     async def auto_com_task(self, ctx: AutocompleteContext):
+        """Provide task options for autocomplete."""
         choices = [
             {"name": "new-book-check", "value": "1"},
             {"name": "finished-book-check", "value": "2"}
@@ -1379,6 +1488,7 @@ class SubscriptionTask(Extension):
 
     @remove_task_command.autocomplete('task')
     async def remove_task_auto_comp(self, ctx: AutocompleteContext):
+        """Provide user's active tasks for autocomplete."""
         choices = []
         result = await search_task_db(discord_id=ctx.author_id)
         if result:
@@ -1392,6 +1502,7 @@ class SubscriptionTask(Extension):
     @task_setup.autocomplete('color')
     @newBookCheck.autocomplete('color')
     async def color_embed_bookcheck(self, ctx: AutocompleteContext):
+        """Provide color options for embed customization."""
         choices = []
         count = 0
         colors = ['Default', 'Yellow', 'Orange', 'Purple', 'Turquoise', 'Red', 'Green']
@@ -1404,9 +1515,10 @@ class SubscriptionTask(Extension):
 
     @task_setup.autocomplete('user')
     async def user_search_task(self, ctx: AutocompleteContext):
+        """Provide stored users for task assignment autocomplete."""
         choices = []
         users_ = []
-        # Check if search_user_db is async or sync
+        # Check if search_user_db is async or sync for compatibility
         try:
             import inspect
             if inspect.iscoroutinefunction(search_user_db):
@@ -1427,12 +1539,15 @@ class SubscriptionTask(Extension):
 
         await ctx.send(choices=choices)
 
-    # --------------------------------------
+    # Auto-start tasks on bot startup ---------------------------------
 
-    # Auto Start Task if db is populated
     @listen()
     async def tasks_startup(self, event: Startup):
-        # Wait for database to be initialized
+        """
+        Initialize tasks on bot startup if configured in database.
+        Waits for database initialization before proceeding.
+        """
+        # Wait for database initialization
         max_attempts = 10
         for attempt in range(max_attempts):
             if task_db is not None:
@@ -1445,7 +1560,8 @@ class SubscriptionTask(Extension):
             return
 
         init_msg = bool(os.getenv('INITIALIZED_MSG', False))
-        # Check if new version
+
+        # Check for version updates
         version_result = await search_version_db()
         version_list = [v[1] for v in version_result]
         print("Saved Versions: ", version_result)
@@ -1456,6 +1572,7 @@ class SubscriptionTask(Extension):
                 f'New version detected! To ensure the task subscription module functions properly remove any existing tasks with command `/remove-task`! Current Version: **{s.versionNumber}**')
             await insert_version(s.versionNumber)
 
+        # Check for configured tasks and auto-start
         result = await search_task_db(
             override_response="Initialized subscription task module, verifying if any tasks are enabled...")
         task_name = "new-book-check"
@@ -1468,17 +1585,18 @@ class SubscriptionTask(Extension):
 
                 logger.debug(f"Tasks db search result: {task}")
 
-            # Check if new book check is running
+            # Auto-start new book check task if configured
             if not self.newBookTask.running and task_name in task_list:
                 self.newBookTask.start()
                 owner = event.bot.owner
                 logger.info(
                     f"Enabling task: New Book Check on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
-                # Debug Stuff
+                # Send debug notification if enabled
                 if s.DEBUG_MODE and s.INITIALIZED_MSG:
                     await owner.send(
                         f"Subscription Task db was populated, auto enabling tasks on startup. Refresh rate set to {TASK_FREQUENCY} minutes.")
 
+            # Auto-start finished book check task if configured
             if not self.finishedBookTask.running and 'finished-book-check' in task_list:
                 self.finishedBookTask.start()
                 logger.info(
