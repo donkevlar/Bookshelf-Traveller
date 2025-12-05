@@ -62,11 +62,23 @@ class TaskDatabaseInterface(ABC):
         pass
 
     @abstractmethod
+    async def create_message_tracking_table(self):
+        pass
+
+    @abstractmethod
     async def insert_data(self, discord_id: int, channel_id: int, task: str, server_name: str, token: str) -> bool:
         pass
 
     @abstractmethod
     async def insert_version(self, version: str) -> bool:
+        pass
+
+    @abstractmethod
+    async def has_message_been_sent(self, channel_id: int, book_id: str, message_type: str) -> bool:
+        pass
+
+    @abstractmethod
+    async def mark_message_as_sent(self, channel_id: int, book_id: str, message_type: str):
         pass
 
     @abstractmethod
@@ -155,6 +167,53 @@ class SQLiteTaskDatabase(TaskDatabaseInterface):
             )
         ''')
         await self.conn.commit()
+
+    async def create_message_tracking_table(self):
+        """Create table to track sent messages and prevent duplicates"""
+        await self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS message_tracking (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                channel_id INTEGER NOT NULL,
+                book_id TEXT NOT NULL,
+                message_type TEXT NOT NULL,
+                sent_at INTEGER NOT NULL,
+                UNIQUE(channel_id, book_id, message_type)
+            )
+        ''')
+        # Create index for faster lookups
+        await self.cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_message_tracking_lookup 
+            ON message_tracking(channel_id, book_id, message_type)
+        ''')
+        await self.conn.commit()
+
+    async def has_message_been_sent(self, channel_id: int, book_id: str, message_type: str) -> bool:
+        """Check if a message has already been sent for this book in this channel"""
+        # Clean up old tracking records (older than 7 days)
+        seven_days_ago = int((datetime.now() - timedelta(days=7)).timestamp())
+        await self.cursor.execute('DELETE FROM message_tracking WHERE sent_at < ?', (seven_days_ago,))
+        await self.conn.commit()
+
+        # Check if message exists
+        await self.cursor.execute('''
+            SELECT 1 FROM message_tracking 
+            WHERE channel_id = ? AND book_id = ? AND message_type = ?
+        ''', (channel_id, book_id, message_type))
+        result = await self.cursor.fetchone()
+        return result is not None
+
+    async def mark_message_as_sent(self, channel_id: int, book_id: str, message_type: str):
+        """Mark a message as sent to prevent duplicates"""
+        now = int(datetime.now().timestamp())
+        try:
+            await self.cursor.execute('''
+                INSERT INTO message_tracking (channel_id, book_id, message_type, sent_at)
+                VALUES (?, ?, ?, ?)
+            ''', (channel_id, book_id, message_type, now))
+            await self.conn.commit()
+        except Exception as e:
+            # Already exists, that's fine
+            logger.debug(f"Message already tracked: {e}")
 
     async def acquire_lock(self, task_name: str, lock_duration_seconds: int = 30) -> bool:
         """Attempt to acquire a lock for a task"""
@@ -376,6 +435,52 @@ class MariaDBTaskDatabase(TaskDatabaseInterface):
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 ''')
 
+    async def create_message_tracking_table(self):
+        """Create table to track sent messages and prevent duplicates"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS message_tracking (
+                        id INT AUTO_INCREMENT PRIMARY KEY,
+                        channel_id BIGINT NOT NULL,
+                        book_id VARCHAR(255) NOT NULL,
+                        message_type VARCHAR(50) NOT NULL,
+                        sent_at BIGINT NOT NULL,
+                        UNIQUE KEY unique_message (channel_id, book_id, message_type),
+                        INDEX idx_sent_at (sent_at)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                ''')
+
+    async def has_message_been_sent(self, channel_id: int, book_id: str, message_type: str) -> bool:
+        """Check if a message has already been sent for this book in this channel"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                # Clean up old tracking records (older than 7 days)
+                seven_days_ago = int((datetime.now() - timedelta(days=7)).timestamp())
+                await cursor.execute('DELETE FROM message_tracking WHERE sent_at < %s', (seven_days_ago,))
+
+                # Check if message exists
+                await cursor.execute('''
+                    SELECT 1 FROM message_tracking 
+                    WHERE channel_id = %s AND book_id = %s AND message_type = %s
+                ''', (channel_id, book_id, message_type))
+                result = await cursor.fetchone()
+                return result is not None
+
+    async def mark_message_as_sent(self, channel_id: int, book_id: str, message_type: str):
+        """Mark a message as sent to prevent duplicates"""
+        now = int(datetime.now().timestamp())
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute('''
+                        INSERT INTO message_tracking (channel_id, book_id, message_type, sent_at)
+                        VALUES (%s, %s, %s, %s)
+                    ''', (channel_id, book_id, message_type, now))
+        except Exception as e:
+            # Already exists, that's fine
+            logger.debug(f"Message already tracked: {e}")
+
     async def acquire_lock(self, task_name: str, lock_duration_seconds: int = 30) -> bool:
         """Attempt to acquire a lock for a task"""
         now = int(datetime.now().timestamp())
@@ -559,6 +664,7 @@ async def initialize_task_database():
     await task_db.create_tasks_table()
     await task_db.create_version_table()
     await task_db.create_task_locks_table()
+    await task_db.create_message_tracking_table()
     logger.info(f"Initialized tasks database using {DB_TYPE}")
     logger.info(f"Instance ID: {INSTANCE_ID}")
 
@@ -604,6 +710,16 @@ async def release_task_lock(task_name: str):
 async def check_task_lock_owner(task_name: str) -> bool:
     """Check if this instance owns the task lock"""
     return await task_db.check_lock_owner(task_name)
+
+
+async def has_message_been_sent(channel_id: int, book_id: str, message_type: str) -> bool:
+    """Check if a message has already been sent"""
+    return await task_db.has_message_been_sent(channel_id, book_id, message_type)
+
+
+async def mark_message_as_sent(channel_id: int, book_id: str, message_type: str):
+    """Mark a message as sent"""
+    await task_db.mark_message_as_sent(channel_id, book_id, message_type)
 
 
 async def conn_test():
