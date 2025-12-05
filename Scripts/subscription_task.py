@@ -1110,7 +1110,6 @@ class SubscriptionTask(Extension):
 
             logger.debug(f"Search result: {search_result}")
 
-            # Backup token
             previous_token = os.getenv("bookshelfToken")
 
             for result in search_result:
@@ -1120,7 +1119,7 @@ class SubscriptionTask(Extension):
                 logger.info(f"Applying active admin token ({len(self.admin_token)} chars)")
                 os.environ["bookshelfToken"] = self.admin_token
 
-                # Fetch new books
+                # --- Fetch list of new books
                 new_titles = await newBookList()
                 if not new_titles:
                     logger.info(f"No new books found for channel {channel_id}")
@@ -1129,12 +1128,18 @@ class SubscriptionTask(Extension):
                 if len(new_titles) > 10:
                     logger.warning("Found more than 10 titles")
 
+                # --- Generate embeds (must match titles)
                 embeds = await self.NewBookCheckEmbed(enable_notifications=True)
                 if not embeds:
                     logger.warning("New books exist but no embeds were generated.")
                     continue
 
-                # Fetch the channel
+                # Assert correct alignment
+                if len(new_titles) != len(embeds):
+                    logger.error("Mismatch between new_titles and embeds. Duplicate prevention disabled for this run.")
+                    continue
+
+                # --- Fetch the channel
                 channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
                 if not channel_query:
                     logger.warning(f"Could not fetch channel {channel_id}")
@@ -1143,26 +1148,29 @@ class SubscriptionTask(Extension):
                 logger.debug(f"Found Channel: {channel_id}")
                 logger.debug(f"Attempting to send messages to channel: {channel_id}")
 
-                # Prevent duplicate notifications
+                # ==========================
+                #   DEDUP FIX STARTS HERE
+                # ==========================
+
                 books_to_send = []
+                embeds_to_send = []
+
                 for idx, item in enumerate(new_titles):
                     book_id = item.get("id")
+
                     already_sent = await has_message_been_sent(channel_id, book_id, "new-book")
 
                     if not already_sent:
-                        books_to_send.append(idx)
-                        await mark_message_as_sent(channel_id, book_id, "new-book")
+                        books_to_send.append(book_id)
+                        embeds_to_send.append(embeds[idx])
                     else:
                         logger.debug(f"Skipping duplicate for book {book_id} in channel {channel_id}")
 
-                # Nothing new to send
                 if not books_to_send:
                     logger.info(f"All new books already sent for channel {channel_id}")
                     continue
 
-                embeds_to_send = [embeds[i] for i in books_to_send if i < len(embeds)]
-
-                # Send paginated if too many embeds
+                # --- Send notifications
                 if len(embeds_to_send) < 10:
                     msg = await channel_query.send(content="New books have been added to your library!")
                     await msg.edit(embeds=embeds_to_send)
@@ -1173,9 +1181,12 @@ class SubscriptionTask(Extension):
 
                 logger.info(f"Sent {len(embeds_to_send)} new book notifications to channel {channel_id}")
 
+                # Mark books as sent **after** successful send
+                for book_id in books_to_send:
+                    await mark_message_as_sent(channel_id, book_id, "new-book")
+
             # Restore token
             os.environ["bookshelfToken"] = previous_token or ""
-            logger.info(f"Returned Active Token to previous value.")
             self.previous_token = None
             self.admin_token = None
 
