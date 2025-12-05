@@ -1577,8 +1577,7 @@ class AudioPlayBack(Extension):
             logger.info(f"Item details for announcement: {item_details}")
 
             # Build announcement message
-            announcement_parts = ["📢 **Now Playing:**"]
-            announcement_parts.append(f"**{self.bookTitle}**")
+            announcement_parts = ["📢 **Now Playing:**", f"**{self.bookTitle}**"]
 
             if self.isPodcast:
                 # For podcasts, get podcast title and author
@@ -1714,6 +1713,7 @@ class AudioPlayBack(Extension):
     # -----------------------------
     @play_audio.autocomplete("book")
     async def search_media_auto_complete(self, ctx: AutocompleteContext):
+        ctx.deferred = True
         user_input = ctx.input_text
         choices = []
         logger.info(f"Autocomplete input: '{user_input}'")
@@ -1852,7 +1852,6 @@ class AudioPlayBack(Extension):
 
         else:
             # Handle user input search
-            ctx.deferred = True
             try:
                 # Add the random option if typing something that could be "random"
                 if user_input == "random":
