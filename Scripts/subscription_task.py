@@ -1115,44 +1115,68 @@ class SubscriptionTask(Extension):
                     os.environ['bookshelfToken'] = self.admin_token
 
                     new_titles = await newBookList()
-                    if new_titles:
-                        logger.debug(f"New Titles Found: {new_titles}")
-                    else:
-                        logger.info("No new books found, marking task as complete.")
-                        return
+                    if not new_titles:
+                        logger.info("No new books found for this channel.")
+                        continue  # Changed from return to continue
 
                     if len(new_titles) > 10:
                         logger.warning("Found more than 10 titles")
 
                     embeds = await self.NewBookCheckEmbed(enable_notifications=True)
-                    if embeds:
+                    if not embeds:
+                        logger.warning("No embeds created despite having new titles")
+                        continue
 
-                        channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
-                        if channel_query:
-                            logger.debug(f"Found Channel: {channel_id}")
-                            logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
+                    channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
+                    if not channel_query:
+                        logger.warning(f"Could not fetch channel {channel_id}")
+                        continue
 
-                            if len(embeds) < 10:
-                                msg = await channel_query.send(content="New books have been added to your library!")
-                                await msg.edit(embeds=embeds)
-                            else:
-                                await channel_query.send(content="New books have been added to your library!")
-                                for embed in embeds:
-                                    await channel_query.send(embed=embed)
+                    logger.debug(f"Found Channel: {channel_id}")
+                    logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
 
-                                # Reset admin token
-                                self.admin_token = None
+                    # Check message tracking to prevent duplicate notifications
+                    books_to_send = []
+                    for idx, item in enumerate(new_titles):
+                        book_id = item.get('id')
+                        already_sent = await has_message_been_sent(channel_id, book_id, 'new-book')
 
-                    # Reset Vars
-                    os.environ['bookshelfToken'] = self.previous_token
-                    logger.info(f'Returned Active Token to: {self.previous_token}')
-                    self.previous_token = None
-                    logger.info("Successfully completed new-book-check task!")
+                        if not already_sent:
+                            books_to_send.append(idx)
+                            await mark_message_as_sent(channel_id, book_id, 'new-book')
+                        else:
+                            logger.debug(f"Skipping duplicate message for book {book_id} in channel {channel_id}")
+
+                    # Send only unsent book notifications
+                    if books_to_send:
+                        embeds_to_send = [embeds[i] for i in books_to_send if i < len(embeds)]
+
+                        if len(embeds_to_send) < 10:
+                            msg = await channel_query.send(content="New books have been added to your library!")
+                            await msg.edit(embeds=embeds_to_send)
+                        else:
+                            await channel_query.send(content="New books have been added to your library!")
+                            for embed in embeds_to_send:
+                                await channel_query.send(embed=embed)
+
+                        logger.info(f"Sent {len(embeds_to_send)} new book notifications to channel {channel_id}")
+                    else:
+                        logger.info(f"All books already sent to channel {channel_id}, skipping message")
+
+                # Reset Vars - moved outside the loop
+                os.environ['bookshelfToken'] = self.previous_token
+                logger.info(f'Returned Active Token to: {self.previous_token}')
+                self.previous_token = None
+                self.admin_token = None
+                logger.info("Successfully completed new-book-check task!")
 
             # If active but no result, disable task and send owner message.
             else:
                 logger.warning("Task 'new-book-check' was active, but setup check failed.")
                 self.newBookTask.stop()
+
+        except Exception as e:
+            logger.error(f"Error in newBookTask: {e}", exc_info=True)
 
         finally:
             # Always release the lock
@@ -1185,44 +1209,73 @@ class SubscriptionTask(Extension):
                     logger.info(f"Appending Active Token! {masked}")
                     os.environ['bookshelfToken'] = self.admin_token
 
-                    # Any Bookshelf Related Calls Need to be made below
+                    # Fetch finished books
                     book_list = await self.getFinishedBooks()
-                    if book_list:
-                        logger.info('Finished books found! Creating embeds.')
-                    else:
-                        logger.info('No finished books found! Aborting!')
-                        return
+                    if not book_list:
+                        logger.info('No finished books found for this channel.')
+                        continue
 
                     embeds = await self.FinishedBookEmbeds(book_list)
-                    if embeds:
+                    if not embeds:
+                        logger.warning("No embeds created despite having finished books")
+                        continue
 
-                        channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
-                        if channel_query:
-                            logger.debug(f"Found Channel: {channel_id}")
-                            logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
+                    channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
+                    if not channel_query:
+                        logger.warning(f"Could not fetch channel {channel_id}")
+                        continue
 
-                            if len(embeds) < 10:
-                                msg = await channel_query.send(
-                                    content="These books have been recently finished in your library!")
-                                await msg.edit(embeds=embeds)
-                            else:
-                                await channel_query.send(
-                                    content="These books have been recently finished in your library!")
-                                for embed in embeds:
-                                    await channel_query.send(embed=embed)
+                    logger.debug(f"Found Channel: {channel_id}")
+                    logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
 
-                        # Reset admin token
-                        self.admin_token = None
+                    # Check message tracking to prevent duplicate notifications
+                    books_to_send = []
+                    for idx, item in enumerate(book_list):
+                        book_id = item.get('libraryItemId')
+                        already_sent = await has_message_been_sent(channel_id, book_id, 'finished-book')
 
-                        # Reset Vars
-                        os.environ['bookshelfToken'] = self.previous_token
-                        logger.info(f'Returned Active Token to: {self.previous_token}')
-                        self.previous_token = None
-                        logger.info("Successfully completed finished-book-check task!")
+                        if not already_sent:
+                            books_to_send.append(idx)
+                            await mark_message_as_sent(channel_id, book_id, 'finished-book')
+                        else:
+                            logger.debug(
+                                f"Skipping duplicate message for finished book {book_id} in channel {channel_id}")
+
+                    # Send only unsent finished book notifications
+                    if books_to_send:
+                        embeds_to_send = [embeds[i] for i in books_to_send if i < len(embeds)]
+
+                        if len(embeds_to_send) < 10:
+                            msg = await channel_query.send(
+                                content="These books have been recently finished in your library!")
+                            await msg.edit(embeds=embeds_to_send)
+                        else:
+                            await channel_query.send(
+                                content="These books have been recently finished in your library!")
+                            for embed in embeds_to_send:
+                                await channel_query.send(embed=embed)
+
+                        logger.info(f"Sent {len(embeds_to_send)} finished book notifications to channel {channel_id}")
+                    else:
+                        logger.info(f"All finished books already sent to channel {channel_id}, skipping message")
+
+                # Reset Vars - moved outside the loop with None check
+                if self.previous_token is not None:
+                    os.environ['bookshelfToken'] = self.previous_token
+                    logger.info(f'Returned Active Token to: {self.previous_token}')
+                else:
+                    logger.warning("Previous token was None, skipping token restoration")
+
+                self.previous_token = None
+                self.admin_token = None
+                logger.info("Successfully completed finished-book-check task!")
 
             else:
                 logger.warning("Task 'finished-book-check' was active, but setup check failed.")
                 self.finishedBookTask.stop()
+
+        except Exception as e:
+            logger.error(f"Error in finishedBookTask: {e}", exc_info=True)
 
         finally:
             # Always release the lock
