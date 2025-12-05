@@ -3,6 +3,7 @@ import time
 import logging
 import sys
 import asyncio
+import uuid
 from typing import Optional, List, Tuple
 from abc import ABC, abstractmethod
 
@@ -25,6 +26,9 @@ logger = logging.getLogger("bot")
 
 # VARS
 TASK_FREQUENCY = 5
+
+# Generate unique instance ID for this bot instance
+INSTANCE_ID = str(uuid.uuid4())
 
 # Database configuration from environment variables
 DB_TYPE = os.getenv('DB_TYPE', 'sqlite').lower()  # 'sqlite' or 'mariadb'
@@ -54,6 +58,10 @@ class TaskDatabaseInterface(ABC):
         pass
 
     @abstractmethod
+    async def create_task_locks_table(self):
+        pass
+
+    @abstractmethod
     async def insert_data(self, discord_id: int, channel_id: int, task: str, server_name: str, token: str) -> bool:
         pass
 
@@ -72,6 +80,18 @@ class TaskDatabaseInterface(ABC):
     @abstractmethod
     async def search_task_db(self, discord_id: int = 0, task: str = '', channel_id: int = 0,
                              override_response: str = '') -> Optional[List[Tuple]]:
+        pass
+
+    @abstractmethod
+    async def acquire_lock(self, task_name: str, lock_duration_seconds: int = 300) -> bool:
+        pass
+
+    @abstractmethod
+    async def release_lock(self, task_name: str):
+        pass
+
+    @abstractmethod
+    async def check_lock_owner(self, task_name: str) -> bool:
         pass
 
 
@@ -123,6 +143,62 @@ class SQLiteTaskDatabase(TaskDatabaseInterface):
             )
         ''')
         await self.conn.commit()
+
+    async def create_task_locks_table(self):
+        """Create table for distributed task locking"""
+        await self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS task_locks (
+                task_name TEXT PRIMARY KEY,
+                instance_id TEXT NOT NULL,
+                locked_at INTEGER NOT NULL,
+                expires_at INTEGER NOT NULL
+            )
+        ''')
+        await self.conn.commit()
+
+    async def acquire_lock(self, task_name: str, lock_duration_seconds: int = 30) -> bool:
+        """Attempt to acquire a lock for a task"""
+        now = int(datetime.now().timestamp())
+        expires_at = now + lock_duration_seconds
+
+        try:
+            # Clean up expired locks first
+            await self.cursor.execute(
+                'DELETE FROM task_locks WHERE expires_at < ?', (now,)
+            )
+            await self.conn.commit()
+
+            # Try to insert lock
+            await self.cursor.execute(
+                '''INSERT INTO task_locks (task_name, instance_id, locked_at, expires_at)
+                   VALUES (?, ?, ?, ?)''',
+                (task_name, INSTANCE_ID, now, expires_at)
+            )
+            await self.conn.commit()
+            return True
+        except Exception as e:
+            # Lock already exists or other error
+            logger.debug(f"Could not acquire lock for {task_name}: {e}")
+            return False
+
+    async def release_lock(self, task_name: str):
+        """Release a lock held by this instance"""
+        await self.cursor.execute(
+            'DELETE FROM task_locks WHERE task_name = ? AND instance_id = ?',
+            (task_name, INSTANCE_ID)
+        )
+        await self.conn.commit()
+
+    async def check_lock_owner(self, task_name: str) -> bool:
+        """Check if this instance owns the lock"""
+        now = int(datetime.now().timestamp())
+        await self.cursor.execute(
+            '''SELECT instance_id FROM task_locks 
+               WHERE task_name = ? AND expires_at > ?''',
+            (task_name, now)
+        )
+        result = await self.cursor.fetchone()
+        return result and result[0] == INSTANCE_ID
 
     async def insert_data(self, discord_id: int, channel_id: int, task: str, server_name: str, token: str) -> bool:
         try:
@@ -286,6 +362,67 @@ class MariaDBTaskDatabase(TaskDatabaseInterface):
                     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
                 ''')
 
+    async def create_task_locks_table(self):
+        """Create table for distributed task locking"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute('''
+                    CREATE TABLE IF NOT EXISTS task_locks (
+                        task_name VARCHAR(255) PRIMARY KEY,
+                        instance_id VARCHAR(36) NOT NULL,
+                        locked_at BIGINT NOT NULL,
+                        expires_at BIGINT NOT NULL,
+                        INDEX idx_expires (expires_at)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+                ''')
+
+    async def acquire_lock(self, task_name: str, lock_duration_seconds: int = 30) -> bool:
+        """Attempt to acquire a lock for a task"""
+        now = int(datetime.now().timestamp())
+        expires_at = now + lock_duration_seconds
+
+        try:
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    # Clean up expired locks first
+                    await cursor.execute(
+                        'DELETE FROM task_locks WHERE expires_at < %s', (now,)
+                    )
+
+                    # Try to insert lock
+                    await cursor.execute(
+                        '''INSERT INTO task_locks (task_name, instance_id, locked_at, expires_at)
+                           VALUES (%s, %s, %s, %s)''',
+                        (task_name, INSTANCE_ID, now, expires_at)
+                    )
+            return True
+        except Exception as e:
+            # Lock already exists or other error
+            logger.debug(f"Could not acquire lock for {task_name}: {e}")
+            return False
+
+    async def release_lock(self, task_name: str):
+        """Release a lock held by this instance"""
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    'DELETE FROM task_locks WHERE task_name = %s AND instance_id = %s',
+                    (task_name, INSTANCE_ID)
+                )
+
+    async def check_lock_owner(self, task_name: str) -> bool:
+        """Check if this instance owns the lock"""
+        now = int(datetime.now().timestamp())
+        async with self.pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                await cursor.execute(
+                    '''SELECT instance_id FROM task_locks 
+                       WHERE task_name = %s AND expires_at > %s''',
+                    (task_name, now)
+                )
+                result = await cursor.fetchone()
+                return result and result[0] == INSTANCE_ID
+
     async def insert_data(self, discord_id: int, channel_id: int, task: str, server_name: str, token: str) -> bool:
         try:
             async with self.pool.acquire() as conn:
@@ -421,7 +558,9 @@ async def initialize_task_database():
     await task_db.connect()
     await task_db.create_tasks_table()
     await task_db.create_version_table()
+    await task_db.create_task_locks_table()
     logger.info(f"Initialized tasks database using {DB_TYPE}")
+    logger.info(f"Instance ID: {INSTANCE_ID}")
 
 
 async def close_task_database():
@@ -450,6 +589,21 @@ async def remove_task_db(task: str = '', discord_id: int = 0, db_id: int = 0) ->
 async def search_task_db(discord_id: int = 0, task: str = '', channel_id: int = 0,
                          override_response: str = '') -> Optional[List[Tuple]]:
     return await task_db.search_task_db(discord_id, task, channel_id, override_response)
+
+
+async def acquire_task_lock(task_name: str, lock_duration_seconds: int = 30) -> bool:
+    """Acquire a distributed lock for a task"""
+    return await task_db.acquire_lock(task_name, lock_duration_seconds)
+
+
+async def release_task_lock(task_name: str):
+    """Release a distributed lock for a task"""
+    await task_db.release_lock(task_name)
+
+
+async def check_task_lock_owner(task_name: str) -> bool:
+    """Check if this instance owns the task lock"""
+    return await task_db.check_lock_owner(task_name)
 
 
 async def conn_test():
@@ -749,117 +903,147 @@ class SubscriptionTask(Extension):
 
     @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
     async def newBookTask(self):
-        logger.info("Initializing new-book-check task!")
-        search_result = await search_task_db(task='new-book-check')
-        if search_result:
-            if self.ServerNickName == '':
-                await self.get_server_name_db()
-            logger.debug(f"search result: {search_result}")
+        task_name = 'new-book-check-execution'
 
-            self.previous_token = os.getenv('bookshelfToken')
+        # Try to acquire lock
+        lock_acquired = await acquire_task_lock(task_name, lock_duration_seconds=30)
 
-            for result in search_result:
-                channel_id = int(result[1])
+        if not lock_acquired:
+            logger.debug(f"Another instance is already running {task_name}, skipping...")
+            return
 
-                self.admin_token = result[3]
-                masked = len(self.admin_token)
-                logger.info(f"Appending Active Token! {masked}")
-                os.environ['bookshelfToken'] = self.admin_token
+        try:
+            logger.info("Initializing new-book-check task!")
+            search_result = await search_task_db(task='new-book-check')
+            if search_result:
+                if self.ServerNickName == '':
+                    await self.get_server_name_db()
+                logger.debug(f"search result: {search_result}")
 
-                new_titles = await newBookList()
-                if new_titles:
-                    logger.debug(f"New Titles Found: {new_titles}")
-                else:
-                    logger.info("No new books found, marking task as complete.")
-                    return
+                self.previous_token = os.getenv('bookshelfToken')
 
-                if len(new_titles) > 10:
-                    logger.warning("Found more than 10 titles")
+                for result in search_result:
+                    channel_id = int(result[1])
 
-                embeds = await self.NewBookCheckEmbed(enable_notifications=True)
-                if embeds:
+                    self.admin_token = result[3]
+                    masked = len(self.admin_token)
+                    logger.info(f"Appending Active Token! {masked}")
+                    os.environ['bookshelfToken'] = self.admin_token
 
-                    channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
-                    if channel_query:
-                        logger.debug(f"Found Channel: {channel_id}")
-                        logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
+                    new_titles = await newBookList()
+                    if new_titles:
+                        logger.debug(f"New Titles Found: {new_titles}")
+                    else:
+                        logger.info("No new books found, marking task as complete.")
+                        return
 
-                        if len(embeds) < 10:
-                            msg = await channel_query.send(content="New books have been added to your library!")
-                            await msg.edit(embeds=embeds)
-                        else:
-                            await channel_query.send(content="New books have been added to your library!")
-                            for embed in embeds:
-                                await channel_query.send(embed=embed)
+                    if len(new_titles) > 10:
+                        logger.warning("Found more than 10 titles")
 
-                            # Reset admin token
-                            self.admin_token = None
+                    embeds = await self.NewBookCheckEmbed(enable_notifications=True)
+                    if embeds:
 
-                # Reset Vars
-                os.environ['bookshelfToken'] = self.previous_token
-                print(f'Returned Active Token to: {self.previous_token}')
-                self.previous_token = None
-                logger.info("Successfully completed new-book-check task!")
+                        channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
+                        if channel_query:
+                            logger.debug(f"Found Channel: {channel_id}")
+                            logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
 
-        # If active but no result, disable task and send owner message.
-        else:
-            logger.warning("Task 'new-book-check' was active, but setup check failed.")
-            self.newBookTask.stop()
+                            if len(embeds) < 10:
+                                msg = await channel_query.send(content="New books have been added to your library!")
+                                await msg.edit(embeds=embeds)
+                            else:
+                                await channel_query.send(content="New books have been added to your library!")
+                                for embed in embeds:
+                                    await channel_query.send(embed=embed)
 
-    @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
-    async def finishedBookTask(self):
-        logger.info('Initializing Finished Book Task!')
-        search_result = await search_task_db(task='finished-book-check')
-
-        if search_result:
-            self.previous_token = os.getenv('bookshelfToken')
-
-            for result in search_result:
-                channel_id = int(result[1])
-                logger.info(f'Channel ID: {channel_id}')
-                self.admin_token = result[3]
-                masked = len(self.admin_token)
-                logger.info(f"Appending Active Token! {masked}")
-                os.environ['bookshelfToken'] = self.admin_token
-
-                # Any Bookshelf Related Calls Need to be made below
-                book_list = await self.getFinishedBooks()
-                if book_list:
-                    logger.info('Finished books found! Creating embeds.')
-                else:
-                    logger.info('No finished books found! Aborting!')
-                    return
-
-                embeds = await self.FinishedBookEmbeds(book_list)
-                if embeds:
-
-                    channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
-                    if channel_query:
-                        logger.debug(f"Found Channel: {channel_id}")
-                        logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
-
-                        if len(embeds) < 10:
-                            msg = await channel_query.send(
-                                content="These books have been recently finished in your library!")
-                            await msg.edit(embeds=embeds)
-                        else:
-                            await channel_query.send(
-                                content="These books have been recently finished in your library!")
-                            for embed in embeds:
-                                await channel_query.send(embed=embed)
-
-                    # Reset admin token
-                    self.admin_token = None
+                                # Reset admin token
+                                self.admin_token = None
 
                     # Reset Vars
                     os.environ['bookshelfToken'] = self.previous_token
-                    print(f'Returned Active Token to: {self.previous_token}')
+                    logger.info(f'Returned Active Token to: {self.previous_token}')
                     self.previous_token = None
-                    logger.info("Successfully completed finished-book-check task!")
+                    logger.info("Successfully completed new-book-check task!")
 
-        else:
-            logger.warning("Task 'new-book-check' was active, but setup check failed.")
-            self.finishedBookTask.stop()
+            # If active but no result, disable task and send owner message.
+            else:
+                logger.warning("Task 'new-book-check' was active, but setup check failed.")
+                self.newBookTask.stop()
+
+        finally:
+            # Always release the lock
+            await release_task_lock(task_name)
+            logger.debug(f"Released lock for {task_name}")
+
+    @Task.create(trigger=IntervalTrigger(minutes=TASK_FREQUENCY))
+    async def finishedBookTask(self):
+        task_name = 'finished-book-check-execution'
+
+        # Try to acquire lock
+        lock_acquired = await acquire_task_lock(task_name, lock_duration_seconds=30)
+
+        if not lock_acquired:
+            logger.debug(f"Another instance is already running {task_name}, skipping...")
+            return
+
+        try:
+            logger.info('Initializing Finished Book Task!')
+            search_result = await search_task_db(task='finished-book-check')
+
+            if search_result:
+                self.previous_token = os.getenv('bookshelfToken')
+
+                for result in search_result:
+                    channel_id = int(result[1])
+                    logger.info(f'Channel ID: {channel_id}')
+                    self.admin_token = result[3]
+                    masked = len(self.admin_token)
+                    logger.info(f"Appending Active Token! {masked}")
+                    os.environ['bookshelfToken'] = self.admin_token
+
+                    # Any Bookshelf Related Calls Need to be made below
+                    book_list = await self.getFinishedBooks()
+                    if book_list:
+                        logger.info('Finished books found! Creating embeds.')
+                    else:
+                        logger.info('No finished books found! Aborting!')
+                        return
+
+                    embeds = await self.FinishedBookEmbeds(book_list)
+                    if embeds:
+
+                        channel_query = await self.bot.fetch_channel(channel_id=channel_id, force=True)
+                        if channel_query:
+                            logger.debug(f"Found Channel: {channel_id}")
+                            logger.debug(f"Bot will now attempt to send a message to channel id: {channel_id}")
+
+                            if len(embeds) < 10:
+                                msg = await channel_query.send(
+                                    content="These books have been recently finished in your library!")
+                                await msg.edit(embeds=embeds)
+                            else:
+                                await channel_query.send(
+                                    content="These books have been recently finished in your library!")
+                                for embed in embeds:
+                                    await channel_query.send(embed=embed)
+
+                        # Reset admin token
+                        self.admin_token = None
+
+                        # Reset Vars
+                        os.environ['bookshelfToken'] = self.previous_token
+                        logger.info(f'Returned Active Token to: {self.previous_token}')
+                        self.previous_token = None
+                        logger.info("Successfully completed finished-book-check task!")
+
+            else:
+                logger.warning("Task 'finished-book-check' was active, but setup check failed.")
+                self.finishedBookTask.stop()
+
+        finally:
+            # Always release the lock
+            await release_task_lock(task_name)
+            logger.debug(f"Released lock for {task_name}")
 
     # Slash Commands ----------------------------------------------------
 
@@ -1095,7 +1279,6 @@ class SubscriptionTask(Extension):
         users_ = []
         # Check if search_user_db is async or sync
         try:
-            # Try calling it as async
             import inspect
             if inspect.iscoroutinefunction(search_user_db):
                 user_result = await search_user_db()
