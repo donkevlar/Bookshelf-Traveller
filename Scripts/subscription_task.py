@@ -687,9 +687,22 @@ class SubscriptionTask(Extension):
     async def get_server_name_db(self, discord_id: int = 0, task: str = 'new-book-check'):
         result = await search_task_db(discord_id=discord_id, task=task)
         if result:
-            server_name = result[1] if isinstance(result, tuple) else result[0][1]
-            logger.debug(f'Setting server nickname to {server_name}')
-            self.ServerNickName = server_name
+            try:
+                # Handle different return formats from search_task_db
+                if isinstance(result, tuple) and len(result) > 1:
+                    # Single tuple result (option 2: discord_id + task)
+                    server_name = result[1]
+                elif isinstance(result, list) and len(result) > 0:
+                    # List of tuples
+                    server_name = result[0][1] if len(result[0]) > 1 else result[0][0]
+                else:
+                    server_name = "Audiobookshelf"
+
+                logger.debug(f'Setting server nickname to {server_name}')
+                self.ServerNickName = server_name
+            except (IndexError, TypeError) as e:
+                logger.error(f"Error extracting server name: {e}")
+                self.ServerNickName = "Audiobookshelf"
         return result
 
     async def send_user_wishlist(self, discord_id: int, title: str, author: str, embed: list):
