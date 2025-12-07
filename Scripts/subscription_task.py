@@ -330,7 +330,8 @@ class SQLiteTaskDatabase(TaskDatabaseInterface):
             await self.cursor.execute('''
                 SELECT channel_id, server_name FROM tasks WHERE discord_id = ? AND task = ?
             ''', (discord_id, task))
-            rows = await self.cursor.fetchone()
+            row = await self.cursor.fetchone()
+            rows = [row] if row else []
 
         elif discord_id != 0 and task == '' and channel_id == 0:
             option = 3
@@ -606,7 +607,8 @@ class MariaDBTaskDatabase(TaskDatabaseInterface):
                     await cursor.execute('''
                         SELECT channel_id, server_name FROM tasks WHERE discord_id = %s AND task = %s
                     ''', (discord_id, task))
-                    rows = await cursor.fetchone()
+                    row = await cursor.fetchone()
+                    rows = [row] if row else []
 
                 elif discord_id != 0 and task == '' and channel_id == 0:
                     option = 3
@@ -821,25 +823,35 @@ class SubscriptionTask(Extension):
             task: Task name to search for
 
         Returns:
-            Database query result
+            str: Server nickname (defaults to "Audiobookshelf" if not found)
         """
-        result = await search_task_db(discord_id=discord_id, task=task)
-        if result:
-            try:
-                # Handle different return formats from search_task_db
-                if isinstance(result, tuple) and len(result) > 1:
-                    server_name = result[1]
-                elif isinstance(result, list) and len(result) > 0:
-                    server_name = result[0][1] if len(result[0]) > 1 else result[0][0]
-                else:
-                    server_name = "Audiobookshelf"
+        # Set default first to ensure consistent state
+        server_name = os.getenv("DEFAULT_SERVER_NAME", "Audiobookshelf")
 
-                logger.debug(f'Setting server nickname to {server_name}')
-                self.ServerNickName = server_name
-            except (IndexError, TypeError) as e:
-                logger.error(f"Error extracting server name: {e}")
-                self.ServerNickName = "Audiobookshelf"
-        return result
+        try:
+            result = await search_task_db(discord_id=discord_id, task=task)
+
+            if result:
+                server_name = self._extract_server_name(result)
+
+        except Exception as e:
+            logger.error(f"Error retrieving server name: {e}")
+
+        logger.debug(f'Setting server nickname to {server_name}')
+        self.ServerNickName = server_name
+        return server_name
+
+    def _extract_server_name(self, result) -> str:
+        """Extract server name from various result formats."""
+        try:
+            if isinstance(result, tuple) and len(result) > 1:
+                return result[1]
+            elif isinstance(result, list) and len(result) > 0:
+                return result[0][1] if len(result[0]) > 1 else result[0][0]
+            return "Audiobookshelf"
+        except (IndexError, TypeError) as e:
+            logger.warning(f"Unexpected result format: {e}")
+            return "Audiobookshelf"
 
     async def send_user_wishlist(self, discord_id: int, title: str, author: str, embed: list):
         """
