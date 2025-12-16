@@ -23,10 +23,18 @@ RUN set -ex \
 # Copy the rest of the application code
 COPY Scripts/ /ABSBOT
 
-# Health check
+# Expose web UI port
+EXPOSE 12359
+
+# Health check (now includes web UI check)
 HEALTHCHECK --interval=1m --timeout=10s --retries=1 \
   CMD python3 healthcheck.py || exit 1
 
-# Set the default command
-CMD ["python", "main.py"]
+# Environment variables for configuration
+ENV WEBUI_ENABLED=true
+ENV WEBUI_HOST=0.0.0.0
+ENV WEBUI_PORT=12359
+ENV BOT_ENABLED=true
 
+# Set the default command to use the launcher
+CMD ["python", "launcher.py"]

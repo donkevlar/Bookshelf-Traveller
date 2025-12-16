@@ -1019,7 +1019,7 @@ async def bookshelf_get_current_chapter(item_id: str, current_time=0):
 async def bookshelf_audio_obj(item_id: str, episode_index: int = 0):
     """
     Enhanced audio object function with proper podcast episode support
-    
+
     :param item_id: Book/Podcast item ID
     :param episode_index: Episode index for podcasts ONLY (0 = newest, 1 = second newest, etc.)
                          This parameter is IGNORED for books
@@ -1429,4 +1429,5 @@ async def main():
                 print("completed media items: ", media_progress_count)
 
 
-asyncio.run(main())
+if __name__ == '__main__':
+    asyncio.run(main())

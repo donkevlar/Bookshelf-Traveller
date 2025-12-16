@@ -1,8 +1,12 @@
 requests
-discord-py-interactions~=5.15.0
+discord-py-interactions
 python-dotenv~=1.0.1
 httpx
 json5
 aiosqlite>=0.17.0
 aiomysql>=0.2.0
 pytz
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+pydantic>=2.0.0
+watchdog>=3.0.0

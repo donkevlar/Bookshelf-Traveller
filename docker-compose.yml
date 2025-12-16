@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  bookshelf-traveller:
+    build: .
+    container_name: bookshelf-traveller
+    restart: unless-stopped
+    ports:
+      # Web UI port
+      - "8080:8080"
+    volumes:
+      # Persist database files
+      - ./data/db:/ABSBOT/db
+      # Mount .env file for configuration
+      - ./.env:/ABSBOT/.env
+    environment:
+      # Web UI settings
+      - WEBUI_ENABLED=true
+      - WEBUI_HOST=0.0.0.0
+      - WEBUI_PORT=8080
+      - BOT_ENABLED=true
+      
+      # You can set these here or in .env file
+      # - DISCORD_TOKEN=your_discord_token
+      # - bookshelfURL=https://your-abs-server.com
+      # - bookshelfToken=your_abs_token
+      
+    # Optional: healthcheck override
+    healthcheck:
+      test: ["CMD", "python3", "healthcheck.py"]
+      interval: 1m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Optional: MariaDB for multi-instance deployments
+  # mariadb:
+  #   image: mariadb:10.11
+  #   container_name: bookshelf-db
+  #   restart: unless-stopped
+  #   environment:
+  #     - MYSQL_ROOT_PASSWORD=your_root_password
+  #     - MYSQL_DATABASE=bookshelf
+  #     - MYSQL_USER=bookshelf
+  #     - MYSQL_PASSWORD=your_password
+  #   volumes:
+  #     - ./data/mariadb:/var/lib/mysql
+  #   ports:
+  #     - "3306:3306"
+
+networks:
+  default:
+    name: bookshelf-network
