@@ -35,8 +35,9 @@ def run_webui():
 
 def run_bot():
     """Run the Discord bot"""
-    # Import and run the main bot
-    import main
+    import runpy
+    # Run main.py as a script (executes __main__ block)
+    runpy.run_path('main.py', run_name='__main__')
 
 
 def main_launcher():
@@ -94,3 +95,4 @@ def main_launcher():
 
 if __name__ == "__main__":
     main_launcher()
+    

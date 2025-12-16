@@ -16,6 +16,7 @@ import settings
 from subscription_task import conn_test, initialize_task_database, close_task_database
 from wishlist import initialize_database as initialize_wishlist_database, close_database as close_wishlist_database
 from interactions.api.events import *
+from settings_watcher import SettingsWatcher, reload_bot_components
 
 # Pulls from bookshelf file
 load_dotenv()
@@ -84,6 +85,9 @@ else:
 # Bot basic setup
 bot = Client(intents=Intents.DEFAULT, logger=logger)
 
+# Settings watcher for auto-reload
+settings_watcher = None
+
 
 # Event listener
 @listen()
@@ -103,6 +107,14 @@ async def on_startup(event: Startup):
     except Exception as e:
         logger.error(f"Failed to initialize task database: {e}")
         raise
+
+    # Start settings watcher for auto-reload
+    global settings_watcher
+    env_file = os.path.join(os.path.dirname(__file__), ".env")
+    if not os.path.exists(env_file):
+        env_file = ".env"
+    settings_watcher = SettingsWatcher(env_file, reload_bot_components)
+    settings_watcher.start()
 
     # Startup Sequence
     print(f'Bot is ready. Logged in as {bot.user}')
@@ -156,6 +168,11 @@ async def on_disconnect(event):
         logger.info("Task database closed successfully")
     except Exception as e:
         logger.error(f"Error closing task database: {e}")
+
+    # Stop settings watcher
+    global settings_watcher
+    if settings_watcher:
+        settings_watcher.stop()
 
 
 # Main Loop

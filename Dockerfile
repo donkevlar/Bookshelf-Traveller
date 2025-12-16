@@ -24,7 +24,7 @@ RUN set -ex \
 COPY Scripts/ /ABSBOT
 
 # Expose web UI port
-EXPOSE 8080
+EXPOSE 12359
 
 # Health check (now includes web UI check)
 HEALTHCHECK --interval=1m --timeout=10s --retries=1 \
@@ -33,7 +33,7 @@ HEALTHCHECK --interval=1m --timeout=10s --retries=1 \
 # Environment variables for configuration
 ENV WEBUI_ENABLED=true
 ENV WEBUI_HOST=0.0.0.0
-ENV WEBUI_PORT=8080
+ENV WEBUI_PORT=12359
 ENV BOT_ENABLED=true
 
 # Set the default command to use the launcher
