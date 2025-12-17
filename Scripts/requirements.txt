@@ -1,5 +1,6 @@
 requests
-discord-py-interactions[voice]==5.16.0
+discord-py-interactions
+discord.py[voice]
 python-dotenv
 httpx
 json5
