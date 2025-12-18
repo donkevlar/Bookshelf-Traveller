@@ -135,6 +135,16 @@ LOGGING_CONFIG = {
             "level": "INFO",
             "propagate": False,
         },
+        "httpx": {
+            "handlers": ["console2"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "httpcore": {
+            "handlers": ["console2"],
+            "level": "WARNING",
+            "propagate": False,
+        },
     },
 }
 
