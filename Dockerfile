@@ -7,18 +7,19 @@ WORKDIR /ABSBOT
 # Copy requirements file
 COPY Scripts/requirements.txt /ABSBOT/requirements.txt
 
-# Install needed packages specified in requirements.txt
-RUN pip install discord.py-interactions[voice] \
-    && pip install --trusted-host pypi.python.org -r requirements.txt
-
-# Install dependencies (ffmpeg, libffi, etc.)
+# Install dependencies
 RUN set -ex \
     && apt-get update \
-    && apt-get install -y ffmpeg libffi-dev libnacl-dev \
-    && apt-get upgrade -y \
-    && apt-get autoremove -y \
-    && apt-get clean -y \
+    && apt-get install -y --no-install-recommends \
+        ffmpeg \
+        libffi-dev \
+        libnacl-dev \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+COPY Scripts/requirements.txt /ABSBOT/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 COPY Scripts/ /ABSBOT
