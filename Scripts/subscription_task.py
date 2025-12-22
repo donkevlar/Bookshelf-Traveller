@@ -845,7 +845,7 @@ class SubscriptionTask(Extension):
         """Extract server name from various result formats."""
         try:
             if isinstance(result, tuple) and len(result) > 1:
-                return result[1]
+                return result[3]
             elif isinstance(result, list) and len(result) > 0:
                 return result[0][1] if len(result[0]) > 1 else result[0][0]
             return "Audiobookshelf"
