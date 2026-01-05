@@ -814,44 +814,31 @@ class SubscriptionTask(Extension):
         self.previous_token = None
         self.bot.admin_token = None
 
-    async def get_server_name_db(self, discord_id: int = 0, task: str = 'new-book-check'):
-        """
-        Retrieve server nickname from database.
-
-        Args:
-            discord_id: Discord user ID
-            task: Task name to search for
-
-        Returns:
-            str: Server nickname (defaults to "Audiobookshelf" if not found)
-        """
-        # Set default first to ensure consistent state
+    async def get_server_name_db(self, discord_id: int, task: str = "new-book-check") -> str:
         server_name = os.getenv("DEFAULT_SERVER_NAME", "Audiobookshelf")
 
         try:
-            result = await search_task_db(discord_id=discord_id, task=task)
+            async with self.pool.acquire() as conn:
+                async with conn.cursor() as cursor:
+                    await cursor.execute(
+                        """
+                        SELECT server_name
+                        FROM tasks
+                        WHERE discord_id = %s AND task = %s
+                        """,
+                        (discord_id, task),
+                    )
 
-            if result:
-                server_name = self._extract_server_name(result)
+                    row = await cursor.fetchone()
+                    if row:
+                        server_name = row[0]
 
         except Exception as e:
             logger.error(f"Error retrieving server name: {e}")
 
-        logger.debug(f'Setting server nickname to {server_name}')
+        logger.debug(f"Setting server nickname to {server_name}")
         self.ServerNickName = server_name
         return server_name
-
-    def _extract_server_name(self, result) -> str:
-        """Extract server name from various result formats."""
-        try:
-            if isinstance(result, tuple) and len(result) > 1:
-                return result[3]
-            elif isinstance(result, list) and len(result) > 0:
-                return result[0][1] if len(result[0]) > 1 else result[0][0]
-            return "Audiobookshelf"
-        except (IndexError, TypeError) as e:
-            logger.warning(f"Unexpected result format: {e}")
-            return "Audiobookshelf"
 
     async def send_user_wishlist(self, discord_id: int, title: str, author: str, embed: list):
         """
