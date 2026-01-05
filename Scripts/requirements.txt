@@ -1,6 +1,6 @@
 requests
 discord-py-interactions[voice]==5.16.0rc3
-python-dotenv~=1.0.1
+python-dotenv
 httpx
 json5
 aiosqlite>=0.17.0
@@ -8,5 +8,5 @@ aiomysql>=0.2.0
 pytz
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
-pydantic>=2.0.0
-watchdog>=3.0.0
+pydantic
+watchdog
