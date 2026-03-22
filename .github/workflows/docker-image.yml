@@ -23,4 +23,5 @@ jobs:
         context: .
         push: true
         tags: donkevlar/bookshelf-traveller:latest, donkevlar/bookshelf-traveller:${{ github.run_number }}
+        platforms: linux/amd64,linux/arm64
 
