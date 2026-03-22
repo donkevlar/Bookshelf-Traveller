@@ -3,7 +3,6 @@ on:
     paths-ignore:
       - 'README.md' # Specify the path to your README file
       - '.github/' # Ignore github flows and templates
-  workflow_dispatch:
 
 jobs:
   login:
@@ -25,6 +24,6 @@ jobs:
       with:
         context: .
         push: true
-        tags: gucio321/bookshelf-traveller:latest, gucio321/bookshelf-traveller:${{ github.run_number }}
+        tags: donkevlar/bookshelf-traveller:latest, donkevlar/bookshelf-traveller:${{ github.run_number }}
         platforms: linux/amd64,linux/arm64
 
