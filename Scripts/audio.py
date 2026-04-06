@@ -3,7 +3,10 @@ import os
 
 import pytz
 from interactions import *
-from interactions.api.voice.audio import AudioVolume
+
+import discord
+from main import voice_adapter
+from voice_adapter import VoiceStateShim
 
 import bookshelfAPI as c
 import settings as s
@@ -66,7 +69,8 @@ class AudioPlayBack(Extension):
         self.repeat_enabled = False
         self.needs_restart = False
         # Audio Variables
-        self.audioObj = AudioVolume
+        self.audio_source = None          # discord.PCMVolumeTransformer
+        self.active_guild_id = None       # already exists, keep it
         self.context_voice_channel = None
         self.current_playback_time = 0
         self.audio_context = None
@@ -200,34 +204,19 @@ class AudioPlayBack(Extension):
             # Reset stream detection for each new session
             self.stream_started = False
 
-            # Build audio object
+            # Build discord.py audio object
             preserved_vol = self.volume if hasattr(self, 'volume') and self.volume is not None else 0.5
-            audio = AudioVolume(audio_obj)
-            audio.buffer_seconds = 3
-            audio.locked_stream = True
-            audio.ffmpeg_before_args = f"-re -ss {actual_start_time}"
-            audio.ffmpeg_args = f""
-            audio.bitrate = self.bitrate
-            audio._volume = preserved_vol
 
-            # Hook into the audio source to detect when streaming starts
-            original_read = audio.read
+            ffmpeg_audio = discord.FFmpegPCMAudio(
+                audio_obj,
+                before_options=f"-re -ss {actual_start_time}",
+                options=""
+            )
 
-            def stream_detecting_read(*args, **kwargs):
-                data = original_read(*args, **kwargs)
-                if data and not self.stream_started:
-                    self.stream_started = True
-                    logger.info("🎵 AUDIO STREAM DETECTED - FFmpeg is now providing data!")
-
-                    # Apply volume when stream actually starts
-                    logger.debug(f"🔧 Before backup: audio._volume = {audio._volume}")
-                    audio._volume = preserved_vol
-                    logger.debug(f"🔧 After backup: audio._volume = {audio._volume}")
-                    logger.debug(f"Applied volume backup: {preserved_vol}")
-
-                return data
-
-            audio.read = stream_detecting_read
+            audio = discord.PCMVolumeTransformer(
+                ffmpeg_audio,
+                volume=preserved_vol
+            )
 
             self.volume = preserved_vol
 
@@ -274,8 +263,13 @@ class AudioPlayBack(Extension):
 
         # Don't sync until FFmpeg is actually streaming
         if not self.stream_started:
-            logger.info("Waiting for FFmpeg to start streaming...")
-            return
+            vc = voice_adapter.voice_clients.get(self.active_guild_id)
+            if vc and vc.is_playing():
+                self.stream_started = True
+                logger.info("🎵 Playback confirmed (discord.py)")
+            else:
+                logger.info("Waiting for playback to begin...")
+                return
 
         logger.debug(f"Initializing Session Sync, current refresh rate set to: {updateFrequency} seconds")
         try:
@@ -464,7 +458,7 @@ class AudioPlayBack(Extension):
         # Stop voice playback if active
         try:
             if hasattr(self, 'audio_context') and self.audio_context and self.audio_context.voice_state:
-                await self.audio_context.voice_state.channel.voice_state.stop()
+                self.voice_state.stop()
                 logger.debug("Stopped voice playback")
         except Exception as e:
             logger.debug(f"Error stopping voice playback: {e}")
@@ -553,6 +547,7 @@ class AudioPlayBack(Extension):
             # Reset audio variables
             self.volume = 0.5
             self.audioObj = None
+            self.voice_state = None
 
             logger.debug("Reset all state variables")
         except Exception as e:
@@ -1171,11 +1166,23 @@ class AudioPlayBack(Extension):
             embed_message = self.modified_message(color=ctx.author.accent_color, chapter=display_chapter)
 
             # check if bot currently connected to voice
-            if not ctx.voice_state:
+            if not getattr(self, "voice_state", None):
                 # if we haven't already joined a voice channel
                 try:
                     # Connect to voice channel and start task
-                    await ctx.author.voice.channel.connect()
+                    guild_id = ctx.guild.id
+                    channel = ctx.author.voice.channel
+
+                    voice_adapter.connect(guild_id, channel.id)
+
+                    self.voice_state = VoiceStateShim(
+                        voice_adapter,
+                        guild_id,
+                        channel
+                    )
+
+                    self.active_guild_id = guild_id
+
                     self.session_update.start()
 
                     # Customize message based on media type and options
@@ -1209,6 +1216,9 @@ class AudioPlayBack(Extension):
 
                     logger.info(f"Beginning audio stream" + (" from the beginning" if startover else ""))
 
+                    if not voice_adapter.wait_connected(guild_id, timeout=10.0):
+                        raise RuntimeError("Timed out waiting for voice connection")
+
                     self.activeSessions += 1
 
                     # Set appropriate presence
@@ -1220,7 +1230,7 @@ class AudioPlayBack(Extension):
                                                                                    type=ActivityType.LISTENING))
 
                     # Start audio playback
-                    await ctx.voice_state.play(audio)
+                    await self.voice_state.play(audio)
 
                 except Exception as e:
                     # Stop Any Associated Tasks
@@ -1229,7 +1239,7 @@ class AudioPlayBack(Extension):
                     # Close ABS session
                     await c.bookshelf_close_session(sessionID)
                     # Cleanup discord interactions
-                    if ctx.voice_state:
+                    if getattr(self, "voice_state", None):
                         await ctx.author.voice.channel.disconnect()
                     if audio:
                         audio.cleanup()
@@ -1239,6 +1249,30 @@ class AudioPlayBack(Extension):
 
                     logger.error(f"Error starting playback: {e}")
                     await ctx.send(content=f"Error starting playback: {str(e)}")
+
+            else:
+                # voice_state already exists -> must still start playback
+                guild_id = ctx.guild.id
+                channel = ctx.author.voice.channel
+
+                voice_adapter.connect(guild_id, channel.id)
+                if not voice_adapter.wait_connected(guild_id, timeout=10.0):
+                    raise RuntimeError("Timed out waiting for voice connection")
+
+                self.voice_state = VoiceStateShim(voice_adapter, guild_id, channel)
+                self.active_guild_id = guild_id
+
+                if not self.session_update.running:
+                    self.session_update.start()
+
+                self.activeSessions += 1
+
+                await self.client.change_presence(activity=Activity.create(
+                    name=f"🎙️ {self.bookTitle}",
+                    type=ActivityType.LISTENING
+                ))
+
+                await self.voice_state.play(audio)
 
         except Exception as e:
             logger.error(f"Unhandled error in play_audio: {e}")
@@ -1266,10 +1300,10 @@ class AudioPlayBack(Extension):
     @slash_command(name="pause", description="pause audio", dm_permission=False)
     @check_session_control()
     async def pause_audio(self, ctx):
-        if ctx.voice_state:
+        if getattr(self, "voice_state", None):
             await ctx.send("Pausing Audio", ephemeral=True)
             logger.info(f"executing command /pause")
-            ctx.voice_state.pause()
+            self.voice_state.pause()
             logger.info("Pausing Audio")
             self.play_state = 'paused'
             # Stop Any Tasks Running and start autokill task
@@ -1283,12 +1317,12 @@ class AudioPlayBack(Extension):
     @slash_command(name="resume", description="resume audio", dm_permission=False)
     @check_session_control()
     async def resume_audio(self, ctx):
-        if ctx.voice_state:
+        if getattr(self, "voice_state", None):
             if self.sessionID != "":
                 await ctx.send("Resuming Audio", ephemeral=True)
                 logger.info(f"executing command /resume")
                 # Resume Audio Stream
-                ctx.voice_state.resume()
+                self.voice_state.resume()
                 logger.info("Resuming Audio")
                 # Stop auto kill session task and start session
                 if self.auto_kill_session.running:
@@ -1306,7 +1340,7 @@ class AudioPlayBack(Extension):
                   autocomplete=True, required=True)
     @check_session_control()
     async def change_chapter(self, ctx, option: str):
-        if not ctx.voice_state:
+        if not getattr(self, "voice_state", None):
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
             return
 
@@ -1355,7 +1389,7 @@ class AudioPlayBack(Extension):
 
         if self.found_next_chapter:
             await ctx.send(content=f"Moving to {operation_desc}: {self.newChapterTitle}", ephemeral=True)
-            await ctx.voice_state.play(self.audioObj)
+            await self.voice_state.play(self.audioObj)
         elif session_was_cleaned_up:
             # Book completed or restarted - this is success, not failure
             await ctx.send(content="📚 Book completed!", ephemeral=True)
@@ -1370,7 +1404,7 @@ class AudioPlayBack(Extension):
     @slash_option(name="volume", description="Must be between 1 and 100", required=False, opt_type=OptionType.INTEGER)
     @check_session_control()
     async def volume_adjuster(self, ctx, volume=-1):
-        if ctx.voice_state:
+        if getattr(self, "voice_state", None):
             audio = self.audioObj
 
             if volume == -1:
@@ -1391,7 +1425,7 @@ class AudioPlayBack(Extension):
                    dm_permission=False)
     @check_session_control()
     async def stop_audio(self, ctx: SlashContext):
-        if ctx.voice_state:
+        if getattr(self, "voice_state", None):
             logger.info(f"executing command /stop")
             await ctx.send(content="Stopping playback.", ephemeral=True)
             await self.cleanup_session("manual stop command")
@@ -1427,7 +1461,7 @@ class AudioPlayBack(Extension):
     @slash_command(name='refresh', description='re-sends your current playback card.')
     @check_session_control()
     async def refresh_play_card(self, ctx: SlashContext):
-        if ctx.voice_state:
+        if getattr(self, "voice_state", None):
             try:
                 current_chapter, chapter_array, bookFinished, isPodcast = await c.bookshelf_get_current_chapter(
                     self.bookItemID)
@@ -1444,7 +1478,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="toggle-series-autoplay", description="Toggle automatic series progression on/off")
     @check_session_control()
     async def toggle_series_autoplay(self, ctx: SlashContext):
-        if not ctx.voice_state or self.play_state == 'stopped':
+        if not self.voice_state or self.play_state == 'stopped':
             await ctx.send("No active playback session found.", ephemeral=True)
             return
 
@@ -1471,7 +1505,7 @@ class AudioPlayBack(Extension):
     @slash_command(name="toggle-podcast-autoplay", description="Toggle automatic podcast episode progression on/off")
     @check_session_control()
     async def toggle_podcast_autoplay(self, ctx: SlashContext):
-        if not ctx.voice_state or self.play_state == 'stopped':
+        if not self.voice_state or self.play_state == 'stopped':
             await ctx.send("No active playback session found.", ephemeral=True)
             return
 
@@ -1493,7 +1527,7 @@ class AudioPlayBack(Extension):
 
     @slash_command(name="series-info", description="Show information about the current series")
     async def series_info_command(self, ctx: SlashContext):
-        if not ctx.voice_state or self.play_state == 'stopped':
+        if not self.voice_state or self.play_state == 'stopped':
             await ctx.send("No active playback session found.", ephemeral=True)
             return
 
@@ -1558,12 +1592,12 @@ class AudioPlayBack(Extension):
         Creates a public (non-ephemeral) playbook card to invite others to join the listening session.
         Available to bot owner and the user who started the current playback session.
         """
-        if not ctx.voice_state or self.play_state == 'stopped':
+        if not self.voice_state or self.play_state == 'stopped':
             await ctx.send("No active playback session found. Start playing audio first.", ephemeral=True)
             return
 
         # Get current voice channel
-        voice_channel = ctx.voice_state.channel
+        voice_channel = self.voice_state.channel
         if not voice_channel:
             await ctx.send("Unable to determine current voice channel.", ephemeral=True)
             return
@@ -2502,12 +2536,12 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        if not ctx.voice_state:
+        if not getattr(self, "voice_state", None):
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
             return
 
         await ctx.defer(edit_origin=True)
-        ctx.voice_state.channel.voice_state.player.stop()
+        self.voice_state.stop()
 
         # Use the unified method for seeking
         result = await self.shared_seek(seek_amount, is_forward=is_forward)
@@ -2518,7 +2552,7 @@ class AudioPlayBack(Extension):
 
         # Update UI
         await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
-        await ctx.voice_state.channel.voice_state.play(self.audioObj)
+        await self.voice_state.play(self.audioObj)
 
     def _create_media_options(self, media_type="series"):
         """
@@ -2767,8 +2801,8 @@ class AudioPlayBack(Extension):
                         display_name = f"Episode {target_index + 1}: {target_name}"
 
             # Stop current playback
-            if ctx.voice_state and self.play_state == 'playing':
-                ctx.voice_state.channel.voice_state.player.stop()
+            if self.voice_state and self.play_state == 'playing':
+                self.voice_state.stop()
 
             # Move to selected media
             if media_type == "series":
@@ -2788,8 +2822,8 @@ class AudioPlayBack(Extension):
                 await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
 
                 # Start new playback
-                if ctx.voice_state:
-                    await ctx.voice_state.channel.voice_state.play(self.audioObj)
+                if getattr(self, "voice_state", None):
+                    await self.voice_state.play(self.audioObj)
 
                 logger.info(f"Successfully switched to {display_name}")
 
@@ -2810,10 +2844,10 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        if ctx.voice_state:
+        if getattr(self, "voice_state", None):
             logger.info('Pausing Playback!')
             self.play_state = 'paused'
-            ctx.voice_state.channel.voice_state.pause()
+            self.voice_state.pause()
             self.session_update.stop()
             logger.warning("Auto session kill task running... Checking for inactive session in 5 minutes!")
 
@@ -2827,10 +2861,10 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        if ctx.voice_state:
+        if getattr(self, "voice_state", None):
             logger.info('Resuming Playback!')
             self.play_state = 'playing'
-            ctx.voice_state.channel.voice_state.resume()
+            self.voice_state.resume()
             self.session_update.start()
 
             # Stop auto kill session task
@@ -2856,7 +2890,7 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        if ctx.voice_state:
+        if getattr(self, "voice_state", None):
             # Check if chapter data exists before attempting navigation
             if not self.currentChapter or not self.chapterArray:
                 logger.warning("No chapter data available for this book. Cannot navigate chapters.")
@@ -2868,7 +2902,7 @@ class AudioPlayBack(Extension):
             await ctx.defer(edit_origin=True)
 
             # Stop current playback
-            ctx.voice_state.channel.voice_state.player.stop()
+            self.voice_state.stop()
 
             # Check if we're on the last chapter before moving
             current_index = next((i for i, ch in enumerate(self.chapterArray)
@@ -2883,14 +2917,14 @@ class AudioPlayBack(Extension):
             if self.found_next_chapter:
                 # Normal successful navigation or restart
                 await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
-                await ctx.voice_state.channel.voice_state.play(self.audioObj)
+                await self.voice_state.play(self.audioObj)
             elif session_was_cleaned_up and is_last_chapter:
                 await ctx.edit_origin(content="📚 Book completed!")
             else:
                 await ctx.send(content="Failed to navigate to next chapter.", ephemeral=True)
                 # Restart playback since we stopped it
-                if ctx.voice_state and ctx.voice_state.channel:
-                    await ctx.voice_state.channel.voice_state.play(self.audioObj)
+                if self.voice_state and self.voice_state.channel:
+                    await self.voice_state.play(self.audioObj)
 
             # Reset variable
             self.found_next_chapter = False
@@ -2904,7 +2938,7 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        if ctx.voice_state:
+        if getattr(self, "voice_state", None):
             # Check if chapter data exists before attempting navigation
             if not self.currentChapter or not self.chapterArray:
                 await ctx.send(
@@ -2914,7 +2948,7 @@ class AudioPlayBack(Extension):
 
             await ctx.defer(edit_origin=True)
 
-            ctx.voice_state.channel.voice_state.player.stop()
+            self.voice_state.stop()
 
             # Find previous chapter
             await self.move_chapter(relative_move=-1)
@@ -2922,12 +2956,12 @@ class AudioPlayBack(Extension):
             # Check if move_chapter succeeded before proceeding
             if self.found_next_chapter:
                 await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
-                ctx.voice_state.channel.voice_state.player.stop()
-                await ctx.voice_state.channel.voice_state.play(self.audioObj)
+                self.voice_state.stop()
+                await self.voice_state.play(self.audioObj)
             else:
                 await ctx.send(content="Failed to navigate to previous chapter.", ephemeral=True)
-                if ctx.voice_state and ctx.voice_state.channel:
-                    await ctx.voice_state.channel.voice_state.play(self.audioObj)
+                if self.voice_state and self.voice_state.channel:
+                    await self.voice_state.play(self.audioObj)
 
             # Reset Variable
             self.found_next_chapter = False
@@ -2941,7 +2975,7 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        if ctx.voice_state:
+        if getattr(self, "voice_state", None):
             await ctx.edit_origin()
             await ctx.delete()
             await self.cleanup_session("manual stop button")
@@ -2952,7 +2986,7 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        if not ctx.voice_state:
+        if not getattr(self, "voice_state", None):
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
             return
 
@@ -2964,7 +2998,7 @@ class AudioPlayBack(Extension):
 
         # Stop current playback
         if self.play_state == 'playing':
-            ctx.voice_state.channel.voice_state.player.stop()
+            self.voice_state.stop()
 
         # Store current position before moving
         self.previousBookID = self.bookItemID
@@ -2975,7 +3009,7 @@ class AudioPlayBack(Extension):
 
         if success:
             await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
-            await ctx.voice_state.channel.voice_state.play(self.audioObj)
+            await self.voice_state.play(self.audioObj)
         else:
             await ctx.send(content="Failed to move to next book in series.", ephemeral=True)
 
@@ -2985,7 +3019,7 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        if not ctx.voice_state:
+        if not getattr(self, "voice_state", None):
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
             return
 
@@ -2997,7 +3031,7 @@ class AudioPlayBack(Extension):
 
         # Stop current playback
         if self.play_state == 'playing':
-            ctx.voice_state.channel.voice_state.player.stop()
+            self.voice_state.stop()
 
         # Move to previous book
         success = await self.move_to_series_book("previous")
@@ -3005,7 +3039,7 @@ class AudioPlayBack(Extension):
         if success:
             # Update UI
             await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
-            await ctx.voice_state.channel.voice_state.play(self.audioObj)
+            await self.voice_state.play(self.audioObj)
         else:
             await ctx.send(content="Failed to move to previous book in series.", ephemeral=True)
 
@@ -3024,7 +3058,7 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        if not ctx.voice_state:
+        if not getattr(self, "voice_state", None):
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
             return
 
@@ -3036,7 +3070,7 @@ class AudioPlayBack(Extension):
 
         # Stop current playback
         if self.play_state == 'playing':
-            ctx.voice_state.channel.voice_state.player.stop()
+            self.voice_state.stop()
 
         # Move to next episode
         success = await self.move_to_podcast_episode(relative_move=1)
@@ -3044,7 +3078,7 @@ class AudioPlayBack(Extension):
         if success:
             # Update UI
             await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
-            await ctx.voice_state.channel.voice_state.play(self.audioObj)
+            await self.voice_state.play(self.audioObj)
         else:
             await ctx.send(content="Failed to move to next episode.", ephemeral=True)
 
@@ -3054,7 +3088,7 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        if not ctx.voice_state:
+        if not getattr(self, "voice_state", None):
             await ctx.send(content="Bot or author isn't connected to channel, aborting.", ephemeral=True)
             return
 
@@ -3066,14 +3100,14 @@ class AudioPlayBack(Extension):
 
         # Stop current playback
         if self.play_state == 'playing':
-            ctx.voice_state.channel.voice_state.player.stop()
+            self.voice_state.stop()
 
         # Move to previous episode
         success = await self.move_to_podcast_episode(relative_move=-1)
 
         if success:
             await self.update_callback_embed(ctx, update_buttons=True, stop_auto_kill=True)
-            await ctx.voice_state.channel.voice_state.play(self.audioObj)
+            await self.voice_state.play(self.audioObj)
         else:
             await ctx.send(content="Failed to move to previous episode.", ephemeral=True)
 
@@ -3104,7 +3138,7 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        if ctx.voice_state and ctx.author.voice:
+        if self.voice_state and ctx.author.voice:
             adjustment = 0.1
             # Update Audio OBJ
             audio = self.audioObj
@@ -3122,7 +3156,7 @@ class AudioPlayBack(Extension):
             await ctx.send("You don't have permission to control this session.", ephemeral=True)
             return
 
-        if ctx.voice_state and ctx.author.voice:
+        if self.voice_state and ctx.author.voice:
             adjustment = 0.1
 
             audio = self.audioObj

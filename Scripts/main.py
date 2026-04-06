@@ -8,6 +8,8 @@ from datetime import datetime
 import pytz
 from dotenv import load_dotenv
 from interactions import *
+import discord
+from threading import Thread
 
 # File Imports
 import bookshelfAPI as c
@@ -33,6 +35,7 @@ MULTI_USER = settings.MULTI_USER
 DEBUG_MODE = settings.DEBUG_MODE
 INITIALIZED_MSG = settings.INITIALIZED_MSG
 EPHEMERAL_OUTPUT = settings.EPHEMERAL_OUTPUT
+VOICE_THREAD_STARTED = False
 
 # Timezone
 TIMEZONE = settings.TIMEZONE
@@ -88,6 +91,41 @@ bot = Client(intents=Intents.DEFAULT, logger=logger)
 # Settings watcher for auto-reload
 settings_watcher = None
 
+# Discord.py VOICE CLIENT
+
+voice_intents = discord.Intents.none()
+voice_intents.guilds = True
+voice_intents.voice_states = True
+
+voice_client = discord.Client(intents=voice_intents)
+
+VOICE_READY = False
+
+@voice_client.event
+async def on_ready():
+    global VOICE_READY
+    VOICE_READY = True
+    logger.info(f"[VOICE] discord.py voice client logged in as {voice_client.user}")
+
+VOICE_LOOP = None
+
+def start_voice_client():
+    if getattr(start_voice_client, "_started", False):
+        logger.debug("[VOICE] start_voice_client already called")
+        return
+    start_voice_client._started = True
+
+    global VOICE_LOOP
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    VOICE_LOOP = loop
+    loop.create_task(voice_client.start(token))
+    loop.run_forever()
+
+Thread(target=start_voice_client, daemon=True).start()
+
+from voice_adapter import VoiceAdapter
+voice_adapter = VoiceAdapter(voice_client)
 
 # Event listener
 @listen()

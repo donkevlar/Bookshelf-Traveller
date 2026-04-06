@@ -4,9 +4,6 @@ FROM python:3.14-slim-bookworm
 # Set the working directory inside the container
 WORKDIR /ABSBOT
 
-# Copy requirements file
-COPY Scripts/requirements.txt /ABSBOT/requirements.txt
-
 # Install dependencies
 RUN set -ex \
     && apt-get update \
