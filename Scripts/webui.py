@@ -29,12 +29,6 @@ if not os.path.exists(ENV_FILE):
     ENV_FILE = '.env'
 
 # Database configuration
-DB_TYPE = os.getenv('DB_TYPE', 'sqlite').lower()
-DB_HOST = os.getenv('DB_HOST', 'localhost')
-DB_PORT = int(os.getenv('DB_PORT', '3306'))
-DB_USER = os.getenv('DB_USER', 'root')
-DB_PASSWORD = os.getenv('DB_PASSWORD', '')
-DB_NAME = os.getenv('DB_NAME', 'bookshelf')
 DB_PATH = 'db/settings.db'
 
 # Global state
@@ -42,35 +36,8 @@ startup_time = datetime.now()
 db_instance = None
 
 
-# ============== Database Abstract Interface ==============
-class SettingsDBInterface(ABC):
-    @abstractmethod
-    async def connect(self):
-        pass
-
-    @abstractmethod
-    async def close(self):
-        pass
-
-    @abstractmethod
-    async def create_settings_table(self):
-        pass
-
-    @abstractmethod
-    async def get_setting(self, key: str) -> Optional[str]:
-        pass
-
-    @abstractmethod
-    async def set_setting(self, key: str, value: str) -> bool:
-        pass
-
-    @abstractmethod
-    async def get_all_settings(self) -> Dict[str, str]:
-        pass
-
-
 # ============== SQLite Implementation ==============
-class SQLiteSettingsDB(SettingsDBInterface):
+class SQLiteSettingsDB:
     def __init__(self, db_path: str):
         self.db_path = db_path
         self.conn = None
@@ -120,81 +87,9 @@ class SQLiteSettingsDB(SettingsDBInterface):
         return {row[0]: row[1] for row in rows}
 
 
-# ============== MariaDB Implementation ==============
-class MariaDBSettingsDB(SettingsDBInterface):
-    def __init__(self, host: str, port: int, user: str, password: str, database: str):
-        self.host = host
-        self.port = port
-        self.user = user
-        self.password = password
-        self.database = database
-        self.pool = None
-
-    async def connect(self):
-        import aiomysql
-        self.pool = await aiomysql.create_pool(
-            host=self.host,
-            port=self.port,
-            user=self.user,
-            password=self.password,
-            db=self.database,
-            autocommit=True
-        )
-        await self.create_settings_table()
-        logger.info(f"Connected to MariaDB settings database: {self.database}")
-
-    async def close(self):
-        if self.pool:
-            self.pool.close()
-            await self.pool.wait_closed()
-
-    async def create_settings_table(self):
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute('''
-                    CREATE TABLE IF NOT EXISTS settings (
-                        `key` VARCHAR(255) PRIMARY KEY,
-                        `value` TEXT NOT NULL
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-                ''')
-
-    async def get_setting(self, key: str) -> Optional[str]:
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    'SELECT value FROM settings WHERE `key` = %s', (key,)
-                )
-                row = await cursor.fetchone()
-                return row[0] if row else None
-
-    async def set_setting(self, key: str, value: str) -> bool:
-        try:
-            async with self.pool.acquire() as conn:
-                async with conn.cursor() as cursor:
-                    await cursor.execute(
-                        'INSERT INTO settings (`key`, `value`) VALUES (%s, %s) '
-                        'ON DUPLICATE KEY UPDATE `value` = %s',
-                        (key, value, value)
-                    )
-            return True
-        except Exception as e:
-            logger.error(f"Failed to set setting {key}: {e}")
-            return False
-
-    async def get_all_settings(self) -> Dict[str, str]:
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute('SELECT `key`, `value` FROM settings')
-                rows = await cursor.fetchall()
-                return {row[0]: row[1] for row in rows}
-
-
 # ============== Database Factory ==============
-def get_settings_db() -> SettingsDBInterface:
-    if DB_TYPE == 'mariadb':
-        return MariaDBSettingsDB(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME)
-    else:
-        return SQLiteSettingsDB(DB_PATH)
+def get_settings_db() -> SQLiteSettingsDB:
+    return SQLiteSettingsDB(DB_PATH)
 
 
 # ============== Settings Helper Functions ==============
@@ -243,11 +138,6 @@ class SettingsConfig(BaseModel):
 
 class DatabaseConfig(BaseModel):
     DB_TYPE: str = Field("sqlite")
-    DB_HOST: str = Field("localhost")
-    DB_PORT: int = Field(3306)
-    DB_USER: str = Field("root")
-    DB_PASSWORD: str = Field("")
-    DB_NAME: str = Field("bookshelf")
 
 
 class TestConnectionRequest(BaseModel):
@@ -288,12 +178,7 @@ def load_current_config() -> Dict[str, Any]:
             "EPHEMERAL_OUTPUT": get_env_bool("EPHEMERAL_OUTPUT", True),
         },
         "database": {
-            "DB_TYPE": get_env_value("DB_TYPE", "sqlite"),
-            "DB_HOST": get_env_value("DB_HOST", "localhost"),
-            "DB_PORT": int(get_env_value("DB_PORT", "3306")),
-            "DB_USER": get_env_value("DB_USER", "root"),
-            "DB_PASSWORD": get_env_value("DB_PASSWORD", ""),
-            "DB_NAME": get_env_value("DB_NAME", "bookshelf"),
+            "DB_TYPE": "sqlite",
         }
     }
 
@@ -787,43 +672,15 @@ def get_dashboard_html() -> str:
         <!-- Database Config -->
         <div class="card">
             <h2 class="card-title">Database</h2>
-            <form id="database-form">
-                <div class="form-group">
-                    <label class="form-label">Database Type</label>
-                    <select class="form-input" name="DB_TYPE" id="db-type-select">
-                        <option value="sqlite">SQLite (Recommended)</option>
-                        <option value="mariadb">MariaDB / MySQL</option>
-                    </select>
-                    <span class="form-help">SQLite is recommended for single-instance deployments</span>
-                </div>
-
-                <div id="mariadb-fields" style="display: none;">
-                    <div class="form-group">
-                        <label class="form-label">Host</label>
-                        <input type="text" class="form-input" name="DB_HOST" placeholder="localhost">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Port</label>
-                        <input type="number" class="form-input" name="DB_PORT" placeholder="3306">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Username</label>
-                        <input type="text" class="form-input" name="DB_USER" placeholder="root">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Password</label>
-                        <input type="password" class="form-input" name="DB_PASSWORD" placeholder="Database password">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Database Name</label>
-                        <input type="text" class="form-input" name="DB_NAME" placeholder="bookshelf">
-                    </div>
-                </div>
-
-                <div class="btn-group">
-                    <button type="submit" class="btn btn-primary">Save Database Settings</button>
-                </div>
-            </form>
+            <div class="form-group">
+                <label class="form-label">Database Engine</label>
+                <input type="text" class="form-input" value="SQLite (Native)" disabled>
+                <span class="form-help">Bookshelf Traveller uses SQLite for local database storage.</span>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Storage Directory</label>
+                <input type="text" class="form-input" value="db/*.db" disabled>
+            </div>
         </div>
 
         <!-- Actions -->
@@ -892,15 +749,6 @@ def get_dashboard_html() -> str:
                 settingsForm.FFMPEG_DEBUG.checked = config.settings?.FFMPEG_DEBUG ?? false;
                 settingsForm.EXPERIMENTAL.checked = config.settings?.EXPERIMENTAL ?? false;
                 settingsForm.INITIALIZED_MSG.checked = config.settings?.INITIALIZED_MSG ?? true;
-
-                const dbForm = document.getElementById('database-form');
-                dbForm.DB_TYPE.value = config.database?.DB_TYPE || 'sqlite';
-                dbForm.DB_HOST.value = config.database?.DB_HOST || 'localhost';
-                dbForm.DB_PORT.value = config.database?.DB_PORT || 3306;
-                dbForm.DB_USER.value = config.database?.DB_USER || 'root';
-                dbForm.DB_PASSWORD.value = config.database?.DB_PASSWORD || '';
-                dbForm.DB_NAME.value = config.database?.DB_NAME || 'bookshelf';
-                toggleMariaDBFields();
             } catch (e) {
                 showToast('Failed to load config', 'error');
             }
@@ -971,39 +819,6 @@ def get_dashboard_html() -> str:
                 showToast('Failed to save settings', 'error');
             }
         });
-
-        // Save database settings
-        document.getElementById('database-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const form = e.target;
-            try {
-                const response = await fetch('/api/config/database', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        DB_TYPE: form.DB_TYPE.value,
-                        DB_HOST: form.DB_HOST.value,
-                        DB_PORT: parseInt(form.DB_PORT.value) || 3306,
-                        DB_USER: form.DB_USER.value,
-                        DB_PASSWORD: form.DB_PASSWORD.value,
-                        DB_NAME: form.DB_NAME.value
-                    })
-                });
-                if (response.ok) showToast('Database settings saved (restart required)', 'success');
-                else throw new Error();
-            } catch (e) {
-                showToast('Failed to save database settings', 'error');
-            }
-        });
-
-        // Toggle MariaDB fields visibility
-        function toggleMariaDBFields() {
-            const dbType = document.getElementById('db-type-select').value;
-            const mariaFields = document.getElementById('mariadb-fields');
-            mariaFields.style.display = dbType === 'mariadb' ? 'block' : 'none';
-        }
-
-        document.getElementById('db-type-select').addEventListener('change', toggleMariaDBFields);
 
         // Test ABS connection
         document.getElementById('test-abs-btn').addEventListener('click', async () => {
@@ -1149,13 +964,8 @@ async def save_settings_config(config: SettingsConfig):
 async def save_database_config(config: DatabaseConfig):
     """Save database configuration to database"""
     try:
-        await save_setting("DB_TYPE", config.DB_TYPE)
-        await save_setting("DB_HOST", config.DB_HOST)
-        await save_setting("DB_PORT", str(config.DB_PORT))
-        await save_setting("DB_USER", config.DB_USER)
-        await save_setting("DB_PASSWORD", config.DB_PASSWORD)
-        await save_setting("DB_NAME", config.DB_NAME)
-        return {"success": True, "message": "Database configuration saved"}
+        await save_setting("DB_TYPE", "sqlite")
+        return {"success": True, "message": "Database configuration saved (SQLite active)"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

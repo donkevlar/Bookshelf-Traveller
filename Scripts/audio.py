@@ -457,7 +457,7 @@ class AudioPlayBack(Extension):
 
         # Stop voice playback if active
         try:
-            if hasattr(self, 'audio_context') and self.audio_context and self.audio_context.voice_state:
+            if getattr(self, "voice_state", None):
                 self.voice_state.stop()
                 logger.debug("Stopped voice playback")
         except Exception as e:
@@ -473,11 +473,16 @@ class AudioPlayBack(Extension):
 
         # Disconnect from voice channel
         try:
-            if hasattr(self, 'audio_context') and self.audio_context and self.audio_context.voice_state:
-                await self.audio_context.voice_state.channel.disconnect()
+            if getattr(self, "voice_state", None):
+                await self.voice_state.disconnect()
                 logger.debug("Disconnected from voice channel")
+            elif getattr(self, "active_guild_id", None):
+                voice_adapter.disconnect(self.active_guild_id)
+                logger.debug("Disconnected from voice channel via voice_adapter")
         except Exception as e:
             logger.debug(f"Error disconnecting from voice: {e}")
+
+        self.voice_state = None
 
         # Close ABS session and all sessions
         if hasattr(self, 'sessionID') and self.sessionID:
@@ -1425,7 +1430,8 @@ class AudioPlayBack(Extension):
                    dm_permission=False)
     @check_session_control()
     async def stop_audio(self, ctx: SlashContext):
-        if getattr(self, "voice_state", None):
+        guild_has_voice = ctx.guild and ctx.guild.id in voice_adapter.voice_clients
+        if getattr(self, "voice_state", None) or guild_has_voice:
             logger.info(f"executing command /stop")
             await ctx.send(content="Stopping playback.", ephemeral=True)
             await self.cleanup_session("manual stop command")

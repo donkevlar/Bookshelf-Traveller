@@ -33,21 +33,6 @@ services:
       retries: 3
       start_period: 30s
 
-  # Optional: MariaDB for multi-instance deployments
-  # mariadb:
-  #   image: mariadb:10.11
-  #   container_name: bookshelf-db
-  #   restart: unless-stopped
-  #   environment:
-  #     - MYSQL_ROOT_PASSWORD=your_root_password
-  #     - MYSQL_DATABASE=bookshelf
-  #     - MYSQL_USER=bookshelf
-  #     - MYSQL_PASSWORD=your_password
-  #   volumes:
-  #     - ./data/mariadb:/var/lib/mysql
-  #   ports:
-  #     - "3306:3306"
-
 networks:
   default:
     name: bookshelf-network

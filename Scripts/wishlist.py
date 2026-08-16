@@ -12,49 +12,8 @@ from settings import DEBUG_MODE, DEFAULT_PROVIDER, bookshelf_traveller_footer
 
 logger = logging.getLogger("bot")
 
-# Database configuration from environment variables
-DB_TYPE = os.getenv('DB_TYPE', 'sqlite').lower()  # 'sqlite' or 'mariadb'
-DB_HOST = os.getenv('DB_HOST', 'localhost')
-DB_PORT = int(os.getenv('DB_PORT', '3306'))
-DB_USER = os.getenv('DB_USER', 'root')
-DB_PASSWORD = os.getenv('DB_PASSWORD', '')
-DB_NAME = os.getenv('DB_NAME', 'bookshelf')
-
-
-# Abstract Database Interface
-class DatabaseInterface(ABC):
-    @abstractmethod
-    async def connect(self):
-        pass
-
-    @abstractmethod
-    async def close(self):
-        pass
-
-    @abstractmethod
-    async def create_wishlist_table(self):
-        pass
-
-    @abstractmethod
-    async def insert_wishlist_data(self, title: str, author: str, description: str, cover: str,
-                                   provider: str, provider_id: str, discord_id: int, data: str) -> bool:
-        pass
-
-    @abstractmethod
-    async def search_wishlist_db(self, discord_id: int = 0, title: str = "", provider_id: str = "") -> List[Tuple]:
-        pass
-
-    @abstractmethod
-    async def update_wishlist_db(self, discord_id: int, downloaded: int, title: str):
-        pass
-
-    @abstractmethod
-    async def search_all_wishlists(self) -> List[Tuple]:
-        pass
-
-
-# SQLite Implementation
-class SQLiteDatabase(DatabaseInterface):
+# SQLite Database Implementation
+class SQLiteDatabase:
     def __init__(self, db_path: str):
         self.db_path = db_path
         self.conn = None
@@ -140,120 +99,14 @@ FROM wishlist''')
         return rows
 
 
-# MariaDB Implementation
-class MariaDBDatabase(DatabaseInterface):
-    def __init__(self, host: str, port: int, user: str, password: str, database: str):
-        self.host = host
-        self.port = port
-        self.user = user
-        self.password = password
-        self.database = database
-        self.pool = None
-
-    async def connect(self):
-        import aiomysql
-        self.pool = await aiomysql.create_pool(
-            host=self.host,
-            port=self.port,
-            user=self.user,
-            password=self.password,
-            db=self.database,
-            autocommit=True
-        )
-        logger.info(f"Connected to MariaDB database: {self.database}")
-
-    async def close(self):
-        if self.pool:
-            self.pool.close()
-            await self.pool.wait_closed()
-
-    async def create_wishlist_table(self):
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute('''
-CREATE TABLE IF NOT EXISTS wishlist (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    title TEXT NOT NULL,
-    author TEXT NOT NULL,
-    description TEXT NOT NULL,
-    cover TEXT,
-    provider TEXT NOT NULL,
-    provider_id TEXT NOT NULL, 
-    discord_id BIGINT NOT NULL,
-    book_data LONGTEXT NOT NULL,
-    downloaded TINYINT NOT NULL DEFAULT 0,
-    UNIQUE KEY unique_title_author (title(255), author(255))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-                ''')
-
-    async def insert_wishlist_data(self, title: str, author: str, description: str, cover: str,
-                                   provider: str, provider_id: str, discord_id: int, data: str) -> bool:
-        try:
-            async with self.pool.acquire() as conn:
-                async with conn.cursor() as cursor:
-                    await cursor.execute('''
-INSERT INTO wishlist (title, author, description, cover, provider, provider_id, discord_id, book_data) 
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
-                                         (str(title), str(author), str(description), str(cover), str(provider),
-                                          str(provider_id), int(discord_id), str(data)))
-            logger.info(f"Inserted: {title} by author {author}")
-            return True
-        except Exception as e:
-            logger.warning(f"Failed to insert: {title}. Error: {e}")
-            return False
-
-    async def search_wishlist_db(self, discord_id: int = 0, title: str = "", provider_id: str = "") -> List[Tuple]:
-        logger.debug('Searching for books in wishlist db!')
-
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                if discord_id == 0 and title == "":
-                    await cursor.execute(
-                        '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data 
-                           FROM wishlist WHERE downloaded = 0''')
-                elif discord_id != 0 and title == "":
-                    logger.debug("Searching wishlist db using discord id!")
-                    await cursor.execute(
-                        '''SELECT title, author, description, cover, provider, provider_id, discord_id, book_data 
-                           FROM wishlist WHERE discord_id = %s AND downloaded = 0''', (discord_id,))
-                elif title != "" or provider_id != '':
-                    await cursor.execute(
-                        '''SELECT discord_id, book_data, title FROM wishlist 
-                           WHERE (title LIKE %s OR provider_id = %s) AND downloaded = 0''',
-                        (f'%{title}%', provider_id))
-
-                rows = await cursor.fetchall()
-                return rows
-
-    async def update_wishlist_db(self, discord_id: int, downloaded: int, title: str):
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute(
-                    '''UPDATE wishlist SET downloaded = %s WHERE title = %s AND discord_id = %s''',
-                    (downloaded, title, discord_id)
-                )
-
-    async def search_all_wishlists(self) -> List[Tuple]:
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cursor:
-                await cursor.execute('''
-SELECT title, author, description, cover, provider, provider_id, discord_id, book_data, downloaded 
-FROM wishlist''')
-                rows = await cursor.fetchall()
-                return rows
-
-
 # Database Factory
-def create_database() -> DatabaseInterface:
-    if DB_TYPE == 'mariadb':
-        return MariaDBDatabase(DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME)
-    else:
-        tasks_db_path = 'db/wishlist.db'
-        return SQLiteDatabase(tasks_db_path)
+def create_database() -> SQLiteDatabase:
+    tasks_db_path = 'db/wishlist.db'
+    return SQLiteDatabase(tasks_db_path)
 
 
 # Global database instance
-db: Optional[DatabaseInterface] = None
+db: Optional[SQLiteDatabase] = None
 
 
 async def initialize_database():
@@ -261,7 +114,7 @@ async def initialize_database():
     db = create_database()
     await db.connect()
     await db.create_wishlist_table()
-    logger.info(f"Initialized wishlist table using {DB_TYPE}")
+    logger.info("Initialized wishlist table using SQLite")
 
 
 async def close_database():
