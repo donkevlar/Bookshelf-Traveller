@@ -1,5 +1,10 @@
 /Scripts/books.csv
 /Scripts/.env
+.env
+.venv/
+__pycache__/
+*.pyc
+db/
 /user_info.db
 /db/tasks.db
 /db/user_info.db

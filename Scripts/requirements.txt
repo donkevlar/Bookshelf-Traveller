@@ -5,9 +5,9 @@ python-dotenv
 httpx
 json5
 aiosqlite>=0.17.0
-aiomysql>=0.2.0
 pytz
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
 pydantic
 watchdog
+
