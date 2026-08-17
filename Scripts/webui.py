@@ -846,16 +846,54 @@ def get_dashboard_html() -> str:
             }
         });
 
+        async function copyToClipboard(text) {
+            if (navigator.clipboard && window.isSecureContext) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                } catch (err) {
+                    console.warn('navigator.clipboard.writeText failed, trying fallback', err);
+                }
+            }
+            try {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.top = '0';
+                textArea.style.left = '0';
+                textArea.style.width = '2em';
+                textArea.style.height = '2em';
+                textArea.style.padding = '0';
+                textArea.style.border = 'none';
+                textArea.style.outline = 'none';
+                textArea.style.boxShadow = 'none';
+                textArea.style.background = 'transparent';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                return successful;
+            } catch (err) {
+                console.error('Fallback copy failed', err);
+                return false;
+            }
+        }
+
         // Copy invite link
-        document.getElementById('copy-invite-btn').addEventListener('click', () => {
-            const clientId = document.getElementById('discord-form').CLIENT_ID.value;
+        document.getElementById('copy-invite-btn').addEventListener('click', async () => {
+            const clientId = document.getElementById('discord-form').CLIENT_ID.value.trim();
             if (!clientId) {
                 showToast('Enter Client ID first', 'warning');
                 return;
             }
-            const link = 'https://discord.com/oauth2/authorize?client_id=' + clientId + '&permissions=277062405120&integration_type=0&scope=bot';
-            navigator.clipboard.writeText(link);
-            showToast('Invite link copied', 'success');
+            const link = 'https://discord.com/oauth2/authorize?client_id=' + encodeURIComponent(clientId) + '&permissions=277062405120&integration_type=0&scope=bot';
+            const copied = await copyToClipboard(link);
+            if (copied) {
+                showToast('Invite link copied', 'success');
+            } else {
+                prompt('Copy this invite link:', link);
+            }
         });
 
         // Refresh status
