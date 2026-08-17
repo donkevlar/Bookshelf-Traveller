@@ -758,7 +758,7 @@ class SubscriptionTask(Extension):
                 channel_id = int(result[1])
                 self.admin_token = result[3]
 
-                logger.info(f"Applying active admin token ({len(self.admin_token)} chars)")
+                logger.debug(f"Applying active admin token ({len(self.admin_token)} chars)")
                 os.environ["bookshelfToken"] = self.admin_token
 
                 # --- Fetch list of new books
@@ -831,6 +831,7 @@ class SubscriptionTask(Extension):
             os.environ["bookshelfToken"] = previous_token or ""
             self.previous_token = None
             self.admin_token = None
+            logger.debug(f"Restored previous bookshelfToken ({len(previous_token)} chars)" if previous_token else "Restored empty bookshelfToken")
 
             logger.info("Successfully completed new-book-check task!")
 
@@ -863,8 +864,7 @@ class SubscriptionTask(Extension):
                     channel_id = int(result[1])
                     logger.info(f'Channel ID: {channel_id}')
                     self.admin_token = result[3]
-                    masked = len(self.admin_token)
-                    logger.info(f"Appending Active Token! {masked}")
+                    logger.debug(f"Applying active admin token ({len(self.admin_token)} chars)")
                     os.environ['bookshelfToken'] = self.admin_token
 
                     # Fetch finished books
@@ -920,7 +920,7 @@ class SubscriptionTask(Extension):
                 # Reset Vars - moved outside the loop with None check
                 if self.previous_token is not None:
                     os.environ['bookshelfToken'] = self.previous_token
-                    logger.info(f'Returned Active Token to: {self.previous_token}')
+                    logger.debug(f'Restored previous bookshelfToken ({len(self.previous_token)} chars)')
                 else:
                     logger.warning("Previous token was None, skipping token restoration")
 
@@ -966,7 +966,7 @@ class SubscriptionTask(Extension):
                 operationSuccess = False
                 search_result = await search_task_db(ctx.author_id, task='new-book-check')
                 if search_result:
-                    print(search_result)
+                    logger.debug(f"Found active task setup for user {ctx.author_id}")
                     operationSuccess = True
 
                 if operationSuccess:
