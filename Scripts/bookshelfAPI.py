@@ -1396,6 +1396,226 @@ async def bookshelf_get_valid_books() -> list:
     return found_books
 
 
+def _extract_session_timestamp_ms(session: dict) -> int:
+    """Extract millisecond epoch timestamp from a session record."""
+    for field in ("createdAt", "startTime", "updatedAt", "date"):
+        val = session.get(field)
+        if val is not None:
+            if isinstance(val, (int, float)):
+                if val < 10000000000:
+                    return int(val * 1000)
+                return int(val)
+            elif isinstance(val, str):
+                try:
+                    if val.isdigit():
+                        ival = int(val)
+                        return ival * 1000 if ival < 10000000000 else ival
+                    dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+                    return int(dt.timestamp() * 1000)
+                except Exception:
+                    pass
+    return int(time.time() * 1000)
+
+
+def _calculate_streak(active_dates: list) -> int:
+    """Calculate maximum consecutive active days streak."""
+    if not active_dates:
+        return 0
+    sorted_unique_dates = sorted(set(active_dates))
+    max_streak = 1
+    current_streak = 1
+    for i in range(1, len(sorted_unique_dates)):
+        if (sorted_unique_dates[i] - sorted_unique_dates[i - 1]).days == 1:
+            current_streak += 1
+            if current_streak > max_streak:
+                max_streak = current_streak
+        else:
+            current_streak = 1
+    return max_streak
+
+
+async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int = None, max_pages: int = 10) -> dict:
+    """
+    Fetches and aggregates listening sessions from Audiobookshelf for an arbitrary date range.
+    :param start_time_ms: Start timestamp in milliseconds (inclusive).
+    :param end_time_ms: End timestamp in milliseconds (inclusive).
+    :param max_pages: Maximum pages of sessions to fetch.
+    :return: Dictionary containing aggregated listening statistics for the timeframe.
+    """
+    now_ms = int(time.time() * 1000)
+    if end_time_ms is None:
+        end_time_ms = now_ms
+    if start_time_ms is None:
+        # Default to past 30 days
+        start_time_ms = end_time_ms - (30 * 86400 * 1000)
+
+    all_sessions = []
+    items_per_page = 100
+    page = 0
+    has_more = True
+
+    while has_more and page < max_pages:
+        try:
+            endpoint = "/me/listening-sessions"
+            params = f"&itemsPerPage={items_per_page}&page={page}"
+            r = await bookshelf_conn(endpoint=endpoint, GET=True, params=params)
+            if r.status_code == 200:
+                data = r.json()
+                page_sessions = data.get("sessions", [])
+                if not page_sessions:
+                    break
+
+                for session in page_sessions:
+                    ts = _extract_session_timestamp_ms(session)
+                    # Stop paginating if sessions are strictly older than start window
+                    if ts < start_time_ms:
+                        has_more = False
+                    if start_time_ms <= ts <= end_time_ms:
+                        all_sessions.append((ts, session))
+
+                total_pages = data.get("numPages", 1)
+                page += 1
+                if page >= total_pages:
+                    break
+            else:
+                logger.warning(f"Failed to fetch listening sessions: status {r.status_code}")
+                break
+        except Exception as e:
+            logger.error(f"Error while fetching listening sessions: {e}")
+            break
+
+    # Fallback if /me/listening-sessions is empty/unavailable
+    if not all_sessions:
+        try:
+            r = await bookshelf_conn(endpoint="/me/listening-stats", GET=True)
+            if r.status_code == 200:
+                stats_data = r.json()
+                for session in stats_data.get("recentSessions", []):
+                    ts = _extract_session_timestamp_ms(session)
+                    if start_time_ms <= ts <= end_time_ms:
+                        all_sessions.append((ts, session))
+        except Exception as e:
+            logger.debug(f"Listening stats fallback encountered: {e}")
+
+    # Aggregate session data
+    total_listening_time = 0.0
+    book_stats = {}
+    author_stats = defaultdict(float)
+    genre_stats = defaultdict(float)
+    daily_activity = defaultdict(float)
+    active_dates = []
+
+    for ts, session in all_sessions:
+        duration = float(session.get("timeListening") or session.get("duration") or 0.0)
+        if duration <= 0:
+            continue
+
+        total_listening_time += duration
+
+        # Date tracking
+        session_dt = datetime.fromtimestamp(ts / 1000.0)
+        session_date = session_dt.date()
+        date_str = session_date.strftime("%Y-%m-%d")
+        daily_activity[date_str] += duration
+        active_dates.append(session_date)
+
+        # Metadata
+        item_id = session.get("libraryItemId") or session.get("bookId") or "unknown"
+        media_metadata = session.get("mediaMetadata") or {}
+        title = session.get("displayTitle") or media_metadata.get("title") or "Unknown Title"
+        author = session.get("displayAuthor") or media_metadata.get("author") or "Unknown Author"
+
+        # Genres
+        genres = media_metadata.get("genres") or []
+        if isinstance(genres, str):
+            genres = [g.strip() for g in genres.split(",") if g.strip()]
+        for g in genres:
+            genre_stats[g] += duration
+
+        # Authors
+        authors = media_metadata.get("authors") or [author]
+        if isinstance(authors, str):
+            authors = [a.strip() for a in authors.split(",") if a.strip()]
+        for a in authors:
+            if a:
+                author_stats[a] += duration
+
+        # Book map
+        if item_id not in book_stats:
+            book_stats[item_id] = {
+                "id": item_id,
+                "title": title,
+                "author": author,
+                "duration": 0.0,
+                "sessionCount": 0,
+                "coverPath": session.get("coverPath"),
+                "genres": genres
+            }
+        book_stats[item_id]["duration"] += duration
+        book_stats[item_id]["sessionCount"] += 1
+
+    # Top Books
+    top_books = sorted(book_stats.values(), key=lambda x: x["duration"], reverse=True)[:5]
+    for b in top_books:
+        b["formattedTime"] = time_converter(int(b["duration"]))
+
+    # Top Authors
+    top_authors = [
+        {"name": name, "duration": dur, "formattedTime": time_converter(int(dur))}
+        for name, dur in sorted(author_stats.items(), key=lambda x: x[1], reverse=True)[:5]
+    ]
+
+    # Top Genres
+    top_genres = [
+        {"name": name, "duration": dur, "formattedTime": time_converter(int(dur))}
+        for name, dur in sorted(genre_stats.items(), key=lambda x: x[1], reverse=True)[:5]
+    ]
+
+    # Most active day & streaks
+    top_day_str = None
+    top_day_duration = 0.0
+    for d_str, dur in daily_activity.items():
+        if dur > top_day_duration:
+            top_day_duration = dur
+            top_day_str = d_str
+
+    total_seconds = int(total_listening_time)
+    days = total_seconds // 86400
+    hours = (total_seconds % 86400) // 3600
+    minutes = (total_seconds % 3600) // 60
+    seconds = total_seconds % 60
+
+    return {
+        "timeframe": {
+            "start": start_time_ms,
+            "end": end_time_ms,
+            "startDate": datetime.fromtimestamp(start_time_ms / 1000.0).strftime("%Y-%m-%d"),
+            "endDate": datetime.fromtimestamp(end_time_ms / 1000.0).strftime("%Y-%m-%d")
+        },
+        "totalListeningTime": total_seconds,
+        "timeFormatted": {
+            "days": days,
+            "hours": hours,
+            "minutes": minutes,
+            "seconds": seconds,
+            "display": f"{days}d {hours}h {minutes}m" if days > 0 else f"{hours}h {minutes}m"
+        },
+        "totalSessions": len(all_sessions),
+        "uniqueBooksCount": len(book_stats),
+        "topBooks": top_books,
+        "topAuthors": top_authors,
+        "topGenres": top_genres,
+        "dailyActivity": dict(daily_activity),
+        "daysListened": len(set(active_dates)),
+        "streak": _calculate_streak(active_dates),
+        "topDay": {
+            "date": top_day_str,
+            "duration": int(top_day_duration),
+            "formattedTime": time_converter(int(top_day_duration)) if top_day_str else "00:00:00"
+        }
+    }
+
+
 # Test bookshelf api functions below
 async def main():
     if __name__ == '__main__':
