@@ -1472,21 +1472,65 @@ def get_dashboard_html() -> str:
             showToast('Recap image saved to downloads!', 'success');
         }
 
-        // Copy Canvas to Clipboard
+        // Copy Canvas to Clipboard (Supports HTTPS, localhost, and HTTP via multi-tier fallback)
         async function copyRecapCanvasImage() {
             const canvas = document.getElementById('recap-canvas');
-            try {
-                canvas.toBlob(async (blob) => {
-                    if (!blob) throw new Error('Blob conversion failed');
-                    await navigator.clipboard.write([
-                        new ClipboardItem({ 'image/png': blob })
-                    ]);
-                    showToast('Recap image copied to clipboard!', 'success');
-                });
-            } catch (err) {
-                console.error(err);
-                showToast('Clipboard copy not supported by your browser', 'warning');
+            if (!canvas) return;
+
+            // 1. Try modern Async Clipboard API if in Secure Context (HTTPS or localhost)
+            if (window.isSecureContext && navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+                try {
+                    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+                    if (blob) {
+                        await navigator.clipboard.write([
+                            new ClipboardItem({ 'image/png': blob })
+                        ]);
+                        showToast('Recap image copied to clipboard!', 'success');
+                        return;
+                    }
+                } catch (err) {
+                    console.warn('Async Clipboard write failed, falling back to selection/execCommand:', err);
+                }
             }
+
+            // 2. Fallback for HTTP / non-secure contexts: HTML image selection + document.execCommand('copy')
+            try {
+                const dataUrl = canvas.toDataURL('image/png');
+                const container = document.createElement('div');
+                container.contentEditable = 'true';
+                container.style.position = 'fixed';
+                container.style.left = '-9999px';
+                container.style.top = '0';
+                container.style.opacity = '0';
+
+                const img = document.createElement('img');
+                img.src = dataUrl;
+                container.appendChild(img);
+                document.body.appendChild(container);
+
+                container.focus();
+                const range = document.createRange();
+                range.selectNode(img);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+
+                const successful = document.execCommand('copy');
+                sel.removeAllRanges();
+                document.body.removeChild(container);
+
+                if (successful) {
+                    showToast('Recap image copied to clipboard!', 'success');
+                    return;
+                }
+            } catch (err) {
+                console.warn('execCommand copy failed:', err);
+            }
+
+            // 3. Fallback if direct image clipboard is restricted by browser policy on HTTP:
+            // Trigger automatic PNG download so the user gets the generated image immediately
+            downloadRecapPNG();
+            showToast('HTTP mode: Browsers restrict clipboard on insecure connections. Image downloaded instead!', 'info');
         }
 
         // Save server config
