@@ -335,10 +335,11 @@ class TestWebUIRecapEndpoints(unittest.TestCase):
             self.assertEqual(res.headers["content-type"], "image/jpeg")
             self.assertEqual(res.content, b"fake-jpeg-binary-data")
 
+    @patch("interactions.api.http.http_client.HTTPClient.get_channel", new_callable=AsyncMock)
     @patch("interactions.api.http.http_client.HTTPClient.get_current_bot_information", new_callable=AsyncMock)
     @patch("interactions.api.http.http_client.HTTPClient.login", new_callable=AsyncMock)
     @patch("interactions.api.http.http_client.HTTPClient.close", new_callable=AsyncMock)
-    def test_get_discord_recipients_endpoint(self, mock_close, mock_login, mock_bot_info):
+    def test_get_discord_recipients_endpoint(self, mock_close, mock_login, mock_bot_info, mock_get_channel):
         os.environ["DISCORD_TOKEN"] = "test_discord_token"
         mock_bot_info.return_value = {
             "id": "1111111111",
@@ -348,6 +349,7 @@ class TestWebUIRecapEndpoints(unittest.TestCase):
                 "global_name": "Bot Owner"
             }
         }
+        mock_get_channel.return_value = {"id": "123456", "name": "audiobook-chat"}
 
         with TestClient(app) as client:
             res = client.get("/api/discord/recipients")

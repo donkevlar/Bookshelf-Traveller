@@ -884,7 +884,7 @@ def get_dashboard_html() -> str:
                             </button>
                         </div>
                         <div class="canvas-toolbar-row">
-                            <button class="btn btn-primary" id="btn-send-owner" onclick="sendRecapToOwner()">
+                            <button class="btn btn-secondary" id="btn-send-owner" onclick="sendRecapToOwner()">
                                 👑 Send to Owner
                             </button>
                             <button class="btn btn-secondary" id="btn-send-user" onclick="openSendToUserModal()">
@@ -1937,7 +1937,13 @@ def get_dashboard_html() -> str:
                     const opt = document.createElement('option');
                     opt.value = ch.channel_id;
                     const serverName = ch.server_name ? ` (${ch.server_name})` : '';
-                    opt.textContent = `📢 Channel ${ch.channel_id}${serverName}`;
+                    let displayName;
+                    if (ch.channel_name) {
+                        displayName = ch.channel_name.startsWith('#') ? ch.channel_name : `#${ch.channel_name}`;
+                    } else {
+                        displayName = `Channel ${ch.channel_id}`;
+                    }
+                    opt.textContent = `📢 ${displayName}${serverName}`;
                     select.appendChild(opt);
                 });
             }
@@ -2382,38 +2388,11 @@ async def cover_proxy(item_id: str):
 @app.get("/api/discord/recipients")
 async def get_discord_recipients():
     """
-    Fetch bot owner info and enrolled users from the SQLite database.
+    Fetch bot owner info, enrolled users, and channels from the SQLite databases and Discord API.
     """
     token = os.getenv("DISCORD_TOKEN")
     owner_info = None
     bot_configured = False
-
-    if token:
-        client = HTTPClient()
-        try:
-            await client.login(token)
-            app_info = await client.get_current_bot_information()
-            bot_configured = True
-            if "owner" in app_info and app_info["owner"]:
-                owner_info = {
-                    "id": str(app_info["owner"].get("id")),
-                    "username": app_info["owner"].get("username", "Owner"),
-                    "display_name": app_info["owner"].get("global_name") or app_info["owner"].get("username", "Owner")
-                }
-            elif "team" in app_info and app_info["team"]:
-                owner_id = app_info["team"].get("owner_user_id")
-                owner_info = {
-                    "id": str(owner_id),
-                    "username": "Team Owner",
-                    "display_name": "Team Owner"
-                }
-        except Exception as e:
-            logger.warning(f"Could not fetch bot owner via HTTPClient: {e}")
-        finally:
-            try:
-                await client.close()
-            except Exception:
-                pass
 
     enrolled_users = []
     user_db_path = "db/user_info.db"
@@ -2440,10 +2419,46 @@ async def get_discord_recipients():
                     for row in rows:
                         channels.append({
                             "channel_id": str(row[0]),
-                            "server_name": str(row[1]) if row[1] else ""
+                            "server_name": str(row[1]) if row[1] else "",
+                            "channel_name": ""
                         })
         except Exception as e:
             logger.warning(f"Failed to fetch task channels from {tasks_db_path}: {e}")
+
+    if token:
+        client = HTTPClient()
+        try:
+            await client.login(token)
+            app_info = await client.get_current_bot_information()
+            bot_configured = True
+            if "owner" in app_info and app_info["owner"]:
+                owner_info = {
+                    "id": str(app_info["owner"].get("id")),
+                    "username": app_info["owner"].get("username", "Owner"),
+                    "display_name": app_info["owner"].get("global_name") or app_info["owner"].get("username", "Owner")
+                }
+            elif "team" in app_info and app_info["team"]:
+                owner_id = app_info["team"].get("owner_user_id")
+                owner_info = {
+                    "id": str(owner_id),
+                    "username": "Team Owner",
+                    "display_name": "Team Owner"
+                }
+
+            for ch in channels:
+                try:
+                    ch_data = await client.get_channel(int(ch["channel_id"]))
+                    if isinstance(ch_data, dict) and ch_data.get("name"):
+                        ch["channel_name"] = str(ch_data["name"])
+                except Exception as e:
+                    logger.debug(f"Could not fetch channel details for {ch['channel_id']}: {e}")
+        except Exception as e:
+            logger.warning(f"Could not fetch bot owner via HTTPClient: {e}")
+        finally:
+            try:
+                await client.close()
+            except Exception:
+                pass
 
     return {
         "bot_configured": bot_configured,
