@@ -285,6 +285,11 @@ class TestWebUIRecapEndpoints(unittest.TestCase):
             self.assertIn('id="recap-end"', html)
             self.assertIn('id="recap-format"', html)
             self.assertIn("downloadRecapPNG", html)
+            self.assertIn('id="btn-send-owner"', html)
+            self.assertIn('id="btn-send-user"', html)
+            self.assertIn('id="send-user-modal"', html)
+            self.assertIn("sendRecapToOwner", html)
+            self.assertIn("openSendToUserModal", html)
 
     @patch("bookshelfAPI.get_custom_listening_stats", new_callable=AsyncMock)
     def test_api_recap_endpoint(self, mock_get_stats):
@@ -326,6 +331,122 @@ class TestWebUIRecapEndpoints(unittest.TestCase):
             self.assertEqual(res.status_code, 200)
             self.assertEqual(res.headers["content-type"], "image/jpeg")
             self.assertEqual(res.content, b"fake-jpeg-binary-data")
+
+    @patch("interactions.api.http.http_client.HTTPClient.get_current_bot_information", new_callable=AsyncMock)
+    @patch("interactions.api.http.http_client.HTTPClient.login", new_callable=AsyncMock)
+    @patch("interactions.api.http.http_client.HTTPClient.close", new_callable=AsyncMock)
+    def test_get_discord_recipients_endpoint(self, mock_close, mock_login, mock_bot_info):
+        os.environ["DISCORD_TOKEN"] = "test_discord_token"
+        mock_bot_info.return_value = {
+            "id": "1111111111",
+            "owner": {
+                "id": "999888777",
+                "username": "BotOwnerGuy",
+                "global_name": "Bot Owner"
+            }
+        }
+
+        with TestClient(app) as client:
+            res = client.get("/api/discord/recipients")
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertTrue(data["bot_configured"])
+            self.assertIsNotNone(data["owner"])
+            self.assertEqual(data["owner"]["id"], "999888777")
+            self.assertEqual(data["owner"]["username"], "BotOwnerGuy")
+            self.assertIsInstance(data["enrolled_users"], list)
+
+    @patch("interactions.api.http.http_client.HTTPClient.create_message", new_callable=AsyncMock)
+    @patch("interactions.api.http.http_client.HTTPClient.create_dm", new_callable=AsyncMock)
+    @patch("interactions.api.http.http_client.HTTPClient.get_current_bot_information", new_callable=AsyncMock)
+    @patch("interactions.api.http.http_client.HTTPClient.login", new_callable=AsyncMock)
+    @patch("interactions.api.http.http_client.HTTPClient.close", new_callable=AsyncMock)
+    def test_send_recap_to_owner(self, mock_close, mock_login, mock_bot_info, mock_create_dm, mock_create_msg):
+        os.environ["DISCORD_TOKEN"] = "test_discord_token"
+        mock_bot_info.return_value = {
+            "id": "1111111111",
+            "owner": {
+                "id": "123456789",
+                "username": "SuperOwner"
+            }
+        }
+        mock_create_dm.return_value = {"id": "dm_channel_555"}
+        mock_create_msg.return_value = {"id": "sent_msg_999"}
+
+        payload = {
+            "image_base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            "target_type": "owner",
+            "start_date": "2025-01-01",
+            "end_date": "2025-01-31",
+            "stats_summary": {
+                "total_time": "12h 30m",
+                "streak": "5 days",
+                "top_day": "2025-01-15 (3h 0m)",
+                "top_book": "Oathbringer",
+                "top_author": "Brandon Sanderson"
+            },
+            "message": "Custom test note"
+        }
+
+        with TestClient(app) as client:
+            res = client.post("/api/send-recap", json=payload)
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertTrue(data["success"])
+            self.assertEqual(data["recipient_id"], "123456789")
+            self.assertEqual(data["message_id"], "sent_msg_999")
+
+            # Verify mock calls
+            mock_create_dm.assert_called_once_with(recipient_id="123456789")
+            mock_create_msg.assert_called_once()
+            call_kwargs = mock_create_msg.call_args.kwargs
+            self.assertEqual(call_kwargs["channel_id"], "dm_channel_555")
+            self.assertIn("embeds", call_kwargs["payload"])
+            embed_dict = call_kwargs["payload"]["embeds"][0]
+            self.assertEqual(embed_dict["title"], "📊 Dynamic Listening Recap")
+            self.assertEqual(embed_dict["image"]["url"], "attachment://listening-recap.png")
+            self.assertEqual(len(call_kwargs["files"]), 1)
+            self.assertEqual(call_kwargs["files"][0].file_name, "listening-recap.png")
+
+    @patch("interactions.api.http.http_client.HTTPClient.create_message", new_callable=AsyncMock)
+    @patch("interactions.api.http.http_client.HTTPClient.create_dm", new_callable=AsyncMock)
+    @patch("interactions.api.http.http_client.HTTPClient.login", new_callable=AsyncMock)
+    @patch("interactions.api.http.http_client.HTTPClient.close", new_callable=AsyncMock)
+    def test_send_recap_to_user(self, mock_close, mock_login, mock_create_dm, mock_create_msg):
+        os.environ["DISCORD_TOKEN"] = "test_discord_token"
+        mock_create_dm.return_value = {"id": "dm_channel_777"}
+        mock_create_msg.return_value = {"id": "sent_msg_888"}
+
+        payload = {
+            "image_base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            "target_type": "user",
+            "target_id": "987654321098765432",
+            "message": "Enjoy your listening recap!"
+        }
+
+        with TestClient(app) as client:
+            res = client.post("/api/send-recap", json=payload)
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertTrue(data["success"])
+            self.assertEqual(data["recipient_id"], "987654321098765432")
+            mock_create_dm.assert_called_once_with(recipient_id="987654321098765432")
+
+    def test_send_recap_missing_token_or_invalid_payload(self):
+        # Missing token
+        if "DISCORD_TOKEN" in os.environ:
+            del os.environ["DISCORD_TOKEN"]
+
+        with TestClient(app) as client:
+            res = client.post("/api/send-recap", json={"image_base64": "fake", "target_type": "owner"})
+            self.assertEqual(res.status_code, 400)
+            self.assertIn("DISCORD_TOKEN", res.json()["detail"])
+
+        os.environ["DISCORD_TOKEN"] = "fake_token"
+        with TestClient(app) as client:
+            # Invalid base64
+            res = client.post("/api/send-recap", json={"image_base64": "!!!not-valid-base64@@@", "target_type": "owner"})
+            self.assertEqual(res.status_code, 400)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,8 @@ A simple FastAPI-based management interface for the Discord bot
 """
 
 import os
+import io
+import base64
 import logging
 from datetime import datetime
 from typing import Optional, Dict, Any, List, Tuple
@@ -14,8 +16,13 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv, set_key
+import aiosqlite
+
+from interactions import File, Embed, FlatUIColors
+from interactions.api.http.http_client import HTTPClient
 
 import bookshelfAPI as c
+import settings as s
 
 # Logger Config
 logger = logging.getLogger("webui")
@@ -143,6 +150,17 @@ class DatabaseConfig(BaseModel):
 class TestConnectionRequest(BaseModel):
     url: str
     token: str
+
+
+class SendRecapRequest(BaseModel):
+    image_base64: str = Field(..., description="Base64 encoded PNG data of recap image")
+    target_type: str = Field("owner", description="'owner' or 'user'")
+    target_id: Optional[str] = Field(None, description="Discord User ID if target_type is user")
+    message: Optional[str] = Field(None, description="Optional custom caption/message")
+    start_date: Optional[str] = Field(None, description="Start date of listening period")
+    end_date: Optional[str] = Field(None, description="End date of listening period")
+    stats_summary: Optional[Dict[str, Any]] = Field(None, description="Summary stats dictionary")
+
 
 
 def get_env_value(key: str, default: str = "") -> str:
@@ -671,6 +689,90 @@ def get_dashboard_html() -> str:
             .btn-group, .canvas-toolbar { flex-direction: column; width: 100%; }
             .btn { width: 100%; }
         }
+
+        /* Modal Dialog Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 1rem;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+            overflow: hidden;
+            animation: slideInModal 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-title {
+            margin: 0;
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .modal-close-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            line-height: 1;
+            padding: 0;
+            transition: color 0.2s;
+        }
+
+        .modal-close-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border-color);
+            background: var(--bg-input);
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideInModal {
+            from { opacity: 0; transform: translateY(20px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
     </style>
 </head>
 <body>
@@ -770,6 +872,12 @@ def get_dashboard_html() -> str:
                         </button>
                         <button class="btn btn-secondary" id="btn-copy-canvas" onclick="copyRecapCanvasImage()">
                             📋 Copy Image to Clipboard
+                        </button>
+                        <button class="btn btn-primary" id="btn-send-owner" onclick="sendRecapToOwner()">
+                            👑 Send to Owner
+                        </button>
+                        <button class="btn btn-secondary" id="btn-send-user" onclick="openSendToUserModal()">
+                            📨 Send to User
                         </button>
                     </div>
                 </div>
@@ -941,6 +1049,38 @@ def get_dashboard_html() -> str:
                 </form>
             </div>
         </main>
+    </div>
+
+    <!-- Send to User / Discord Modal -->
+    <div id="send-user-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">📨 Send Recap via Discord</h3>
+                <button type="button" class="modal-close-btn" onclick="closeSendToUserModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="send-recipient-select">Select Enrolled Recipient</label>
+                    <select id="send-recipient-select" class="form-input" onchange="onRecipientSelectChange()">
+                        <option value="">Loading recipients...</option>
+                    </select>
+                </div>
+                <div class="form-group" id="custom-discord-id-group" style="display: none;">
+                    <label class="form-label" for="send-custom-discord-id">Custom Discord User ID</label>
+                    <input type="text" id="send-custom-discord-id" class="form-input" placeholder="e.g. 123456789012345678">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="send-custom-message">Optional Caption / Note</label>
+                    <input type="text" id="send-custom-message" class="form-input" value="Here is your Audiobookshelf listening recap! 🎧" placeholder="Add a custom note...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeSendToUserModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btn-submit-send-user" onclick="submitSendToUser()">
+                    🚀 Send via Discord
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- Toast Notifications -->
@@ -1533,6 +1673,202 @@ def get_dashboard_html() -> str:
             showToast('HTTP mode: Browsers restrict clipboard on insecure connections. Image downloaded instead!', 'info');
         }
 
+        // --- Discord Bot Send Functions ---
+        let cachedRecipients = null;
+
+        async function fetchRecipients() {
+            try {
+                const res = await fetch('/api/discord/recipients');
+                if (res.ok) {
+                    cachedRecipients = await res.json();
+                    return cachedRecipients;
+                }
+            } catch (e) {
+                console.warn('Failed to fetch Discord recipients:', e);
+            }
+            return { bot_configured: false, owner: null, enrolled_users: [] };
+        }
+
+        function getRecapSummaryData() {
+            return {
+                total_time: document.getElementById('metric-total-time')?.textContent || '',
+                streak: document.getElementById('metric-streak')?.textContent || '',
+                top_day: `${document.getElementById('metric-top-day')?.textContent || ''} (${document.getElementById('metric-top-day-time')?.textContent || ''})`,
+                top_book: currentRecapData?.topBooks?.[0]?.title || '',
+                top_author: currentRecapData?.topAuthors?.[0]?.name || ''
+            };
+        }
+
+        async function sendRecapToOwner() {
+            const canvas = document.getElementById('recap-canvas');
+            if (!canvas) {
+                showToast('Please generate a recap first.', 'error');
+                return;
+            }
+            const btn = document.getElementById('btn-send-owner');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Sending to Owner...';
+
+            try {
+                const image_base64 = canvas.toDataURL('image/png');
+                const start_date = document.getElementById('recap-start').value;
+                const end_date = document.getElementById('recap-end').value;
+                const stats_summary = getRecapSummaryData();
+
+                const res = await fetch('/api/send-recap', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_base64: image_base64,
+                        target_type: 'owner',
+                        start_date: start_date,
+                        end_date: end_date,
+                        stats_summary: stats_summary,
+                        message: 'Here is your Audiobookshelf listening recap! 🎧'
+                    })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showToast('👑 Recap successfully sent to bot owner via Discord DM!', 'success');
+                } else {
+                    showToast('Failed to send to owner: ' + (data.detail || data.message || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showToast('Error sending to owner: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
+        async function openSendToUserModal() {
+            const canvas = document.getElementById('recap-canvas');
+            if (!canvas) {
+                showToast('Please generate a recap first.', 'error');
+                return;
+            }
+            const modal = document.getElementById('send-user-modal');
+            const select = document.getElementById('send-recipient-select');
+            select.innerHTML = '<option value="">Loading recipients...</option>';
+            modal.style.display = 'flex';
+
+            const data = await fetchRecipients();
+            select.innerHTML = '';
+
+            if (data.owner && data.owner.id) {
+                const optOwner = document.createElement('option');
+                optOwner.value = `owner:${data.owner.id}`;
+                optOwner.textContent = `👑 Bot Owner (${data.owner.display_name || data.owner.username || data.owner.id})`;
+                select.appendChild(optOwner);
+            }
+
+            if (data.enrolled_users && data.enrolled_users.length > 0) {
+                const optGroup = document.createElement('optgroup');
+                optGroup.label = 'Enrolled ABS Users';
+                data.enrolled_users.forEach(u => {
+                    const opt = document.createElement('option');
+                    opt.value = `user:${u.discord_id}`;
+                    opt.textContent = `👤 ${u.username} (Discord ID: ${u.discord_id})`;
+                    optGroup.appendChild(opt);
+                });
+                select.appendChild(optGroup);
+            }
+
+            const optCustom = document.createElement('option');
+            optCustom.value = 'custom';
+            optCustom.textContent = '✏️ Custom Discord User ID...';
+            select.appendChild(optCustom);
+
+            onRecipientSelectChange();
+        }
+
+        function onRecipientSelectChange() {
+            const select = document.getElementById('send-recipient-select');
+            const customGroup = document.getElementById('custom-discord-id-group');
+            if (select.value === 'custom') {
+                customGroup.style.display = 'block';
+            } else {
+                customGroup.style.display = 'none';
+            }
+        }
+
+        function closeSendToUserModal() {
+            document.getElementById('send-user-modal').style.display = 'none';
+        }
+
+        async function submitSendToUser() {
+            const canvas = document.getElementById('recap-canvas');
+            const select = document.getElementById('send-recipient-select');
+            const customInput = document.getElementById('send-custom-discord-id');
+            const msgInput = document.getElementById('send-custom-message');
+            const btn = document.getElementById('btn-submit-send-user');
+
+            let targetType = 'user';
+            let targetId = '';
+
+            const val = select.value;
+            if (!val) {
+                showToast('Please select a recipient.', 'warning');
+                return;
+            }
+
+            if (val.startsWith('owner:')) {
+                targetType = 'owner';
+                targetId = val.split(':')[1];
+            } else if (val.startsWith('user:')) {
+                targetType = 'user';
+                targetId = val.split(':')[1];
+            } else if (val === 'custom') {
+                targetType = 'user';
+                targetId = customInput.value.trim();
+                if (!targetId) {
+                    showToast('Please enter a Discord User ID.', 'warning');
+                    return;
+                }
+            }
+
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Sending...';
+
+            try {
+                const image_base64 = canvas.toDataURL('image/png');
+                const start_date = document.getElementById('recap-start').value;
+                const end_date = document.getElementById('recap-end').value;
+                const stats_summary = getRecapSummaryData();
+                const custom_msg = msgInput.value.trim() || 'Here is your Audiobookshelf listening recap! 🎧';
+
+                const res = await fetch('/api/send-recap', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_base64: image_base64,
+                        target_type: targetType,
+                        target_id: targetId,
+                        start_date: start_date,
+                        end_date: end_date,
+                        stats_summary: stats_summary,
+                        message: custom_msg
+                    })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showToast('📨 Recap sent successfully via Discord!', 'success');
+                    closeSendToUserModal();
+                } else {
+                    showToast('Failed to send: ' + (data.detail || data.message || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showToast('Error sending recap: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
         // Save server config
         document.getElementById('server-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -1881,6 +2217,158 @@ async def cover_proxy(item_id: str):
     except Exception as e:
         logger.error(f"Failed to proxy cover for {item_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/discord/recipients")
+async def get_discord_recipients():
+    """
+    Fetch bot owner info and enrolled users from the SQLite database.
+    """
+    token = os.getenv("DISCORD_TOKEN")
+    owner_info = None
+    bot_configured = False
+
+    if token:
+        client = HTTPClient()
+        try:
+            await client.login(token)
+            app_info = await client.get_current_bot_information()
+            bot_configured = True
+            if "owner" in app_info and app_info["owner"]:
+                owner_info = {
+                    "id": str(app_info["owner"].get("id")),
+                    "username": app_info["owner"].get("username", "Owner"),
+                    "display_name": app_info["owner"].get("global_name") or app_info["owner"].get("username", "Owner")
+                }
+            elif "team" in app_info and app_info["team"]:
+                owner_id = app_info["team"].get("owner_user_id")
+                owner_info = {
+                    "id": str(owner_id),
+                    "username": "Team Owner",
+                    "display_name": "Team Owner"
+                }
+        except Exception as e:
+            logger.warning(f"Could not fetch bot owner via HTTPClient: {e}")
+        finally:
+            try:
+                await client.close()
+            except Exception:
+                pass
+
+    enrolled_users = []
+    user_db_path = "db/user_info.db"
+    if os.path.exists(user_db_path):
+        try:
+            async with aiosqlite.connect(user_db_path) as db:
+                async with db.execute("SELECT user, discord_id FROM users") as cursor:
+                    rows = await cursor.fetchall()
+                    for row in rows:
+                        enrolled_users.append({
+                            "username": row[0],
+                            "discord_id": str(row[1])
+                        })
+        except Exception as e:
+            logger.warning(f"Failed to fetch enrolled users from {user_db_path}: {e}")
+
+    return {
+        "bot_configured": bot_configured,
+        "owner": owner_info,
+        "enrolled_users": enrolled_users
+    }
+
+
+@app.post("/api/send-recap")
+async def send_recap(req: SendRecapRequest):
+    """
+    Send the dynamic listening recap image wrapped in an interactions.Embed to the bot owner or enrolled user.
+    """
+    token = os.getenv("DISCORD_TOKEN")
+    if not token:
+        raise HTTPException(status_code=400, detail="DISCORD_TOKEN is not configured in settings/env.")
+
+    # Decode base64 image data
+    try:
+        raw_b64 = req.image_base64
+        if "," in raw_b64:
+            raw_b64 = raw_b64.split(",", 1)[1]
+        img_bytes = base64.b64decode(raw_b64)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Invalid base64 image data: {e}")
+
+    client = HTTPClient()
+    try:
+        await client.login(token)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to authenticate bot token: {e}")
+
+    try:
+        target_discord_id = None
+        if req.target_type == "owner":
+            try:
+                app_info = await client.get_current_bot_information()
+                if "owner" in app_info and app_info["owner"]:
+                    target_discord_id = str(app_info["owner"]["id"])
+                elif "team" in app_info and app_info["team"]:
+                    target_discord_id = str(app_info["team"].get("owner_user_id"))
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Failed to fetch bot owner: {e}")
+        else:
+            target_discord_id = req.target_id
+
+        if not target_discord_id:
+            raise HTTPException(status_code=400, detail="Target Discord User ID could not be determined.")
+
+        # Build Rich Embed styled with interactions.Embed
+        timeframe_str = f"({req.start_date or 'Start'} to {req.end_date or 'Now'})"
+        embed = Embed(
+            title="📊 Dynamic Listening Recap",
+            description=f"Audiobookshelf Listening Summary {timeframe_str}",
+            color=FlatUIColors.TURQUOISE
+        )
+
+        if req.stats_summary:
+            if req.stats_summary.get("total_time"):
+                embed.add_field(name="Total Listening Time", value=str(req.stats_summary["total_time"]), inline=True)
+            if req.stats_summary.get("streak"):
+                embed.add_field(name="Streak", value=f"🔥 {req.stats_summary['streak']}", inline=True)
+            if req.stats_summary.get("top_day"):
+                embed.add_field(name="Peak Day", value=str(req.stats_summary["top_day"]), inline=True)
+            if req.stats_summary.get("top_book"):
+                embed.add_field(name="Top Audiobook", value=str(req.stats_summary["top_book"]), inline=False)
+            if req.stats_summary.get("top_author"):
+                embed.add_field(name="Top Author", value=str(req.stats_summary["top_author"]), inline=False)
+
+        embed.set_image(url="attachment://listening-recap.png")
+        footer_text = getattr(s, "bookshelf_traveller_footer", "Powered by Bookshelf Traveller 🕮")
+        embed.footer = f"{footer_text} | Dynamic Recap"
+
+        file_obj = File(file=io.BytesIO(img_bytes), file_name="listening-recap.png")
+        content_msg = req.message or "Here is your Audiobookshelf listening recap! 🎧"
+
+        dm_channel = await client.create_dm(recipient_id=target_discord_id)
+        channel_id = dm_channel["id"]
+        payload = {
+            "content": content_msg,
+            "embeds": [embed.to_dict()]
+        }
+        sent_msg = await client.create_message(payload=payload, channel_id=channel_id, files=[file_obj])
+
+        return {
+            "success": True,
+            "recipient_id": target_discord_id,
+            "message_id": sent_msg.get("id") if isinstance(sent_msg, dict) else None,
+            "message": "Recap successfully sent via Discord!"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to send DM to {target_discord_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to send Discord message: {e}")
+    finally:
+        try:
+            await client.close()
+        except Exception:
+            pass
 
 
 def run_webui(host: str = "0.0.0.0", port: int = 8080):
