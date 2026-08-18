@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 # Version Info
-versionNumber = 'V1.4.2b '
+versionNumber = 'V1.4.2b'
 
 COMMAND_COUNT = 0
 
@@ -96,7 +96,7 @@ bookshelf_startup_msg = f'''
     |-----------------------------------------------------------|
     |        Discover your next literary adventure!             |
     |                                                           |
-    |        Version: {versionNumber}                                   |
+    |        Version: {versionNumber.strip():<42}|
     |        Author: DonKevlar                                  |
     |-----------------------------------------------------------|
     =============================================================
