@@ -210,6 +210,54 @@ class TestListeningRecapLogic(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(stats["topAuthors"][0]["name"], "Frank Herbert")
 
     @patch("bookshelfAPI.bookshelf_conn")
+    async def test_get_custom_listening_stats_with_dict_metadata(self, mock_conn):
+        # Audiobookshelf often provides authors and genres as lists of objects/dicts
+        base_time = int(datetime(2025, 2, 1, 12, 0, 0).timestamp() * 1000)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "total": 1,
+            "numPages": 1,
+            "page": 0,
+            "sessions": [
+                {
+                    "id": "session-nested-1",
+                    "libraryItemId": {"id": "book-dict-1"},
+                    "displayTitle": "Words of Radiance",
+                    "timeListening": 5400.0,
+                    "startedAt": base_time,
+                    "mediaMetadata": {
+                        "title": {"title": "Words of Radiance"},
+                        "authors": [
+                            {"id": "auth-1", "name": "Brandon Sanderson"},
+                            {"name": "Michael Whelan"}
+                        ],
+                        "genres": [
+                            {"id": "genre-1", "name": "Fantasy"},
+                            {"name": "High Fantasy"}
+                        ]
+                    }
+                }
+            ]
+        }
+        mock_conn.return_value = mock_resp
+
+        start_ms = int(datetime(2025, 2, 1).timestamp() * 1000)
+        end_ms = int(datetime(2025, 2, 28).timestamp() * 1000)
+
+        stats = await c.get_custom_listening_stats(start_time_ms=start_ms, end_time_ms=end_ms)
+        self.assertEqual(stats["totalListeningTime"], 5400)
+        self.assertEqual(stats["uniqueBooksCount"], 1)
+        self.assertEqual(stats["topBooks"][0]["title"], "Words of Radiance")
+        author_names = [a["name"] for a in stats["topAuthors"]]
+        self.assertIn("Brandon Sanderson", author_names)
+        self.assertIn("Michael Whelan", author_names)
+        genre_names = [g["name"] for g in stats["topGenres"]]
+        self.assertIn("Fantasy", genre_names)
+        self.assertIn("High Fantasy", genre_names)
+
+    @patch("bookshelfAPI.bookshelf_conn")
     async def test_get_custom_listening_stats_empty(self, mock_conn):
         mock_resp = MagicMock()
         mock_resp.status_code = 200

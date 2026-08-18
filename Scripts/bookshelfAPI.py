@@ -1450,6 +1450,34 @@ def _extract_session_timestamp_ms(session: dict) -> int:
     return int(time.time() * 1000)
 
 
+def _extract_str(val, default="") -> str:
+    """Safely extracts a string from a string, dict, or object."""
+    if isinstance(val, str):
+        return val.strip()
+    if isinstance(val, dict):
+        return str(val.get("name") or val.get("title") or val.get("id") or val.get("value") or default).strip()
+    if val is not None:
+        return str(val).strip()
+    return default
+
+
+def _extract_str_list(val) -> list:
+    """Safely extracts a list of strings from a string, list of strings/dicts, or dict."""
+    result = []
+    if isinstance(val, str):
+        result = [s.strip() for s in val.split(",") if s.strip()]
+    elif isinstance(val, (list, tuple, set)):
+        for item in val:
+            s = _extract_str(item)
+            if s:
+                result.append(s)
+    elif isinstance(val, dict):
+        s = _extract_str(val)
+        if s:
+            result.append(s)
+    return result
+
+
 def _calculate_streak(active_dates: list) -> int:
     """Calculate maximum consecutive active days streak."""
     if not active_dates:
@@ -1575,26 +1603,26 @@ async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int
         active_dates.append(session_date)
 
         # Metadata
-        item_id = session.get("libraryItemId") or session.get("bookId") or session.get("itemId") or "unknown"
+        item_id = _extract_str(session.get("libraryItemId") or session.get("bookId") or session.get("itemId") or session.get("id"), "unknown")
         media_metadata = session.get("mediaMetadata") or session.get("metadata") or {}
-        title = session.get("displayTitle") or media_metadata.get("title") or "Unknown Title"
-        author = session.get("displayAuthor") or media_metadata.get("author") or media_metadata.get("authorName") or "Unknown Author"
+        if not isinstance(media_metadata, dict):
+            media_metadata = {}
+
+        title = _extract_str(session.get("displayTitle") or media_metadata.get("title") or media_metadata.get("name"), "Unknown Title")
+        author = _extract_str(session.get("displayAuthor") or media_metadata.get("author") or media_metadata.get("authorName"), "Unknown Author")
 
         # Genres
-        genres = media_metadata.get("genres") or []
-        if isinstance(genres, str):
-            genres = [g.strip() for g in genres.split(",") if g.strip()]
+        genres = _extract_str_list(media_metadata.get("genres") or session.get("genres"))
         for g in genres:
-            genre_stats[g] += duration
+            if g:
+                genre_stats[g] += duration
 
         # Authors
-        authors = media_metadata.get("authors") or [author]
-        if isinstance(authors, str):
-            authors = [a.strip() for a in authors.split(",") if a.strip()]
+        authors = _extract_str_list(media_metadata.get("authors") or session.get("authors"))
+        if not authors and author and author != "Unknown Author":
+            authors = [author]
         for a in authors:
             if a and a != "Unknown Author":
-                author_stats[a] += duration
-            elif a:
                 author_stats[a] += duration
 
         # Book map
@@ -1605,7 +1633,7 @@ async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int
                 "author": author,
                 "duration": 0.0,
                 "sessionCount": 0,
-                "coverPath": session.get("coverPath"),
+                "coverPath": _extract_str(session.get("coverPath")),
                 "genres": genres
             }
         book_stats[item_id]["duration"] += duration
@@ -1649,10 +1677,16 @@ async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int
                         ts = _extract_session_timestamp_ms(session)
                         duration = float(session.get("timeListening") or session.get("duration") or 0.0)
                         if start_time_ms <= ts <= end_time_ms and duration > 0:
-                            item_id = session.get("libraryItemId") or session.get("bookId") or "unknown"
-                            media_metadata = session.get("mediaMetadata") or {}
-                            title = session.get("displayTitle") or media_metadata.get("title") or "Unknown Title"
-                            author = session.get("displayAuthor") or media_metadata.get("author") or "Unknown Author"
+                            item_id = _extract_str(session.get("libraryItemId") or session.get("bookId") or session.get("itemId") or session.get("id"), "unknown")
+                            media_metadata = session.get("mediaMetadata") or session.get("metadata") or {}
+                            if not isinstance(media_metadata, dict):
+                                media_metadata = {}
+                            title = _extract_str(session.get("displayTitle") or media_metadata.get("title") or media_metadata.get("name"), "Unknown Title")
+                            author = _extract_str(session.get("displayAuthor") or media_metadata.get("author") or media_metadata.get("authorName"), "Unknown Author")
+                            genres = _extract_str_list(media_metadata.get("genres") or session.get("genres"))
+                            authors = _extract_str_list(media_metadata.get("authors") or session.get("authors"))
+                            if not authors and author and author != "Unknown Author":
+                                authors = [author]
 
                             if item_id not in book_stats:
                                 book_stats[item_id] = {
@@ -1661,26 +1695,34 @@ async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int
                                     "author": author,
                                     "duration": 0.0,
                                     "sessionCount": 0,
-                                    "coverPath": session.get("coverPath"),
-                                    "genres": []
+                                    "coverPath": _extract_str(session.get("coverPath")),
+                                    "genres": genres
                                 }
                             book_stats[item_id]["duration"] += duration
                             book_stats[item_id]["sessionCount"] += 1
-                            if author and author != "Unknown Author":
-                                author_stats[author] += duration
+                            for a in authors:
+                                if a and a != "Unknown Author":
+                                    author_stats[a] += duration
+                            for g in genres:
+                                if g:
+                                    genre_stats[g] += duration
 
                     # 3. Parse items in listening-stats if book_stats is still empty
                     items_map = stats_data.get("items", {})
                     if not book_stats and isinstance(items_map, dict):
-                        for item_id, item_val in items_map.items():
+                        for raw_item_id, item_val in items_map.items():
                             if isinstance(item_val, dict):
+                                item_id = _extract_str(raw_item_id)
                                 dur = float(item_val.get("timeListening") or item_val.get("duration") or 0.0)
                                 meta = item_val.get("mediaMetadata") or item_val.get("metadata") or {}
-                                title = meta.get("title") or item_val.get("title") or "Unknown Title"
-                                author = meta.get("author") or meta.get("authorName") or item_val.get("author") or "Unknown Author"
-                                genres = meta.get("genres") or []
-                                if isinstance(genres, str):
-                                    genres = [g.strip() for g in genres.split(",") if g.strip()]
+                                if not isinstance(meta, dict):
+                                    meta = {}
+                                title = _extract_str(meta.get("title") or item_val.get("title") or meta.get("name"), "Unknown Title")
+                                author = _extract_str(meta.get("author") or meta.get("authorName") or item_val.get("author"), "Unknown Author")
+                                genres = _extract_str_list(meta.get("genres") or item_val.get("genres"))
+                                authors = _extract_str_list(meta.get("authors") or item_val.get("authors"))
+                                if not authors and author and author != "Unknown Author":
+                                    authors = [author]
                                 if dur > 0:
                                     book_stats[item_id] = {
                                         "id": item_id,
@@ -1691,10 +1733,12 @@ async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int
                                         "coverPath": None,
                                         "genres": genres
                                     }
-                                    if author:
-                                        author_stats[author] += dur
+                                    for a in authors:
+                                        if a and a != "Unknown Author":
+                                            author_stats[a] += dur
                                     for g in genres:
-                                        genre_stats[g] += dur
+                                        if g:
+                                            genre_stats[g] += dur
 
                     if total_listening_time > 0 or book_stats:
                         break
