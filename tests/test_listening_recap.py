@@ -14,19 +14,33 @@ from webui import app, _parse_date_to_ms
 class TestListeningRecapLogic(unittest.IsolatedAsyncioTestCase):
 
     def test_extract_session_timestamp_ms(self):
-        # 1. Millisecond integer
-        s1 = {"createdAt": 1700000000000}
+        # 1. startedAt in milliseconds (standard Audiobookshelf session timestamp)
+        s1 = {"startedAt": 1700000000000}
         self.assertEqual(c._extract_session_timestamp_ms(s1), 1700000000000)
 
-        # 2. Second timestamp (< 10000000000)
-        s2 = {"startTime": 1700000000}
+        # 2. startedAt in seconds (< 10000000000)
+        s2 = {"startedAt": 1700000000}
         self.assertEqual(c._extract_session_timestamp_ms(s2), 1700000000000)
 
-        # 3. ISO Date String
-        s3 = {"updatedAt": "2025-01-15T12:00:00Z"}
-        ts3 = c._extract_session_timestamp_ms(s3)
-        self.assertIsInstance(ts3, int)
-        self.assertGreater(ts3, 0)
+        # 3. createdAt in milliseconds
+        s3 = {"createdAt": 1700000000000}
+        self.assertEqual(c._extract_session_timestamp_ms(s3), 1700000000000)
+
+        # 4. Critical: startTime is audio track offset (e.g. 0.0 or 150.5), MUST NOT be used as timestamp
+        s4 = {"startTime": 0.0, "startedAt": 1716500000000}
+        self.assertEqual(c._extract_session_timestamp_ms(s4), 1716500000000)
+
+        # 5. ISO Date String
+        s5 = {"updatedAt": "2025-01-15T12:00:00Z"}
+        ts5 = c._extract_session_timestamp_ms(s5)
+        self.assertIsInstance(ts5, int)
+        self.assertGreater(ts5, 0)
+
+        # 6. YYYY-MM-DD Date String
+        s6 = {"date": "2024-05-20"}
+        ts6 = c._extract_session_timestamp_ms(s6)
+        self.assertIsInstance(ts6, int)
+        self.assertGreater(ts6, 0)
 
     def test_calculate_streak(self):
         # Empty
@@ -79,7 +93,8 @@ class TestListeningRecapLogic(unittest.IsolatedAsyncioTestCase):
                     "displayTitle": "The Way of Kings",
                     "displayAuthor": "Brandon Sanderson",
                     "timeListening": 3600.0,
-                    "createdAt": base_time,
+                    "startedAt": base_time,
+                    "startTime": 0.0,
                     "mediaMetadata": {
                         "genres": ["Fantasy", "Epic"],
                         "authors": ["Brandon Sanderson"]
@@ -91,7 +106,8 @@ class TestListeningRecapLogic(unittest.IsolatedAsyncioTestCase):
                     "displayTitle": "The Way of Kings",
                     "displayAuthor": "Brandon Sanderson",
                     "timeListening": 1800.0,
-                    "createdAt": base_time + 5000,
+                    "startedAt": base_time + 5000,
+                    "startTime": 3600.0,
                     "mediaMetadata": {
                         "genres": ["Fantasy"],
                         "authors": ["Brandon Sanderson"]
@@ -103,7 +119,8 @@ class TestListeningRecapLogic(unittest.IsolatedAsyncioTestCase):
                     "displayTitle": "Project Hail Mary",
                     "displayAuthor": "Andy Weir",
                     "timeListening": 7200.0,
-                    "createdAt": day2_time,
+                    "startedAt": day2_time,
+                    "startTime": 0.0,
                     "mediaMetadata": {
                         "genres": ["Sci-Fi"],
                         "authors": ["Andy Weir"]
@@ -142,6 +159,55 @@ class TestListeningRecapLogic(unittest.IsolatedAsyncioTestCase):
         # Top day should be 2025-01-11 with 7200 seconds
         self.assertEqual(stats["topDay"]["date"], "2025-01-11")
         self.assertEqual(stats["topDay"]["duration"], 7200)
+
+    @patch("bookshelfAPI.bookshelf_conn")
+    async def test_get_custom_listening_stats_fallback_to_days_map(self, mock_conn):
+        # Simulate /listening-sessions returning 404, but /listening-stats returning days map
+        def side_effect(endpoint, *args, **kwargs):
+            resp = MagicMock()
+            if "listening-sessions" in endpoint:
+                resp.status_code = 404
+            elif "listening-stats" in endpoint:
+                resp.status_code = 200
+                resp.json.return_value = {
+                    "totalTime": 14400,
+                    "days": {
+                        "2024-05-10": 3600,
+                        "2024-05-11": 7200,
+                        "2024-05-12": 3600,
+                        "2023-01-01": 5000  # Outside range
+                    },
+                    "items": {
+                        "book-xyz": {
+                            "timeListening": 14400,
+                            "metadata": {
+                                "title": "Dune",
+                                "author": "Frank Herbert",
+                                "genres": ["Sci-Fi"]
+                            }
+                        }
+                    },
+                    "recentSessions": []
+                }
+            elif endpoint == "/me":
+                resp.status_code = 200
+                resp.json.return_value = {"id": "user-123", "username": "testuser"}
+            else:
+                resp.status_code = 404
+            return resp
+
+        mock_conn.side_effect = side_effect
+
+        start_ms = int(datetime(2024, 5, 1).timestamp() * 1000)
+        end_ms = int(datetime(2024, 5, 31).timestamp() * 1000)
+
+        stats = await c.get_custom_listening_stats(start_time_ms=start_ms, end_time_ms=end_ms)
+        self.assertEqual(stats["totalListeningTime"], 14400)
+        self.assertEqual(stats["daysListened"], 3)
+        self.assertEqual(stats["streak"], 3)
+        self.assertEqual(len(stats["topBooks"]), 1)
+        self.assertEqual(stats["topBooks"][0]["title"], "Dune")
+        self.assertEqual(stats["topAuthors"][0]["name"], "Frank Herbert")
 
     @patch("bookshelfAPI.bookshelf_conn")
     async def test_get_custom_listening_stats_empty(self, mock_conn):

@@ -1819,9 +1819,10 @@ async def cover_proxy(item_id: str):
         raise HTTPException(status_code=400, detail="Missing server URL or item ID")
 
     url = f"{server_url}/api/items/{item_id}/cover?token={token}"
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(url)
+            r = await client.get(url, headers=headers)
             if r.status_code == 200:
                 content_type = r.headers.get("content-type", "image/jpeg")
                 return Response(

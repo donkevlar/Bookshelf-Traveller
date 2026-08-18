@@ -68,24 +68,44 @@ async def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET
     :param params:
     :return: r -> requests or httpx object if status 200.
     """
-    bookshelfURL = SERVER_URL
-    API_URL = bookshelfURL + "/api"
-    bookshelfToken = os.environ.get("bookshelfToken")
-    tokenInsert = "?token=" + bookshelfToken if Token else ""
+    bookshelfURL = (os.environ.get("bookshelfURL") or SERVER_URL or "").rstrip("/")
+    API_URL = bookshelfURL + "/api" if not bookshelfURL.endswith("/api") else bookshelfURL
+    bookshelfToken = os.environ.get("bookshelfToken", "")
 
-    if params is not None:
-        additional_params = params
+    req_headers = dict(Headers) if Headers is not None else {}
+    if Token and bookshelfToken and "Authorization" not in req_headers:
+        req_headers["Authorization"] = f"Bearer {bookshelfToken}"
+
+    if not endpoint.startswith("/"):
+        endpoint = "/" + endpoint
+
+    tokenInsert = f"?token={bookshelfToken}" if (Token and bookshelfToken) else ""
+
+    if params:
+        p_str = str(params)
+        if tokenInsert:
+            if p_str.startswith("?") or p_str.startswith("&"):
+                additional_params = "&" + p_str[1:]
+            else:
+                additional_params = "&" + p_str
+        else:
+            if p_str.startswith("?"):
+                additional_params = p_str
+            elif p_str.startswith("&"):
+                additional_params = "?" + p_str[1:]
+            else:
+                additional_params = "?" + p_str
     else:
-        additional_params = ''
+        additional_params = ""
 
-    link = f'{API_URL}{endpoint}{tokenInsert}{additional_params}'
+    link = f"{API_URL}{endpoint}{tokenInsert}{additional_params}"
     if __name__ == '__main__':
         print(link)
     # Create an HTTPX client
     async with httpx.AsyncClient(timeout=HTTPX_TIMEOUT) as client:
         if GET:
-            if Headers:
-                r = await client.get(link, headers=Headers)
+            if req_headers:
+                r = await client.get(link, headers=req_headers)
             else:
                 r = await client.get(link)
 
@@ -94,8 +114,12 @@ async def bookshelf_conn(endpoint: str, Headers=None, Data=None, Token=True, GET
 
             return r
         elif POST:
-            if Data is not None and Headers is not None:
-                r = await client.post(link, headers=Headers, json=Data)
+            if Data is not None and req_headers:
+                r = await client.post(link, headers=req_headers, json=Data)
+            elif Data is not None:
+                r = await client.post(link, json=Data)
+            elif req_headers:
+                r = await client.post(link, headers=req_headers)
             else:
                 r = await client.post(link)
 
@@ -1398,19 +1422,28 @@ async def bookshelf_get_valid_books() -> list:
 
 def _extract_session_timestamp_ms(session: dict) -> int:
     """Extract millisecond epoch timestamp from a session record."""
-    for field in ("createdAt", "startTime", "updatedAt", "date"):
+    # Priority order: startedAt (standard Audiobookshelf session event timestamp), createdAt, updatedAt, date
+    # CRITICAL: Do NOT check startTime as that represents the playback position in seconds (e.g. 0.0 or 120.5)
+    for field in ("startedAt", "createdAt", "updatedAt", "date"):
         val = session.get(field)
-        if val is not None:
+        if val is not None and val != "":
             if isinstance(val, (int, float)):
-                if val < 10000000000:
+                if val >= 10000000000:
+                    return int(val)
+                elif val > 0:
                     return int(val * 1000)
-                return int(val)
             elif isinstance(val, str):
+                val_str = val.strip()
+                if val_str.isdigit():
+                    ival = int(val_str)
+                    return ival if ival >= 10000000000 else ival * 1000
                 try:
-                    if val.isdigit():
-                        ival = int(val)
-                        return ival * 1000 if ival < 10000000000 else ival
-                    dt = datetime.fromisoformat(val.replace("Z", "+00:00"))
+                    dt = datetime.fromisoformat(val_str.replace("Z", "+00:00"))
+                    return int(dt.timestamp() * 1000)
+                except Exception:
+                    pass
+                try:
+                    dt = datetime.strptime(val_str[:10], "%Y-%m-%d")
                     return int(dt.timestamp() * 1000)
                 except Exception:
                     pass
@@ -1434,7 +1467,7 @@ def _calculate_streak(active_dates: list) -> int:
     return max_streak
 
 
-async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int = None, max_pages: int = 10) -> dict:
+async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int = None, max_pages: int = 50) -> dict:
     """
     Fetches and aggregates listening sessions from Audiobookshelf for an arbitrary date range.
     :param start_time_ms: Start timestamp in milliseconds (inclusive).
@@ -1452,50 +1485,72 @@ async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int
     all_sessions = []
     items_per_page = 100
     page = 0
-    has_more = True
 
-    while has_more and page < max_pages:
+    # Determine user ID if possible for fallback endpoint paths
+    user_id = None
+    try:
+        me_resp = await bookshelf_conn(endpoint="/me", GET=True)
+        if me_resp.status_code == 200:
+            user_id = me_resp.json().get("id")
+    except Exception as e:
+        logger.debug(f"Unable to fetch user ID from /me: {e}")
+
+    session_endpoints = ["/me/listening-sessions"]
+    if user_id:
+        session_endpoints.insert(0, f"/users/{user_id}/listening-sessions")
+    session_endpoints.append("/users/me/listening-sessions")
+
+    # Try session endpoints to retrieve paginated sessions
+    working_endpoint = None
+    for endpoint in session_endpoints:
         try:
-            endpoint = "/me/listening-sessions"
-            params = f"&itemsPerPage={items_per_page}&page={page}"
-            r = await bookshelf_conn(endpoint=endpoint, GET=True, params=params)
-            if r.status_code == 200:
-                data = r.json()
-                page_sessions = data.get("sessions", [])
-                if not page_sessions:
-                    break
-
-                for session in page_sessions:
-                    ts = _extract_session_timestamp_ms(session)
-                    # Stop paginating if sessions are strictly older than start window
-                    if ts < start_time_ms:
-                        has_more = False
-                    if start_time_ms <= ts <= end_time_ms:
-                        all_sessions.append((ts, session))
-
-                total_pages = data.get("numPages", 1)
-                page += 1
-                if page >= total_pages:
-                    break
-            else:
-                logger.warning(f"Failed to fetch listening sessions: status {r.status_code}")
+            test_resp = await bookshelf_conn(endpoint=endpoint, GET=True, params="&itemsPerPage=1&page=0")
+            if test_resp.status_code == 200:
+                working_endpoint = endpoint
                 break
-        except Exception as e:
-            logger.error(f"Error while fetching listening sessions: {e}")
-            break
+        except Exception:
+            continue
 
-    # Fallback if /me/listening-sessions is empty/unavailable
-    if not all_sessions:
-        try:
-            r = await bookshelf_conn(endpoint="/me/listening-stats", GET=True)
-            if r.status_code == 200:
-                stats_data = r.json()
-                for session in stats_data.get("recentSessions", []):
-                    ts = _extract_session_timestamp_ms(session)
-                    if start_time_ms <= ts <= end_time_ms:
-                        all_sessions.append((ts, session))
-        except Exception as e:
-            logger.debug(f"Listening stats fallback encountered: {e}")
+    if working_endpoint:
+        has_more = True
+        consecutive_older_pages = 0
+        while has_more and page < max_pages:
+            try:
+                params = f"&itemsPerPage={items_per_page}&page={page}"
+                r = await bookshelf_conn(endpoint=working_endpoint, GET=True, params=params)
+                if r.status_code == 200:
+                    data = r.json()
+                    page_sessions = data.get("sessions", [])
+                    if not page_sessions:
+                        break
+
+                    all_sessions_older = True
+                    for session in page_sessions:
+                        ts = _extract_session_timestamp_ms(session)
+                        if ts >= start_time_ms:
+                            all_sessions_older = False
+                        if start_time_ms <= ts <= end_time_ms:
+                            all_sessions.append((ts, session))
+
+                    # If all sessions on this page are strictly older than the start window,
+                    # we have passed beyond the historical timeframe (assuming descending sort)
+                    if all_sessions_older:
+                        consecutive_older_pages += 1
+                        if consecutive_older_pages >= 2:
+                            has_more = False
+                    else:
+                        consecutive_older_pages = 0
+
+                    total_pages = data.get("numPages", 1)
+                    page += 1
+                    if page >= total_pages:
+                        break
+                else:
+                    logger.warning(f"Failed to fetch listening sessions from {working_endpoint}: status {r.status_code}")
+                    break
+            except Exception as e:
+                logger.error(f"Error while fetching listening sessions: {e}")
+                break
 
     # Aggregate session data
     total_listening_time = 0.0
@@ -1520,10 +1575,10 @@ async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int
         active_dates.append(session_date)
 
         # Metadata
-        item_id = session.get("libraryItemId") or session.get("bookId") or "unknown"
-        media_metadata = session.get("mediaMetadata") or {}
+        item_id = session.get("libraryItemId") or session.get("bookId") or session.get("itemId") or "unknown"
+        media_metadata = session.get("mediaMetadata") or session.get("metadata") or {}
         title = session.get("displayTitle") or media_metadata.get("title") or "Unknown Title"
-        author = session.get("displayAuthor") or media_metadata.get("author") or "Unknown Author"
+        author = session.get("displayAuthor") or media_metadata.get("author") or media_metadata.get("authorName") or "Unknown Author"
 
         # Genres
         genres = media_metadata.get("genres") or []
@@ -1537,7 +1592,9 @@ async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int
         if isinstance(authors, str):
             authors = [a.strip() for a in authors.split(",") if a.strip()]
         for a in authors:
-            if a:
+            if a and a != "Unknown Author":
+                author_stats[a] += duration
+            elif a:
                 author_stats[a] += duration
 
         # Book map
@@ -1553,6 +1610,96 @@ async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int
             }
         book_stats[item_id]["duration"] += duration
         book_stats[item_id]["sessionCount"] += 1
+
+    # Fallback if no sessions were aggregated from session endpoints:
+    # Query /me/listening-stats or /users/{user_id}/listening-stats
+    if total_listening_time == 0:
+        stats_endpoints = ["/me/listening-stats"]
+        if user_id:
+            stats_endpoints.insert(0, f"/users/{user_id}/listening-stats")
+        stats_endpoints.append("/users/me/listening-stats")
+
+        for s_endpoint in stats_endpoints:
+            try:
+                r = await bookshelf_conn(endpoint=s_endpoint, GET=True)
+                if r.status_code == 200:
+                    stats_data = r.json()
+
+                    # 1. Parse daily stats map { "YYYY-MM-DD": seconds_listened }
+                    days_map = stats_data.get("days", {})
+                    if isinstance(days_map, dict):
+                        start_date_obj = datetime.fromtimestamp(start_time_ms / 1000.0).date()
+                        end_date_obj = datetime.fromtimestamp(end_time_ms / 1000.0).date()
+
+                        for date_str, dur in days_map.items():
+                            try:
+                                day_dur = float(dur or 0.0)
+                                if day_dur <= 0:
+                                    continue
+                                d_obj = datetime.strptime(date_str[:10], "%Y-%m-%d").date()
+                                if start_date_obj <= d_obj <= end_date_obj:
+                                    total_listening_time += day_dur
+                                    daily_activity[date_str] += day_dur
+                                    active_dates.append(d_obj)
+                            except Exception:
+                                pass
+
+                    # 2. Parse recentSessions in listening-stats
+                    for session in stats_data.get("recentSessions", []):
+                        ts = _extract_session_timestamp_ms(session)
+                        duration = float(session.get("timeListening") or session.get("duration") or 0.0)
+                        if start_time_ms <= ts <= end_time_ms and duration > 0:
+                            item_id = session.get("libraryItemId") or session.get("bookId") or "unknown"
+                            media_metadata = session.get("mediaMetadata") or {}
+                            title = session.get("displayTitle") or media_metadata.get("title") or "Unknown Title"
+                            author = session.get("displayAuthor") or media_metadata.get("author") or "Unknown Author"
+
+                            if item_id not in book_stats:
+                                book_stats[item_id] = {
+                                    "id": item_id,
+                                    "title": title,
+                                    "author": author,
+                                    "duration": 0.0,
+                                    "sessionCount": 0,
+                                    "coverPath": session.get("coverPath"),
+                                    "genres": []
+                                }
+                            book_stats[item_id]["duration"] += duration
+                            book_stats[item_id]["sessionCount"] += 1
+                            if author and author != "Unknown Author":
+                                author_stats[author] += duration
+
+                    # 3. Parse items in listening-stats if book_stats is still empty
+                    items_map = stats_data.get("items", {})
+                    if not book_stats and isinstance(items_map, dict):
+                        for item_id, item_val in items_map.items():
+                            if isinstance(item_val, dict):
+                                dur = float(item_val.get("timeListening") or item_val.get("duration") or 0.0)
+                                meta = item_val.get("mediaMetadata") or item_val.get("metadata") or {}
+                                title = meta.get("title") or item_val.get("title") or "Unknown Title"
+                                author = meta.get("author") or meta.get("authorName") or item_val.get("author") or "Unknown Author"
+                                genres = meta.get("genres") or []
+                                if isinstance(genres, str):
+                                    genres = [g.strip() for g in genres.split(",") if g.strip()]
+                                if dur > 0:
+                                    book_stats[item_id] = {
+                                        "id": item_id,
+                                        "title": title,
+                                        "author": author,
+                                        "duration": dur,
+                                        "sessionCount": 1,
+                                        "coverPath": None,
+                                        "genres": genres
+                                    }
+                                    if author:
+                                        author_stats[author] += dur
+                                    for g in genres:
+                                        genre_stats[g] += dur
+
+                    if total_listening_time > 0 or book_stats:
+                        break
+            except Exception as e:
+                logger.debug(f"Listening stats fallback encountered: {e}")
 
     # Top Books
     top_books = sorted(book_stats.values(), key=lambda x: x["duration"], reverse=True)[:5]
@@ -1600,7 +1747,7 @@ async def get_custom_listening_stats(start_time_ms: int = None, end_time_ms: int
             "seconds": seconds,
             "display": f"{days}d {hours}h {minutes}m" if days > 0 else f"{hours}h {minutes}m"
         },
-        "totalSessions": len(all_sessions),
+        "totalSessions": len(all_sessions) if all_sessions else len(active_dates),
         "uniqueBooksCount": len(book_stats),
         "topBooks": top_books,
         "topAuthors": top_authors,
