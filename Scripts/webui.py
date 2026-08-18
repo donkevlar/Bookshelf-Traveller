@@ -154,8 +154,8 @@ class TestConnectionRequest(BaseModel):
 
 class SendRecapRequest(BaseModel):
     image_base64: str = Field(..., description="Base64 encoded PNG data of recap image")
-    target_type: str = Field("owner", description="'owner' or 'user'")
-    target_id: Optional[str] = Field(None, description="Discord User ID if target_type is user")
+    target_type: str = Field("owner", description="'owner', 'user', or 'channel'")
+    target_id: Optional[str] = Field(None, description="Discord User or Channel ID if target_type is user or channel")
     message: Optional[str] = Field(None, description="Optional custom caption/message")
     start_date: Optional[str] = Field(None, description="Start date of listening period")
     end_date: Optional[str] = Field(None, description="End date of listening period")
@@ -579,8 +579,16 @@ def get_dashboard_html() -> str:
 
         .canvas-toolbar {
             display: flex;
+            flex-direction: column;
             gap: 0.75rem;
             margin-top: 1.5rem;
+            align-items: center;
+            width: 100%;
+        }
+
+        .canvas-toolbar-row {
+            display: flex;
+            gap: 0.75rem;
             flex-wrap: wrap;
             justify-content: center;
             width: 100%;
@@ -867,18 +875,25 @@ def get_dashboard_html() -> str:
                 <div class="canvas-wrapper">
                     <canvas id="recap-canvas" width="1080" height="1920" style="max-width: 380px;"></canvas>
                     <div class="canvas-toolbar">
-                        <button class="btn btn-primary" id="btn-download-canvas" onclick="downloadRecapPNG()">
-                            💾 Download Image (PNG)
-                        </button>
-                        <button class="btn btn-secondary" id="btn-copy-canvas" onclick="copyRecapCanvasImage()">
-                            📋 Copy Image to Clipboard
-                        </button>
-                        <button class="btn btn-primary" id="btn-send-owner" onclick="sendRecapToOwner()">
-                            👑 Send to Owner
-                        </button>
-                        <button class="btn btn-secondary" id="btn-send-user" onclick="openSendToUserModal()">
-                            📨 Send to User
-                        </button>
+                        <div class="canvas-toolbar-row">
+                            <button class="btn btn-primary" id="btn-download-canvas" onclick="downloadRecapPNG()">
+                                💾 Download Image (PNG)
+                            </button>
+                            <button class="btn btn-secondary" id="btn-copy-canvas" onclick="copyRecapCanvasImage()">
+                                📋 Copy Image to Clipboard
+                            </button>
+                        </div>
+                        <div class="canvas-toolbar-row">
+                            <button class="btn btn-primary" id="btn-send-owner" onclick="sendRecapToOwner()">
+                                👑 Send to Owner
+                            </button>
+                            <button class="btn btn-secondary" id="btn-send-user" onclick="openSendToUserModal()">
+                                📨 Send to User
+                            </button>
+                            <button class="btn btn-secondary" id="btn-send-channel" onclick="openSendToChannelModal()">
+                                📢 Send to Channel
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1078,6 +1093,38 @@ def get_dashboard_html() -> str:
                 <button type="button" class="btn btn-secondary" onclick="closeSendToUserModal()">Cancel</button>
                 <button type="button" class="btn btn-primary" id="btn-submit-send-user" onclick="submitSendToUser()">
                     🚀 Send via Discord
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Send to Channel Modal -->
+    <div id="send-channel-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">📢 Send Recap to Discord Channel</h3>
+                <button type="button" class="modal-close-btn" onclick="closeSendToChannelModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label" for="send-channel-select">Select Channel</label>
+                    <select id="send-channel-select" class="form-input" onchange="onChannelSelectChange()">
+                        <option value="">Loading channels...</option>
+                    </select>
+                </div>
+                <div class="form-group" id="custom-channel-id-group" style="display: none;">
+                    <label class="form-label" for="send-custom-channel-id">Custom Discord Channel ID</label>
+                    <input type="text" id="send-custom-channel-id" class="form-input" placeholder="e.g. 123456789012345678">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="send-channel-custom-message">Optional Caption / Note</label>
+                    <input type="text" id="send-channel-custom-message" class="form-input" value="Here is our Audiobookshelf listening recap! 🎧" placeholder="Add a custom note...">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeSendToChannelModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" id="btn-submit-send-channel" onclick="submitSendToChannel()">
+                    🚀 Send to Channel
                 </button>
             </div>
         </div>
@@ -1869,6 +1916,119 @@ def get_dashboard_html() -> str:
             }
         }
 
+        async function openSendToChannelModal() {
+            const canvas = document.getElementById('recap-canvas');
+            if (!canvas) {
+                showToast('Please generate a recap first.', 'error');
+                return;
+            }
+            const modal = document.getElementById('send-channel-modal');
+            const select = document.getElementById('send-channel-select');
+            select.innerHTML = '<option value="">Loading channels...</option>';
+            modal.style.display = 'flex';
+
+            const data = await fetchRecipients();
+            select.innerHTML = '';
+
+            if (data.channels && data.channels.length > 0) {
+                const optGroup = document.createElement('optgroup');
+                optGroup.label = 'Configured Task Channels';
+                data.channels.forEach(ch => {
+                    const opt = document.createElement('option');
+                    opt.value = ch.channel_id;
+                    const serverName = ch.server_name ? ` (${ch.server_name})` : '';
+                    opt.textContent = `📢 Channel ${ch.channel_id}${serverName}`;
+                    select.appendChild(opt);
+                });
+            }
+
+            const optCustom = document.createElement('option');
+            optCustom.value = 'custom';
+            optCustom.textContent = '✏️ Custom Discord Channel ID...';
+            select.appendChild(optCustom);
+
+            if (!data.channels || data.channels.length === 0) {
+                select.value = 'custom';
+            }
+
+            onChannelSelectChange();
+        }
+
+        function onChannelSelectChange() {
+            const select = document.getElementById('send-channel-select');
+            const customGroup = document.getElementById('custom-channel-id-group');
+            if (select.value === 'custom') {
+                customGroup.style.display = 'block';
+            } else {
+                customGroup.style.display = 'none';
+            }
+        }
+
+        function closeSendToChannelModal() {
+            document.getElementById('send-channel-modal').style.display = 'none';
+        }
+
+        async function submitSendToChannel() {
+            const canvas = document.getElementById('recap-canvas');
+            const select = document.getElementById('send-channel-select');
+            const customInput = document.getElementById('send-custom-channel-id');
+            const msgInput = document.getElementById('send-channel-custom-message');
+            const btn = document.getElementById('btn-submit-send-channel');
+
+            let channelId = select.value;
+            if (!channelId) {
+                showToast('Please select a channel.', 'warning');
+                return;
+            }
+
+            if (channelId === 'custom') {
+                channelId = customInput.value.trim();
+                if (!channelId) {
+                    showToast('Please enter a Discord Channel ID.', 'warning');
+                    return;
+                }
+            }
+
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Sending to Channel...';
+
+            try {
+                const image_base64 = canvas.toDataURL('image/png');
+                const start_date = document.getElementById('recap-start').value;
+                const end_date = document.getElementById('recap-end').value;
+                const stats_summary = getRecapSummaryData();
+                const custom_msg = msgInput.value.trim() || 'Here is our Audiobookshelf listening recap! 🎧';
+
+                const res = await fetch('/api/send-recap', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        image_base64: image_base64,
+                        target_type: 'channel',
+                        target_id: channelId,
+                        start_date: start_date,
+                        end_date: end_date,
+                        stats_summary: stats_summary,
+                        message: custom_msg
+                    })
+                });
+
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showToast('📢 Recap sent successfully to Discord channel!', 'success');
+                    closeSendToChannelModal();
+                } else {
+                    showToast('Failed to send to channel: ' + (data.detail || data.message || 'Unknown error'), 'error');
+                }
+            } catch (err) {
+                showToast('Error sending recap to channel: ' + err.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
         // Save server config
         document.getElementById('server-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -2270,17 +2430,33 @@ async def get_discord_recipients():
         except Exception as e:
             logger.warning(f"Failed to fetch enrolled users from {user_db_path}: {e}")
 
+    channels = []
+    tasks_db_path = "db/tasks.db"
+    if os.path.exists(tasks_db_path):
+        try:
+            async with aiosqlite.connect(tasks_db_path) as db:
+                async with db.execute("SELECT DISTINCT channel_id, server_name FROM tasks") as cursor:
+                    rows = await cursor.fetchall()
+                    for row in rows:
+                        channels.append({
+                            "channel_id": str(row[0]),
+                            "server_name": str(row[1]) if row[1] else ""
+                        })
+        except Exception as e:
+            logger.warning(f"Failed to fetch task channels from {tasks_db_path}: {e}")
+
     return {
         "bot_configured": bot_configured,
         "owner": owner_info,
-        "enrolled_users": enrolled_users
+        "enrolled_users": enrolled_users,
+        "channels": channels
     }
 
 
 @app.post("/api/send-recap")
 async def send_recap(req: SendRecapRequest):
     """
-    Send the dynamic listening recap image wrapped in an interactions.Embed to the bot owner or enrolled user.
+    Send the dynamic listening recap image wrapped in an interactions.Embed to the bot owner, enrolled user, or Discord channel.
     """
     token = os.getenv("DISCORD_TOKEN")
     if not token:
@@ -2303,6 +2479,7 @@ async def send_recap(req: SendRecapRequest):
 
     try:
         target_discord_id = None
+        channel_id = None
         if req.target_type == "owner":
             try:
                 app_info = await client.get_current_bot_information()
@@ -2312,11 +2489,22 @@ async def send_recap(req: SendRecapRequest):
                     target_discord_id = str(app_info["team"].get("owner_user_id"))
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Failed to fetch bot owner: {e}")
+
+            if not target_discord_id:
+                raise HTTPException(status_code=400, detail="Bot owner ID could not be determined.")
+            dm_channel = await client.create_dm(recipient_id=target_discord_id)
+            channel_id = dm_channel["id"]
+        elif req.target_type == "channel":
+            target_discord_id = req.target_id
+            if not target_discord_id:
+                raise HTTPException(status_code=400, detail="Target Discord Channel ID could not be determined.")
+            channel_id = target_discord_id
         else:
             target_discord_id = req.target_id
-
-        if not target_discord_id:
-            raise HTTPException(status_code=400, detail="Target Discord User ID could not be determined.")
+            if not target_discord_id:
+                raise HTTPException(status_code=400, detail="Target Discord User ID could not be determined.")
+            dm_channel = await client.create_dm(recipient_id=target_discord_id)
+            channel_id = dm_channel["id"]
 
         # Build Rich Embed styled with interactions.Embed
         timeframe_str = f"({req.start_date or 'Start'} to {req.end_date or 'Now'})"
@@ -2345,8 +2533,6 @@ async def send_recap(req: SendRecapRequest):
         file_obj = File(file=io.BytesIO(img_bytes), file_name="listening-recap.png")
         content_msg = req.message or "Here is your Audiobookshelf listening recap! 🎧"
 
-        dm_channel = await client.create_dm(recipient_id=target_discord_id)
-        channel_id = dm_channel["id"]
         payload = {
             "content": content_msg,
             "embeds": [embed.to_dict()]
@@ -2362,7 +2548,7 @@ async def send_recap(req: SendRecapRequest):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to send DM to {target_discord_id}: {e}")
+        logger.error(f"Failed to send message to {target_discord_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to send Discord message: {e}")
     finally:
         try:

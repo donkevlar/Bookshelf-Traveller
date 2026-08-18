@@ -287,9 +287,12 @@ class TestWebUIRecapEndpoints(unittest.TestCase):
             self.assertIn("downloadRecapPNG", html)
             self.assertIn('id="btn-send-owner"', html)
             self.assertIn('id="btn-send-user"', html)
+            self.assertIn('id="btn-send-channel"', html)
             self.assertIn('id="send-user-modal"', html)
+            self.assertIn('id="send-channel-modal"', html)
             self.assertIn("sendRecapToOwner", html)
             self.assertIn("openSendToUserModal", html)
+            self.assertIn("openSendToChannelModal", html)
 
     @patch("bookshelfAPI.get_custom_listening_stats", new_callable=AsyncMock)
     def test_api_recap_endpoint(self, mock_get_stats):
@@ -355,6 +358,7 @@ class TestWebUIRecapEndpoints(unittest.TestCase):
             self.assertEqual(data["owner"]["id"], "999888777")
             self.assertEqual(data["owner"]["username"], "BotOwnerGuy")
             self.assertIsInstance(data["enrolled_users"], list)
+            self.assertIsInstance(data["channels"], list)
 
     @patch("interactions.api.http.http_client.HTTPClient.create_message", new_callable=AsyncMock)
     @patch("interactions.api.http.http_client.HTTPClient.create_dm", new_callable=AsyncMock)
@@ -432,6 +436,33 @@ class TestWebUIRecapEndpoints(unittest.TestCase):
             self.assertEqual(data["recipient_id"], "987654321098765432")
             mock_create_dm.assert_called_once_with(recipient_id="987654321098765432")
 
+    @patch("interactions.api.http.http_client.HTTPClient.create_message", new_callable=AsyncMock)
+    @patch("interactions.api.http.http_client.HTTPClient.create_dm", new_callable=AsyncMock)
+    @patch("interactions.api.http.http_client.HTTPClient.login", new_callable=AsyncMock)
+    @patch("interactions.api.http.http_client.HTTPClient.close", new_callable=AsyncMock)
+    def test_send_recap_to_channel(self, mock_close, mock_login, mock_create_dm, mock_create_msg):
+        os.environ["DISCORD_TOKEN"] = "test_discord_token"
+        mock_create_msg.return_value = {"id": "channel_msg_123"}
+
+        payload = {
+            "image_base64": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+            "target_type": "channel",
+            "target_id": "112233445566778899",
+            "message": "Here is the channel recap!"
+        }
+
+        with TestClient(app) as client:
+            res = client.post("/api/send-recap", json=payload)
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertTrue(data["success"])
+            self.assertEqual(data["recipient_id"], "112233445566778899")
+            # Channel sending does NOT create a DM
+            mock_create_dm.assert_not_called()
+            mock_create_msg.assert_called_once()
+            call_kwargs = mock_create_msg.call_args.kwargs
+            self.assertEqual(call_kwargs["channel_id"], "112233445566778899")
+
     def test_send_recap_missing_token_or_invalid_payload(self):
         # Missing token
         if "DISCORD_TOKEN" in os.environ:
@@ -447,6 +478,43 @@ class TestWebUIRecapEndpoints(unittest.TestCase):
             # Invalid base64
             res = client.post("/api/send-recap", json={"image_base64": "!!!not-valid-base64@@@", "target_type": "owner"})
             self.assertEqual(res.status_code, 400)
+
+
+class TestDefaultCommandsListeningRecap(unittest.IsolatedAsyncioTestCase):
+
+    @patch("bookshelfAPI.bookshelf_cover_image", new_callable=AsyncMock)
+    @patch("bookshelfAPI.get_custom_listening_stats", new_callable=AsyncMock)
+    async def test_listening_recap_command(self, mock_get_stats, mock_cover):
+        from default_commands import PrimaryCommands
+
+        mock_get_stats.return_value = {
+            "timeframe": {"startDate": "2025-01-01", "endDate": "2025-01-31"},
+            "totalListeningTime": 7200,
+            "timeFormatted": {"days": 0, "hours": 2, "minutes": 0, "seconds": 0, "display": "2h 0m"},
+            "daysListened": 5,
+            "streak": 3,
+            "topDay": {"date": "2025-01-15", "formattedTime": "1h 30m"},
+            "topBooks": [{"id": "b-123", "title": "The Way of Kings", "author": "Brandon Sanderson", "formattedTime": "2h 0m"}],
+            "topAuthors": [{"name": "Brandon Sanderson", "formattedTime": "2h 0m"}],
+            "topGenres": [{"name": "Fantasy", "formattedTime": "2h 0m"}]
+        }
+        mock_cover.return_value = "https://example.com/cover.jpg"
+
+        mock_bot = MagicMock()
+        extension = PrimaryCommands(mock_bot)
+
+        mock_ctx = AsyncMock()
+        mock_ctx.author = MagicMock()
+        mock_ctx.author.accent_color = None
+
+        await extension.listening_recap(mock_ctx, days=30)
+
+        mock_ctx.defer.assert_called_once()
+        mock_ctx.send.assert_called_once()
+        sent_embed = mock_ctx.send.call_args.kwargs.get("embed")
+        self.assertIsNotNone(sent_embed)
+        self.assertEqual(sent_embed.title, "📊 Listening Recap")
+        self.assertIn("2025-01-01 to 2025-01-31", sent_embed.description)
 
 
 if __name__ == "__main__":

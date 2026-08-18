@@ -157,6 +157,117 @@ class PrimaryCommands(Extension):
             logger.warning(
                 f'User:{self.bot.user} (ID: {self.bot.user.id}) | Error occurred: {e} | Command Name: listening-stats')
 
+    # Dynamic listening recap with customizable days or date range
+    @slash_command(name="listening-recap",
+                   description="Generate a listening recap summary for a specified timeframe. Default Command.")
+    @slash_option(name="days", description="Number of days to recap (default: 30, e.g. 7, 30, 90, 365)",
+                  opt_type=OptionType.INTEGER, min_value=1, max_value=3650, required=False)
+    @slash_option(name="start_date", description="Start date (YYYY-MM-DD, optional)",
+                  opt_type=OptionType.STRING, required=False)
+    @slash_option(name="end_date", description="End date (YYYY-MM-DD, optional)",
+                  opt_type=OptionType.STRING, required=False)
+    async def listening_recap(self, ctx: SlashContext, days: int = 30, start_date: str = None, end_date: str = None):
+        try:
+            await ctx.defer(ephemeral=self.ephemeral_output)
+
+            now = datetime.now()
+            start_ms = None
+            end_ms = None
+
+            if start_date:
+                try:
+                    dt_start = datetime.strptime(start_date.strip(), "%Y-%m-%d")
+                    start_ms = int(dt_start.timestamp() * 1000)
+                except Exception:
+                    await ctx.send("Invalid start_date format. Please use YYYY-MM-DD.", ephemeral=True)
+                    return
+
+            if end_date:
+                try:
+                    dt_end = datetime.strptime(end_date.strip(), "%Y-%m-%d").replace(hour=23, minute=59, second=59, microsecond=999000)
+                    end_ms = int(dt_end.timestamp() * 1000)
+                except Exception:
+                    await ctx.send("Invalid end_date format. Please use YYYY-MM-DD.", ephemeral=True)
+                    return
+
+            if not start_ms:
+                days_val = days if days and days > 0 else 30
+                end_ms = end_ms or int(now.timestamp() * 1000)
+                start_ms = end_ms - (days_val * 86400 * 1000)
+
+            stats = await c.get_custom_listening_stats(start_time_ms=start_ms, end_time_ms=end_ms)
+
+            timeframe_info = stats.get("timeframe", {})
+            start_str = timeframe_info.get("startDate", start_date or "Start")
+            end_str = timeframe_info.get("endDate", end_date or "Now")
+            time_formatted = stats.get("timeFormatted", {}).get("display", "0m")
+
+            embed_color = getattr(ctx.author, "accent_color", None) or FlatUIColors.TURQUOISE
+            embed_message = Embed(
+                title="📊 Listening Recap",
+                description=f"Listening Summary ({start_str} to {end_str})",
+                color=embed_color
+            )
+
+            embed_message.add_field(name="Total Listening Time", value=f"⏱️ **{time_formatted}**", inline=True)
+            embed_message.add_field(name="Days Listened", value=f"📅 **{stats.get('daysListened', 0)}** days", inline=True)
+
+            streak = stats.get("streak", 0)
+            if streak > 0:
+                embed_message.add_field(name="Streak", value=f"🔥 **{streak}** days", inline=True)
+
+            top_day = stats.get("topDay", {})
+            if top_day.get("date"):
+                embed_message.add_field(name="Peak Day", value=f"🌟 {top_day['date']} ({top_day.get('formattedTime', '')})", inline=True)
+
+            top_books = stats.get("topBooks", [])
+            top_book_id = None
+            if top_books:
+                top_b = top_books[0]
+                top_book_id = top_b.get("id")
+                embed_message.add_field(
+                    name="Top Audiobook",
+                    value=f"🎧 **{top_b.get('title', 'Unknown Title')}**\nby *{top_b.get('author', 'Unknown Author')}* ({top_b.get('formattedTime', '')})",
+                    inline=False
+                )
+
+            top_authors = stats.get("topAuthors", [])
+            if top_authors:
+                top_a = top_authors[0]
+                embed_message.add_field(
+                    name="Top Author",
+                    value=f"✍️ **{top_a.get('name', 'Unknown Author')}** ({top_a.get('formattedTime', '')})",
+                    inline=True
+                )
+
+            top_genres = stats.get("topGenres", [])
+            if top_genres:
+                top_g = top_genres[0]
+                embed_message.add_field(
+                    name="Top Genre",
+                    value=f"🏷️ **{top_g.get('name', 'Unknown Genre')}** ({top_g.get('formattedTime', '')})",
+                    inline=True
+                )
+
+            # Add cover thumbnail for top book if available
+            if top_book_id and top_book_id != "unknown":
+                try:
+                    cover_url = await c.bookshelf_cover_image(top_book_id)
+                    if cover_url:
+                        embed_message.set_thumbnail(url=cover_url)
+                except Exception as e:
+                    logger.debug(f"Could not load thumbnail for recap top book: {e}")
+
+            footer_text = getattr(settings, "bookshelf_traveller_footer", "Powered by Bookshelf Traveller 🕮")
+            embed_message.footer = f"{footer_text} | Listening Recap"
+
+            await ctx.send(embed=embed_message, ephemeral=self.ephemeral_output)
+            logger.info("Successfully sent command: listening-recap")
+
+        except Exception as e:
+            logger.error(f"Error in listening_recap command: {e}")
+            await ctx.send("Could not generate listening recap at this time. Please try again later.", ephemeral=True)
+
     # Display a formatted list (embedded) of current libraries
     @check(ownership_check)
     @slash_command(name="all-libraries",
