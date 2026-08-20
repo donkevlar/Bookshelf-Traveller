@@ -273,6 +273,7 @@ def get_dashboard_html() -> str:
         }
 
         .header {
+            position: relative;
             text-align: center;
             margin-bottom: 2rem;
             padding-bottom: 1.5rem;
@@ -291,6 +292,63 @@ def get_dashboard_html() -> str:
         .header .version {
             font-size: 0.85rem;
             color: var(--text-muted);
+        }
+
+        /* Power / Restart Button */
+        .btn-power {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            z-index: 10;
+        }
+
+        .btn-power:hover {
+            color: #ff5c5c;
+            border-color: #ff5c5c;
+            background: rgba(196, 92, 74, 0.15);
+            box-shadow: 0 0 14px rgba(255, 92, 92, 0.35);
+            transform: scale(1.08);
+        }
+
+        .btn-power:active {
+            transform: scale(0.95);
+        }
+
+        .btn-power:focus-visible {
+            outline: none;
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        .btn-power.restarting {
+            pointer-events: none;
+            opacity: 0.85;
+            border-color: var(--warning);
+            color: var(--warning);
+            animation: pulsePower 1.2s infinite ease-in-out;
+        }
+
+        @keyframes pulsePower {
+            0%, 100% { transform: scale(1); opacity: 0.7; }
+            50% { transform: scale(1.1); opacity: 1; filter: drop-shadow(0 0 8px var(--warning)); }
+        }
+
+        .power-icon {
+            width: 22px;
+            height: 22px;
+            stroke-width: 2.3;
         }
 
         /* Navigation Tabs */
@@ -786,6 +844,12 @@ def get_dashboard_html() -> str:
 <body>
     <div class="container">
         <header class="header">
+            <button type="button" class="btn-power" id="btn-restart-bot" onclick="openRestartModal()" title="Restart Bot & Server" aria-label="Restart Bot & Server">
+                <svg class="power-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+                    <line x1="12" y1="2" x2="12" y2="12"></line>
+                </svg>
+            </button>
             <h1>Bookshelf Traveller</h1>
             <span class="version" id="version">Loading...</span>
         </header>
@@ -1125,6 +1189,30 @@ def get_dashboard_html() -> str:
                 <button type="button" class="btn btn-secondary" onclick="closeSendToChannelModal()">Cancel</button>
                 <button type="button" class="btn btn-primary" id="btn-submit-send-channel" onclick="submitSendToChannel()">
                     🚀 Send to Channel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Restart Confirmation Modal -->
+    <div id="restart-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">⚡ Restart Bot & Server</h3>
+                <button type="button" class="modal-close-btn" onclick="closeRestartModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="color: var(--text-primary); font-size: 0.95rem; font-weight: 500;">
+                    Are you sure you want to restart the server and bot?
+                </p>
+                <p style="color: var(--text-muted); font-size: 0.85rem; line-height: 1.5;">
+                    This will re-initialize bot services, reload configuration, and restart active background processes. The Web UI will automatically reconnect once the server is back online.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeRestartModal()">Cancel</button>
+                <button type="button" class="btn" id="btn-confirm-restart" onclick="confirmRestartBot()" style="background: var(--error); color: #fff;">
+                    ⚡ Confirm Restart
                 </button>
             </div>
         </div>
@@ -2177,6 +2265,96 @@ def get_dashboard_html() -> str:
             }
         });
 
+        // Restart modal controls
+        function openRestartModal() {
+            const modal = document.getElementById('restart-modal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeRestartModal() {
+            const modal = document.getElementById('restart-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        document.getElementById('restart-modal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'restart-modal') closeRestartModal();
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeRestartModal();
+                closeSendToUserModal();
+                closeSendToChannelModal();
+            }
+        });
+
+        async function confirmRestartBot() {
+            closeRestartModal();
+            const powerBtn = document.getElementById('btn-restart-bot');
+            if (powerBtn) {
+                powerBtn.classList.add('restarting');
+                powerBtn.disabled = true;
+            }
+
+            showToast('Sending restart signal to server & bot...', 'info');
+
+            try {
+                const res = await fetch('/api/restart', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                if (res.ok) {
+                    showToast('Server restarting... Reconnecting in a few moments.', 'warning');
+                    pollServerReconnect();
+                } else {
+                    const data = await res.json().catch(() => ({}));
+                    showToast('Failed to trigger restart: ' + (data.detail || 'Unknown error'), 'error');
+                    if (powerBtn) {
+                        powerBtn.classList.remove('restarting');
+                        powerBtn.disabled = false;
+                    }
+                }
+            } catch (err) {
+                // If network connection closed due to immediate restart
+                showToast('Server restarting... Reconnecting in a few moments.', 'warning');
+                pollServerReconnect();
+            }
+        }
+
+        function pollServerReconnect(attempt = 1) {
+            const maxAttempts = 30;
+            const powerBtn = document.getElementById('btn-restart-bot');
+
+            setTimeout(async () => {
+                try {
+                    const res = await fetch('/api/status', { cache: 'no-cache' });
+                    if (res.ok) {
+                        showToast('Bot and server restarted successfully!', 'success');
+                        if (powerBtn) {
+                            powerBtn.classList.remove('restarting');
+                            powerBtn.disabled = false;
+                        }
+                        fetchStatus();
+                        fetchConfig();
+                        return;
+                    }
+                } catch (e) {
+                    // Still offline, retry
+                }
+
+                if (attempt < maxAttempts) {
+                    pollServerReconnect(attempt + 1);
+                } else {
+                    showToast('Server took too long to reconnect. Please refresh the page.', 'error');
+                    if (powerBtn) {
+                        powerBtn.classList.remove('restarting');
+                        powerBtn.disabled = false;
+                    }
+                }
+            }, 2000);
+        }
+
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             setPreset('30d');
@@ -2282,6 +2460,31 @@ async def save_database_config(config: DatabaseConfig):
         return {"success": True, "message": "Database configuration saved (SQLite active)"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/restart")
+@app.post("/api/bot/restart")
+async def restart_server_and_bot():
+    """
+    Trigger a restart of the bot and web UI server process.
+    Spawns a delayed daemon thread to gracefully return the response before restarting.
+    """
+    import threading
+    import time
+    import sys
+
+    def _execute_restart():
+        time.sleep(1.0)
+        logger.info("Executing server/bot restart...")
+        try:
+            os.execv(sys.executable, [sys.executable] + sys.argv)
+        except Exception as e:
+            logger.error(f"os.execv failed: {e}. Terminating process so process supervisor/docker can restart.")
+            os._exit(0)
+
+    threading.Thread(target=_execute_restart, daemon=True).start()
+    return {"success": True, "message": "Server and bot restart initiated"}
+
 
 
 @app.post("/api/test-abs-connection")

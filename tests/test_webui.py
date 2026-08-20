@@ -65,6 +65,19 @@ class TestWebUIDatabaseAndEndpoints(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(res_post.status_code, 200)
             self.assertTrue(res_post.json()["success"])
 
+            # Verify Restart Power Button & Modal in HTML
+            html_content = response.text
+            self.assertIn('id="btn-restart-bot"', html_content)
+            self.assertIn('class="btn-power"', html_content)
+            self.assertIn('id="restart-modal"', html_content)
+            self.assertIn('confirmRestartBot()', html_content)
+
+            # Test Restart Endpoint
+            res_restart = client.post("/api/restart")
+            self.assertEqual(res_restart.status_code, 200)
+            self.assertTrue(res_restart.json()["success"])
+            self.assertIn("initiated", res_restart.json()["message"])
+
 
 if __name__ == "__main__":
     unittest.main()
