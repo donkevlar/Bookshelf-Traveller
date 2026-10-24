@@ -270,7 +270,7 @@ class SQLiteTaskDatabase:
             if not override:
                 logger.info(f'OPTION {option}: Searching db using task name in tasks table.')
             await self.cursor.execute('''
-                SELECT task, channel_id, id, token FROM tasks WHERE task = ?
+                SELECT task, channel_id, id, token, server_name FROM tasks WHERE task = ?
             ''', (task,))
             rows = await self.cursor.fetchall()
 
@@ -290,6 +290,36 @@ class SQLiteTaskDatabase:
                 logger.warning('Query returned null using table tasks, an error may follow.')
 
         return rows
+
+    async def get_server_name(self, discord_id: int = 0, task: str = '') -> str:
+        """Retrieve server nickname from tasks table."""
+        default_name = os.getenv("DEFAULT_SERVER_NAME", "Audiobookshelf")
+        try:
+            if discord_id != 0 and task != '':
+                await self.cursor.execute(
+                    "SELECT server_name FROM tasks WHERE discord_id = ? AND task = ? LIMIT 1",
+                    (int(discord_id), task)
+                )
+            elif discord_id != 0:
+                await self.cursor.execute(
+                    "SELECT server_name FROM tasks WHERE discord_id = ? LIMIT 1",
+                    (int(discord_id),)
+                )
+            elif task != '':
+                await self.cursor.execute(
+                    "SELECT server_name FROM tasks WHERE task = ? LIMIT 1",
+                    (task,)
+                )
+            else:
+                await self.cursor.execute(
+                    "SELECT server_name FROM tasks LIMIT 1"
+                )
+            row = await self.cursor.fetchone()
+            if row and row[0]:
+                return row[0]
+        except Exception as e:
+            logger.error(f"Error retrieving server name from tasks: {e}")
+        return default_name
 
 
 # Database Factory for Tasks
@@ -340,6 +370,13 @@ async def remove_task_db(task: str = '', discord_id: int = 0, db_id: int = 0) ->
 async def search_task_db(discord_id: int = 0, task: str = '', channel_id: int = 0,
                          override_response: str = '') -> Optional[List[Tuple]]:
     return await task_db.search_task_db(discord_id, task, channel_id, override_response)
+
+
+async def get_server_name_db(discord_id: int = 0, task: str = "new-book-check") -> str:
+    """Retrieve server nickname from database."""
+    if task_db:
+        return await task_db.get_server_name(discord_id, task)
+    return os.getenv("DEFAULT_SERVER_NAME", "Audiobookshelf")
 
 
 async def acquire_task_lock(task_name: str, lock_duration_seconds: int = 30) -> bool:
@@ -406,44 +443,48 @@ async def newBookList(task_frequency=TASK_FREQUENCY) -> list:
     items_added = []
     current_time = datetime.now()
 
-    libraries = await c.bookshelf_libraries()
-    library_count = len(libraries)
-    logger.debug(f'Found {library_count} libraries')
+    try:
+        libraries = await c.bookshelf_libraries() or {}
+        library_count = len(libraries)
+        logger.debug(f'Found {library_count} libraries')
 
-    time_minus_delta = current_time - timedelta(minutes=task_frequency)
-    timestamp_minus_delta = int(time.mktime(time_minus_delta.timetuple()) * 1000)
+        time_minus_delta = current_time - timedelta(minutes=task_frequency)
+        timestamp_minus_delta = int(time.mktime(time_minus_delta.timetuple()) * 1000)
 
-    for name, (library_id, audiobooks_only) in libraries.items():
-        library_items = await c.bookshelf_all_library_items(library_id, params="sort=addedAt&desc=1")
+        for name, (library_id, audiobooks_only) in libraries.items():
+            library_items = await c.bookshelf_all_library_items(library_id, params="sort=addedAt&desc=1") or []
 
-        for item in library_items:
-            latest_item_time_added = int(item.get('addedTime'))
-            latest_item_title = item.get('title')
-            latest_item_type = item.get('mediaType')
-            latest_item_author = item.get('author')
-            latest_item_bookID = item.get('id')
-            try:
-                latest_item_provider_id = item.get('asin')
-            except Exception as e:
-                latest_item_provider_id = ''
-                logger.debug("Couldn't fetch asin from item. Likely was not set with metadata.")
-                logger.debug(f"Error: {e}")
+            for item in library_items:
+                latest_item_time_added = int(item.get('addedTime') or 0)
+                latest_item_title = item.get('title') or 'Unknown Title'
+                latest_item_type = item.get('mediaType')
+                latest_item_author = item.get('author') or 'Unknown Author'
+                latest_item_bookID = item.get('id')
+                try:
+                    latest_item_provider_id = item.get('asin', '')
+                except Exception as e:
+                    latest_item_provider_id = ''
+                    logger.debug("Couldn't fetch asin from item. Likely was not set with metadata.")
+                    logger.debug(f"Error: {e}")
 
-            if "(Abridged)" in latest_item_title:
-                latest_item_title = latest_item_title.replace("(Abridged)", '').strip()
-            if "(Unabridged)" in latest_item_title:
-                latest_item_title = latest_item_title.replace("(Unabridged)", '').strip()
+                if "(Abridged)" in latest_item_title:
+                    latest_item_title = latest_item_title.replace("(Abridged)", '').strip()
+                if "(Unabridged)" in latest_item_title:
+                    latest_item_title = latest_item_title.replace("(Unabridged)", '').strip()
 
-            formatted_time = latest_item_time_added / 1000
-            formatted_time = datetime.fromtimestamp(formatted_time)
-            formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
+                formatted_time = latest_item_time_added / 1000
+                formatted_time = datetime.fromtimestamp(formatted_time)
+                formatted_time = formatted_time.strftime('%Y/%m/%d %H:%M')
 
-            if latest_item_time_added >= timestamp_minus_delta and latest_item_type == 'book':
-                items_added.append({"title": latest_item_title, "addedTime": formatted_time,
-                                    "author": latest_item_author, "id": latest_item_bookID,
-                                    "provider_id": latest_item_provider_id})
+                if latest_item_time_added >= timestamp_minus_delta and latest_item_type == 'book':
+                    items_added.append({"title": latest_item_title, "addedTime": formatted_time,
+                                        "author": latest_item_author, "id": latest_item_bookID,
+                                        "provider_id": latest_item_provider_id})
 
-        return items_added
+    except Exception as e:
+        logger.error(f"Error in newBookList: {e}", exc_info=True)
+
+    return items_added
 
 
 class SubscriptionTask(Extension):
@@ -457,25 +498,12 @@ class SubscriptionTask(Extension):
         self.previous_token = None
         self.bot.admin_token = None
 
-    async def get_server_name_db(self, discord_id: int, task: str = "new-book-check") -> str:
+    async def get_server_name_db(self, discord_id: int = 0, task: str = "new-book-check") -> str:
         server_name = os.getenv("DEFAULT_SERVER_NAME", "Audiobookshelf")
 
         try:
-            async with self.pool.acquire() as conn:
-                async with conn.cursor() as cursor:
-                    await cursor.execute(
-                        """
-                        SELECT server_name
-                        FROM tasks
-                        WHERE discord_id = %s AND task = %s
-                        """,
-                        (discord_id, task),
-                    )
-
-                    row = await cursor.fetchone()
-                    if row:
-                        server_name = row[0]
-
+            if task_db:
+                server_name = await task_db.get_server_name(discord_id=discord_id, task=task)
         except Exception as e:
             logger.error(f"Error retrieving server name: {e}")
 
@@ -512,13 +540,14 @@ class SubscriptionTask(Extension):
         else:
             await user.send(content=msg, embeds=embed)
 
-    async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False):
+    async def NewBookCheckEmbed(self, task_frequency=TASK_FREQUENCY, enable_notifications=False, items_added=None):
         """
         Create embed messages for newly added books.
 
         Args:
             task_frequency: Lookback period in minutes
             enable_notifications: Whether to send wishlist notifications
+            items_added: Optional pre-fetched list of newly added books
 
         Returns:
             list: Discord embed messages for new books
@@ -529,7 +558,8 @@ class SubscriptionTask(Extension):
         if not self.ServerNickName:
             self.ServerNickName = "Audiobookshelf"
 
-        items_added = await newBookList(task_frequency) or []
+        if items_added is None:
+            items_added = await newBookList(task_frequency) or []
 
         if items_added:
             count = 0
@@ -568,9 +598,8 @@ class SubscriptionTask(Extension):
                                         inline=False)
 
                 # Ensure URL is properly assigned
-                if img_url and "https" in img_url:
-                    bookshelfURL = img_url
-                embed_message.url = f"{bookshelfURL}/item/{bookID}"
+                item_url = img_url if (img_url and "https" in img_url) else bookshelfURL
+                embed_message.url = f"{item_url}/item/{bookID}"
 
                 embed_message.add_image(cover_link)
                 embed_message.footer = f"{s.bookshelf_traveller_footer} | {self.ServerNickName}"
@@ -584,10 +613,11 @@ class SubscriptionTask(Extension):
                         if enable_notifications:
                             # Send notification and update database
                             await self.send_user_wishlist(discord_id=discord_id, title=title, author=author,
-                                                          embed=embeds)
+                                                          embed=[embed_message])
                             await mark_book_as_downloaded(discord_id=discord_id, title=search_title)
 
             return embeds
+        return []
 
     @staticmethod
     async def getFinishedBooks():
@@ -737,6 +767,9 @@ class SubscriptionTask(Extension):
             logger.debug(f"Another instance is already running {task_name}, skipping...")
             return
 
+        previous_token = os.getenv("bookshelfToken")
+        self.previous_token = previous_token
+
         try:
             logger.info("Initializing new-book-check task!")
 
@@ -752,11 +785,11 @@ class SubscriptionTask(Extension):
 
             logger.debug(f"Search result: {search_result}")
 
-            previous_token = os.getenv("bookshelfToken")
-
             for result in search_result:
                 channel_id = int(result[1])
                 self.admin_token = result[3]
+                if len(result) > 4 and result[4]:
+                    self.ServerNickName = result[4]
 
                 logger.debug(f"Applying active admin token ({len(self.admin_token)} chars)")
                 os.environ["bookshelfToken"] = self.admin_token
@@ -771,7 +804,7 @@ class SubscriptionTask(Extension):
                     logger.warning("Found more than 10 titles")
 
                 # --- Generate embeds (must match titles)
-                embeds = await self.NewBookCheckEmbed(enable_notifications=True)
+                embeds = await self.NewBookCheckEmbed(enable_notifications=True, items_added=new_titles)
                 if not embeds:
                     logger.warning("New books exist but no embeds were generated.")
                     continue
@@ -827,18 +860,21 @@ class SubscriptionTask(Extension):
                 for book_id in books_to_send:
                     await mark_message_as_sent(channel_id, book_id, "new-book")
 
-            # Restore token
-            os.environ["bookshelfToken"] = previous_token or ""
-            self.previous_token = None
-            self.admin_token = None
-            logger.debug(f"Restored previous bookshelfToken ({len(previous_token)} chars)" if previous_token else "Restored empty bookshelfToken")
-
             logger.info("Successfully completed new-book-check task!")
 
         except Exception as e:
             logger.error(f"Error in newBookTask: {e}", exc_info=True)
 
         finally:
+            # Restore token
+            if previous_token is not None:
+                os.environ["bookshelfToken"] = previous_token
+                logger.debug(f"Restored previous bookshelfToken ({len(previous_token)} chars)")
+            else:
+                os.environ.pop("bookshelfToken", None)
+                logger.debug("Restored empty bookshelfToken")
+            self.previous_token = None
+            self.admin_token = None
             await release_task_lock(task_name)
             logger.debug(f"Released lock for {task_name}")
 
@@ -864,6 +900,8 @@ class SubscriptionTask(Extension):
                     channel_id = int(result[1])
                     logger.info(f'Channel ID: {channel_id}')
                     self.admin_token = result[3]
+                    if len(result) > 4 and result[4]:
+                        self.ServerNickName = result[4]
                     logger.debug(f"Applying active admin token ({len(self.admin_token)} chars)")
                     os.environ['bookshelfToken'] = self.admin_token
 

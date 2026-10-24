@@ -74,6 +74,50 @@ class TestSubscriptionTaskDatabase(unittest.IsolatedAsyncioTestCase):
         sent_after = await self.db.has_message_been_sent(channel_id=111, book_id="book_abc", message_type="new_book")
         self.assertTrue(sent_after)
 
+    async def test_get_server_name(self):
+        # When db is empty, returns default
+        name = await self.db.get_server_name()
+        self.assertEqual(name, "Audiobookshelf")
+
+        # Insert a task with custom server name
+        await self.db.insert_data(
+            discord_id=111222,
+            channel_id=333444,
+            task="new-book-check",
+            server_name="My Audiobook Server",
+            token="test-token"
+        )
+
+        # Retrieve with discord_id and task
+        name = await self.db.get_server_name(discord_id=111222, task="new-book-check")
+        self.assertEqual(name, "My Audiobook Server")
+
+        # Retrieve with task only (as used by newBookTask)
+        name = await self.db.get_server_name(task="new-book-check")
+        self.assertEqual(name, "My Audiobook Server")
+
+        # Retrieve with no args
+        name = await self.db.get_server_name()
+        self.assertEqual(name, "My Audiobook Server")
+
+    async def test_search_task_db_returns_server_name(self):
+        await self.db.insert_data(
+            discord_id=111222,
+            channel_id=333444,
+            task="new-book-check",
+            server_name="Special Library",
+            token="token123"
+        )
+        rows = await self.db.search_task_db(task="new-book-check")
+        self.assertIsNotNone(rows)
+        self.assertEqual(len(rows), 1)
+        # Verify columns: task, channel_id, id, token, server_name
+        self.assertEqual(rows[0][0], "new-book-check")
+        self.assertEqual(rows[0][1], 333444)
+        self.assertEqual(rows[0][3], "token123")
+        self.assertEqual(rows[0][4], "Special Library")
+
 
 if __name__ == "__main__":
     unittest.main()
+
