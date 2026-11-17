@@ -988,57 +988,56 @@ class SubscriptionTask(Extension):
                   opt_type=OptionType.INTEGER)
     @slash_option(name="color", description="Will override the new book check embed color.", opt_type=OptionType.STRING,
                   autocomplete=True)
-    @slash_option(name="enable_task", description="If set to true will enable recurring task.",
-                  opt_type=OptionType.BOOLEAN)
-    @slash_option(name="disable_task", description="If set to true, this will disable the task.",
-                  opt_type=OptionType.BOOLEAN)
-    async def newBookCheck(self, ctx: InteractionContext, minutes=TASK_FREQUENCY, enable_task=False,
-                           disable_task=False, color=None):
+    #@slash_option(name="enable_task", description="If set to true will enable recurring task.",
+    #              opt_type=OptionType.BOOLEAN)
+    #@slash_option(name="disable_task", description="If set to true, this will disable the task.",
+    #              opt_type=OptionType.BOOLEAN)
+    async def newBookCheck(self, ctx: InteractionContext, minutes=TASK_FREQUENCY, color=None):
         if color and minutes == TASK_FREQUENCY:
             self.embedColor = await self.embed_color_selector(color)
             await ctx.send("Successfully updated color!", ephemeral=True)
             return
-        if enable_task and not disable_task:
-            logger.info('Activating New Book Task! A message will follow.')
-            if not self.newBookTask.running:
-                operationSuccess = False
-                search_result = await search_task_db(ctx.author_id, task='new-book-check')
-                if search_result:
-                    logger.debug(f"Found active task setup for user {ctx.author_id}")
-                    operationSuccess = True
+        # if enable_task and not disable_task:
+        #     logger.info('Activating New Book Task! A message will follow.')
+        #     if not self.newBookTask.running:
+        #         operationSuccess = False
+        #         search_result = await search_task_db(ctx.author_id, task='new-book-check')
+        #         if search_result:
+        #             logger.debug(f"Found active task setup for user {ctx.author_id}")
+        #             operationSuccess = True
 
-                if operationSuccess:
-                    if color:
-                        self.embedColor = await self.embed_color_selector(color)
+        #         if operationSuccess:
+        #             if color:
+        #                 self.embedColor = await self.embed_color_selector(color)
 
-                    await ctx.send(
-                        f"Activating New Book Task! This task will automatically refresh every *{TASK_FREQUENCY} minutes*!",
-                        ephemeral=True)
+        #             await ctx.send(
+        #                 f"Activating New Book Task! This task will automatically refresh every *{TASK_FREQUENCY} minutes*!",
+        #                 ephemeral=True)
 
-                    self.newBookTask.start()
-                    return
-                else:
-                    await ctx.send("Error activating new book task. Please visit logs for more information. "
-                                   "Please make sure to setup the task prior to activation by using command **/setup-tasks**",
-                                   ephemeral=True)
-                    return
-            else:
-                logger.warning('New book check task was already running, ignoring...')
-                await ctx.send('New book check task is already running, ignoring...', ephemeral=True)
-                return
-        elif disable_task and not enable_task:
-            if self.newBookTask.running:
-                if color:
-                    self.embedColor = await self.embed_color_selector(color)
-                await ctx.send("Disabled Task: *Recently Added Books*", ephemeral=True)
-                self.newBookTask.stop()
-                return
-            else:
-                pass
-        elif disable_task and enable_task:
-            await ctx.send(
-                "Invalid option entered, please ensure only one option is entered from this command at a time.")
-            return
+        #             self.newBookTask.start()
+        #             return
+        #         else:
+        #             await ctx.send("Error activating new book task. Please visit logs for more information. "
+        #                            "Please make sure to setup the task prior to activation by using command **/setup-tasks**",
+        #                            ephemeral=True)
+        #             return
+        #     else:
+        #         logger.warning('New book check task was already running, ignoring...')
+        #         await ctx.send('New book check task is already running, ignoring...', ephemeral=True)
+        #         return
+        # elif disable_task and not enable_task:
+        #     if self.newBookTask.running:
+        #         if color:
+        #             self.embedColor = await self.embed_color_selector(color)
+        #         await ctx.send("Disabled Task: *Recently Added Books*", ephemeral=True)
+        #         self.newBookTask.stop()
+        #         return
+        #     else:
+        #         pass
+        # elif disable_task and enable_task:
+        #     await ctx.send(
+        #         "Invalid option entered, please ensure only one option is entered from this command at a time.")
+        #     return
         # Set server nickname
         await self.get_server_name_db(discord_id=ctx.author_id)
 
